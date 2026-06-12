@@ -1,0 +1,57 @@
+# AI Ready Engineer — full stack (mongo + backend + nginx-served frontend).
+# Run from this directory:  docker compose up -d --build
+# Requires a .env file here (see .env.deploy.example). Build context is the repo root.
+#
+# Using MongoDB Atlas instead of the bundled mongo? Remove the `mongo` service +
+# its volume + the backend `depends_on`, and set MONGO_URI to your Atlas SRV URI.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Not published to the host by default — only the backend reaches it.
+
+  backend:
+    build:
+      context: ..
+      dockerfile: LMS_Deployment/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5050
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/lms_ai_ready}
+      CORS_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      APP_BASE_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      # Secrets are REQUIRED — compose fails fast if unset.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      # Persist uploaded learning resources across restarts.
+      - uploads:/app/LMS_Storage/uploads
+    # No host port published — nginx proxies to it on the internal network.
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: LMS_Deployment/Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${PUBLIC_PORT:-8080}:80"
+
+volumes:
+  mongo-data:
+  uploads:

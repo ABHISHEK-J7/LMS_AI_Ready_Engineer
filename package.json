@@ -1,0 +1,26 @@
+{
+  "name": "lms-ai-ready-engineer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Ready Engineer — AI Engineering College & Training Institute Management System",
+  "type": "module",
+  "workspaces": [
+    "LMS_Shared",
+    "LMS_Backend",
+    "LMS_Frontend",
+    "LMS_Admin",
+    "LMS_AI_Engine"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace LMS_Backend",
+    "dev:frontend": "npm run dev --workspace LMS_Frontend",
+    "dev:admin": "npm run dev --workspace LMS_Admin",
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "build": "npm run build --workspace LMS_Frontend",
+    "build:admin": "npm run build --workspace LMS_Admin",
+    "seed": "npm run seed --workspace LMS_Backend"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

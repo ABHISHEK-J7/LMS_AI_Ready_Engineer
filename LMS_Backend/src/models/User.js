@@ -1,0 +1,48 @@
+import bcrypt from 'bcryptjs';
+import mongoose, { Schema } from 'mongoose';
+import { UserRole, UserStatus } from '@lms/shared';
+import { baseSchemaOptions } from './baseSchema.js';
+
+const userSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
+    // Optional: bulk-imported users have no password until they set one through
+    // the email-OTP onboarding flow.
+    passwordHash: { type: String, select: false },
+    // One-time passcode for passwordless onboarding / password reset (hidden).
+    otpHash: { type: String, select: false },
+    otpExpiresAt: { type: Date, select: false },
+    otpAttempts: { type: Number, default: 0, select: false },
+    role: { type: String, enum: Object.values(UserRole), required: true, index: true },
+    status: {
+      type: String,
+      enum: Object.values(UserStatus),
+      default: UserStatus.ACTIVE,
+      index: true,
+    },
+    phone: String,
+    avatarUrl: String,
+    batch: { type: Schema.Types.ObjectId, ref: 'Batch' },
+    assignedModules: [{ type: Schema.Types.ObjectId, ref: 'Module' }],
+    assignedBatches: [{ type: Schema.Types.ObjectId, ref: 'Batch' }],
+    lastLoginAt: Date,
+  },
+  baseSchemaOptions,
+);
+
+userSchema.methods.comparePassword = function comparePassword(plain) {
+  if (!this.passwordHash) return Promise.resolve(false); // no password set yet
+  return bcrypt.compare(plain, this.passwordHash);
+};
+
+/** Whether this user has a usable password (vs. needing OTP onboarding). */
+userSchema.methods.hasPassword = function hasPassword() {
+  return Boolean(this.passwordHash);
+};
+
+userSchema.statics.setPassword = function setPassword(plain) {
+  return bcrypt.hash(plain, 10);
+};
+
+export const User = mongoose.model('User', userSchema);

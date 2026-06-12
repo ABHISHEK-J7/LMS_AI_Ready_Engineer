@@ -1,0 +1,203 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { UploadCloud } from 'lucide-react';
+import { UserRole, UserStatus } from '@lms/shared';
+import { Badge, Button, Card, FullPageSpinner, Input, Modal, Select } from '@/components/ui';
+import { PageHeader } from '@/components/PageHeader';
+import { BulkUploadUsers } from '@/components/BulkUploadUsers';
+import { apiErrorMessage } from '@/lib/api';
+import {
+  useApproveUser,
+  useArchiveUser,
+  useCreateUser,
+  useUpdateUser,
+  useUsers,
+} from '@/lib/users';
+import { formatDate } from '@/lib/format';
+import '../modules/modules.css';
+
+const ROLE_TONE = { admin: 'primary', trainer: 'warning', student: 'neutral' };
+const STATUS_TONE = { active: 'success', pending: 'warning', suspended: 'error', archived: 'neutral' };
+const titleCase = (s = '') => s.charAt(0).toUpperCase() + s.slice(1);
+const ROLE_OPTS = Object.values(UserRole).map((v) => ({ value: v, label: titleCase(v) }));
+const STATUS_OPTS = Object.values(UserStatus).map((v) => ({ value: v, label: titleCase(v) }));
+
+const NEW_USER = { name: '', email: '', password: '', role: UserRole.STUDENT, phone: '' };
+const PAGE_SIZE = 20;
+
+export function UsersPage() {
+  const navigate = useNavigate();
+  const [filters, setFilters] = useState({ role: '', status: '', search: '', page: 1 });
+  const query = useUsers({ ...filters, pageSize: PAGE_SIZE });
+  const data = query.data;
+
+  const [creating, setCreating] = useState(false);
+  const [bulk, setBulk] = useState(false);
+  const [form, setForm] = useState(NEW_USER);
+  const [editing, setEditing] = useState(null); // user being edited
+  const [err, setErr] = useState('');
+
+  const create = useCreateUser();
+  const update = useUpdateUser();
+  const approve = useApproveUser();
+  const archive = useArchiveUser();
+
+  function setFilter(patch) {
+    setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
+  }
+
+  async function submitCreate(e) {
+    e.preventDefault();
+    setErr('');
+    try {
+      await create.mutateAsync({ ...form, phone: form.phone || undefined });
+      setCreating(false);
+      setForm(NEW_USER);
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+
+  async function submitEdit(e) {
+    e.preventDefault();
+    setErr('');
+    try {
+      await update.mutateAsync({ id: editing.id, name: editing.name, phone: editing.phone || undefined, status: editing.status });
+      setEditing(null);
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <>
+      <PageHeader title="User Management" subtitle="Onboard and manage students, trainers, and administrators." />
+
+      <div className="toolbar">
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <Input placeholder="Search name or email…" value={filters.search} onChange={(e) => setFilter({ search: e.target.value })} />
+          <Select
+            value={filters.role}
+            onChange={(e) => setFilter({ role: e.target.value })}
+            options={[{ value: '', label: 'All roles' }, ...ROLE_OPTS]}
+          />
+          <Select
+            value={filters.status}
+            onChange={(e) => setFilter({ status: e.target.value })}
+            options={[{ value: '', label: 'All statuses' }, ...STATUS_OPTS]}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <Button variant="outline" onClick={() => setBulk(true)}>
+            <UploadCloud size={16} style={{ marginRight: 6 }} /> Bulk upload
+          </Button>
+          <Button onClick={() => setCreating(true)}>+ New User</Button>
+        </div>
+      </div>
+
+      {query.isError && <Card><p className="field__error">{apiErrorMessage(query.error)}</p></Card>}
+
+      {query.isLoading && !data ? (
+        <FullPageSpinner />
+      ) : data && data.items.length === 0 ? (
+        <Card><p className="lms-muted">No users match these filters.</p></Card>
+      ) : (
+        <>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr><th>Name</th><th>Role</th><th>Status</th><th>Joined</th><th /></tr>
+              </thead>
+              <tbody>
+                {data?.items.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.name}<div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{u.email}</div></td>
+                    <td><Badge tone={ROLE_TONE[u.role]}>{titleCase(u.role)}</Badge></td>
+                    <td><Badge tone={STATUS_TONE[u.status]}>{titleCase(u.status)}</Badge></td>
+                    <td>{formatDate(u.createdAt)}</td>
+                    <td>
+                      <div className="list-actions">
+                        {u.role === UserRole.STUDENT && (
+                          <Button size="sm" variant="outline" onClick={() => navigate(`/app/students/${u.id}`)}>View</Button>
+                        )}
+                        {u.status === UserStatus.PENDING && (
+                          <Button size="sm" loading={approve.isPending} onClick={() => approve.mutate(u.id)}>Approve</Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => setEditing({ id: u.id, name: u.name, phone: u.phone ?? '', status: u.status })}>Edit</Button>
+                        {u.status !== UserStatus.ARCHIVED && (
+                          <Button size="sm" variant="ghost" onClick={() => window.confirm(`Archive ${u.name}?`) && archive.mutate(u.id)}>Archive</Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-4)' }}>
+            <span className="lms-muted" style={{ fontSize: 'var(--font-size-sm)' }}>
+              {total} user{total === 1 ? '' : 's'} · page {filters.page} of {totalPages}
+            </span>
+            <div className="list-actions">
+              <Button size="sm" variant="outline" disabled={filters.page <= 1} onClick={() => setFilter({ page: filters.page - 1 })}>Previous</Button>
+              <Button size="sm" variant="outline" disabled={filters.page >= totalPages} onClick={() => setFilter({ page: filters.page + 1 })}>Next</Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Bulk upload */}
+      <Modal open={bulk} title="Bulk upload users" onClose={() => setBulk(false)}>
+        <BulkUploadUsers onClose={() => setBulk(false)} />
+      </Modal>
+
+      {/* Create */}
+      <Modal
+        open={creating}
+        title="New User"
+        onClose={() => setCreating(false)}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+            <Button form="create-user-form" type="submit" loading={create.isPending}>Create</Button>
+          </>
+        }
+      >
+        <form id="create-user-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <Input label="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          <Input label="Temporary password" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 8 characters" required />
+          <Select label="Role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} options={ROLE_OPTS} />
+          <Input label="Phone (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          {err && <span className="field__error">{err}</span>}
+        </form>
+      </Modal>
+
+      {/* Edit */}
+      <Modal
+        open={Boolean(editing)}
+        title="Edit User"
+        onClose={() => setEditing(null)}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button form="edit-user-form" type="submit" loading={update.isPending}>Save</Button>
+          </>
+        }
+      >
+        {editing && (
+          <form id="edit-user-form" onSubmit={submitEdit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <Input label="Full name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} required />
+            <Input label="Phone" value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} />
+            <Select label="Status" value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value })} options={STATUS_OPTS} />
+            {err && <span className="field__error">{err}</span>}
+          </form>
+        )}
+      </Modal>
+    </>
+  );
+}

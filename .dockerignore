@@ -1,0 +1,15 @@
+# Keep build context small and NEVER bake secrets or local state into images.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.gitignore
+**/*.log
+**/.DS_Store
+LMS_Storage/uploads/*
+!LMS_Storage/uploads/.gitkeep
+LMS_Deployment
+LMS_Documentation
+README.md

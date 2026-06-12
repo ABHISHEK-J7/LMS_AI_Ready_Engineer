@@ -1,0 +1,16 @@
+{
+  "name": "@lms/ai-engine",
+  "version": "0.1.0",
+  "description": "AI evaluation engines (prompt evaluation, GitHub project review) for the AI Ready Engineer LMS",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": ["src"],
+  "scripts": {},
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@lms/shared": "*"
+  }
+}

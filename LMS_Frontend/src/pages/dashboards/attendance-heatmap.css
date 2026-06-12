@@ -1,0 +1,66 @@
+.hm-scroll {
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+}
+.hm { display: inline-block; }
+
+/* Month labels row — aligned above the grid (offset by weekday-label width). */
+.hm-months {
+  display: flex;
+  gap: 4px;
+  margin-left: 36px; /* weekday column (30) + body gap (6) */
+  margin-bottom: 4px;
+}
+.hm-month-cell {
+  width: 15px;
+  flex: none;
+  height: 13px;
+  line-height: 13px;
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.hm-body { display: flex; gap: 6px; }
+.hm-weekdays {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 30px;
+  flex: none;
+}
+.hm-wd {
+  height: 15px;
+  line-height: 15px;
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+}
+
+.hm-grid { display: flex; gap: 4px; }
+.hm-col { display: flex; flex-direction: column; gap: 4px; flex: none; }
+
+.hm-cell {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-border) 55%, transparent);
+  flex: none;
+}
+.hm-cell--present { background: var(--color-success); }
+.hm-cell--late { background: #e6a817; }
+.hm-cell--absent { background: var(--color-error); }
+.hm-cell--excused { background: var(--color-text-muted); }
+.hm-cell--future { visibility: hidden; }
+
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.hm-legend .hm-cell { margin-left: var(--space-3); }
+.hm-legend .hm-cell:first-child { margin-left: 0; }

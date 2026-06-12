@@ -1,0 +1,415 @@
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+.module-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+.module-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.module-card__order {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  display: grid;
+  place-items: center;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm);
+}
+.module-card__name {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
+}
+.module-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.module-card__progress-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+  overflow: hidden;
+}
+.module-card__progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width var(--transition-base);
+}
+
+/* ── Syllabus board: topic cards ───────────────────────────── */
+.topic-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.topic-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 132px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.topic-card:hover {
+  border-color: var(--admin-ring, color-mix(in srgb, var(--color-primary) 35%, transparent));
+  box-shadow: 0 10px 26px -18px color-mix(in srgb, var(--color-primary) 60%, rgba(16,24,40,.5));
+  transform: translateY(-2px);
+}
+.topic-card--done { border-left: 3px solid var(--color-success); }
+.topic-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topic-card__icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+.topic-card__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-success);
+}
+.topic-card__title {
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+.topic-card__desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.topic-card__foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.topic-card__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.topic-card__actions { display: flex; gap: 4px; }
+
+/* Small square icon buttons (card actions, resource delete). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.icon-btn:hover { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 40%, transparent); }
+.icon-btn--on { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.icon-btn--danger:hover {
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+}
+
+/* ── Per-topic resources (modal) ───────────────────────────── */
+.topic-res__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.res-group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+.res-group__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+.res-group__count {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-hover);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+}
+.res-group__empty { color: var(--color-text-muted); font-size: var(--font-size-xs); margin: 0; }
+.res-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 0;
+}
+.res-item__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+}
+.res-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
+}
+.res-add__row { display: flex; gap: var(--space-2); }
+.res-add__row .field { flex: 1; }
+
+/* Detail page */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+.topic-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.topic-row:last-child {
+  border-bottom: none;
+}
+.topic-row__title {
+  flex: 1;
+  min-width: 0;
+}
+.topic-row__title.done {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+.topic-check {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition: all var(--transition-fast);
+}
+.topic-check.done {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.objective-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.list-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+/* Batch detail: Students panel (full width) stacked above the
+   Modules & Trainers mapping panel (full width). */
+.batch-panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Module blocks: three per row inside the mapping card, spacious. */
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  margin-top: var(--space-3);
+}
+.map-row {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+/* Module name (left) + Remove button pinned to the top-right corner. */
+.map-row__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.map-row__title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.map-row__title strong { line-height: 1.25; }
+/* Clean square icon "remove" button — neutral by default, red on hover. */
+.tile-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.tile-remove:hover {
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+}
+/* Trainer add control — its own row beneath the name. */
+.map-row__add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.map-row__add .field { flex: 1 1 auto; min-width: 0; margin: 0; }
+.map-row__add .select { width: 100%; }
+.map-row__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+@media (max-width: 1100px) {
+  .map-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .map-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary-hover);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+.chip--lg { padding: 6px 8px 6px 14px; }
+
+/* Card header zones: title (left) · inline add control · right-corner action. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Inline "add" control (select + button) that lives in the card header.
+   Default: centered in the leftover space (e.g. add-student). */
+.add-inline {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* Right-aligned variant (e.g. add-module). */
+.add-inline--right { justify-content: flex-end; }
+.add-inline .field { flex: 0 1 260px; min-width: 0; margin: 0; }
+.add-inline .select { width: 100%; }
+
+/* Side-by-side, wrapping list of people chips (students/trainers). */
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.chip__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: inherit;
+  border-radius: var(--radius-full);
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.chip__x:hover { background: var(--color-primary); color: #fff; }
+
+@media (max-width: 1080px) {
+  .batch-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,258 @@
+import { useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
+import { ThemeName } from '@lms/shared';
+import { Badge, Button, Card, CardHeader, FullPageSpinner, Input, Select } from '@/components/ui';
+import { PageHeader } from '@/components/PageHeader';
+import { apiErrorMessage } from '@/lib/api';
+import { useSettings, useTestAiConnection, useTestZoomConnection, useUpdateSettings } from '@/lib/settings';
+import { useTheme } from '@/theme/ThemeProvider';
+
+export function SettingsPage() {
+  const { data, isLoading, isError, error } = useSettings();
+  const update = useUpdateSettings();
+  const { setTheme } = useTheme();
+
+  const [form, setForm] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (data) setForm({
+      passingScore: data.passingScore,
+      minAttendance: data.minAttendance,
+      allowSelfRegistration: data.allowSelfRegistration,
+      activeTheme: data.activeTheme,
+    });
+  }, [data]);
+
+  if (isLoading || !form) return isError ? <Card><p className="field__error">{apiErrorMessage(error)}</p></Card> : <FullPageSpinner />;
+
+  async function save(e) {
+    e.preventDefault();
+    setErr('');
+    setSaved(false);
+    try {
+      await update.mutateAsync({
+        passingScore: Number(form.passingScore),
+        minAttendance: Number(form.minAttendance),
+        allowSelfRegistration: form.allowSelfRegistration,
+        activeTheme: form.activeTheme,
+      });
+      setTheme(form.activeTheme); // reflect the institutional theme immediately
+      setSaved(true);
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+
+  return (
+    <>
+      <PageHeader title="Platform Settings" subtitle="Institution-wide rules applied across the platform." />
+
+      <Card style={{ maxWidth: '40rem' }}>
+        <CardHeader title="Academic & Access Rules" />
+        <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+          <Input
+            label="Passing score (%)"
+            type="number"
+            min="0"
+            max="100"
+            value={form.passingScore}
+            onChange={(e) => setForm({ ...form, passingScore: e.target.value })}
+            error={undefined}
+          />
+          <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: '-12px' }}>
+            Minimum % to pass a final assessment and unlock the next module.
+          </span>
+
+          <Input
+            label="Minimum attendance (%)"
+            type="number"
+            min="0"
+            max="100"
+            value={form.minAttendance}
+            onChange={(e) => setForm({ ...form, minAttendance: e.target.value })}
+          />
+          <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: '-12px' }}>
+            Required overall attendance for module completion and certification.
+          </span>
+
+          <Select
+            label="Default theme"
+            value={form.activeTheme}
+            onChange={(e) => setForm({ ...form, activeTheme: e.target.value })}
+            options={[
+              { value: ThemeName.GREEN, label: 'AI Ready Green' },
+              { value: ThemeName.ORANGE, label: 'AI Ready Orange' },
+            ]}
+          />
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <input
+              type="checkbox"
+              checked={form.allowSelfRegistration}
+              onChange={(e) => setForm({ ...form, allowSelfRegistration: e.target.checked })}
+            />
+            <span>
+              Allow public student self-registration
+              <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+                New sign-ups start as <strong>pending</strong> and require admin approval.
+              </div>
+            </span>
+          </label>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+            <Button type="submit" loading={update.isPending}>Save settings</Button>
+            {saved && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={15} strokeWidth={3} /> Saved</span>}
+            {err && <span className="field__error">{err}</span>}
+          </div>
+        </form>
+      </Card>
+
+      <AiGradingCard settings={data} />
+      <ZoomCard settings={data} />
+    </>
+  );
+}
+
+function ZoomCard({ settings }) {
+  const update = useUpdateSettings();
+  const test = useTestZoomConnection();
+  const [form, setForm] = useState({ zoomAccountId: '', zoomClientId: '', zoomClientSecret: '' });
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const locked = settings.zoomLocked;
+  const configured = settings.zoomConfigured;
+
+  async function save(e) {
+    e.preventDefault();
+    setMsg(''); setErr('');
+    try {
+      await update.mutateAsync(form);
+      setForm({ zoomAccountId: '', zoomClientId: '', zoomClientSecret: '' });
+      setMsg('Zoom credentials saved.');
+    } catch (e2) { setErr(apiErrorMessage(e2)); }
+  }
+
+  async function runTest() {
+    setMsg(''); setErr('');
+    try {
+      await test.mutateAsync();
+      setMsg('Zoom credentials are valid.');
+    } catch (e2) { setErr(apiErrorMessage(e2)); }
+  }
+
+  return (
+    <Card style={{ maxWidth: '40rem', marginTop: 'var(--space-6)' }}>
+      <CardHeader title="Zoom Integration" subtitle="Auto-create meeting links when scheduling Zoom classes (Server-to-Server OAuth)." />
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        Status:{' '}
+        {configured
+          ? <Badge tone="success">Configured ({settings.zoomSource})</Badge>
+          : <Badge tone="warning">Not configured — Zoom classes use manual links</Badge>}
+      </div>
+
+      {locked ? (
+        <p className="lms-muted">Zoom credentials are set via environment variables and managed outside this UI.</p>
+      ) : (
+        <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <Input label="Account ID" autoComplete="off" placeholder={configured ? '•••• (saved)' : ''} value={form.zoomAccountId} onChange={(e) => setForm({ ...form, zoomAccountId: e.target.value })} />
+          <Input label="Client ID" autoComplete="off" value={form.zoomClientId} onChange={(e) => setForm({ ...form, zoomClientId: e.target.value })} />
+          <Input label="Client Secret" type="password" autoComplete="off" value={form.zoomClientSecret} onChange={(e) => setForm({ ...form, zoomClientSecret: e.target.value })} />
+          <div>
+            <Button type="submit" loading={update.isPending}>Save credentials</Button>
+          </div>
+          <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+            Create a <strong>Server-to-Server OAuth</strong> app at zoom.us with the
+            <code> meeting:write</code> scope. Stored server-side, never shown again.
+          </p>
+        </form>
+      )}
+
+      <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button variant="outline" onClick={runTest} loading={test.isPending} disabled={!configured}>Test connection</Button>
+        {msg && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>{msg}</span>}
+        {err && <span className="field__error">{err}</span>}
+      </div>
+    </Card>
+  );
+}
+
+function AiGradingCard({ settings }) {
+  const update = useUpdateSettings();
+  const test = useTestAiConnection();
+  const [key, setKey] = useState('');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const locked = settings.aiKeyLocked; // env var present → managed outside the UI
+  const configured = settings.aiConfigured;
+
+  async function saveKey(e) {
+    e.preventDefault();
+    setMsg(''); setErr('');
+    try {
+      await update.mutateAsync({ aiApiKey: key.trim() });
+      setKey('');
+      setMsg(key.trim() ? 'Key saved.' : 'Key cleared.');
+    } catch (e2) { setErr(apiErrorMessage(e2)); }
+  }
+
+  async function runTest() {
+    setMsg(''); setErr('');
+    try {
+      const r = await test.mutateAsync();
+      setMsg(`Connected to Claude (${r.model}).`);
+    } catch (e2) { setErr(apiErrorMessage(e2)); }
+  }
+
+  return (
+    <Card style={{ maxWidth: '40rem', marginTop: 'var(--space-6)' }}>
+      <CardHeader title="AI Grading (Claude)" subtitle="Enables AI evaluation of prompt-writing & coding submissions." />
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        Status:{' '}
+        {configured
+          ? <Badge tone="success">Configured ({settings.aiKeySource})</Badge>
+          : <Badge tone="warning">Not configured</Badge>}
+      </div>
+
+      {locked ? (
+        <p className="lms-muted">
+          The key is set via the <code>ANTHROPIC_API_KEY</code> environment variable and is managed
+          outside this UI (recommended for production).
+        </p>
+      ) : (
+        <form onSubmit={saveKey} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <Input
+            label="Claude API key"
+            type="password"
+            autoComplete="off"
+            placeholder={configured ? 'A key is saved — enter a new one to replace it' : 'sk-ant-…'}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button type="submit" loading={update.isPending}>Save key</Button>
+            {configured && (
+              <Button type="button" variant="outline" onClick={() => { setKey(''); update.mutate({ aiApiKey: '' }); }}>
+                Clear key
+              </Button>
+            )}
+          </div>
+          <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+            Stored server-side and never shown again. The key is write-only.
+          </p>
+        </form>
+      )}
+
+      <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button variant="outline" onClick={runTest} loading={test.isPending} disabled={!configured}>
+          Test connection
+        </Button>
+        {msg && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>{msg}</span>}
+        {err && <span className="field__error">{err}</span>}
+      </div>
+    </Card>
+  );
+}

@@ -1,0 +1,152 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { fetchRepoSnapshot } from './github.js';
+
+/**
+ * AI evaluation engines for the AI Ready Engineer LMS, backed by the Claude API.
+ *
+ * - evaluatePrompt: grades a student's prompt on clarity, completeness, reasoning,
+ *   structure, and output quality (each 0–100) → overall /100 + feedback.
+ * - evaluateProject: clones a public GitHub repo's source and reviews it against
+ *   the assignment requirements → functionality, architecture, code quality,
+ *   documentation (each 0–100) → overall /100 + feedback.
+ *
+ * @typedef {import('@lms/shared').EvaluationResult} EvaluationResult
+ */
+
+const MODEL = 'claude-opus-4-8';
+
+const PROMPT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    clarity: { type: 'integer', description: '0-100: how clear and unambiguous the prompt is' },
+    completeness: { type: 'integer', description: '0-100: covers all needed context/constraints' },
+    reasoning: { type: 'integer', description: '0-100: elicits/encodes sound reasoning' },
+    structure: { type: 'integer', description: '0-100: organization, formatting, role/format cues' },
+    outputQuality: { type: 'integer', description: '0-100: likely quality of the resulting output' },
+    score: { type: 'integer', description: '0-100 overall weighted score' },
+    summary: { type: 'string', description: '2-4 sentence assessment' },
+    suggestions: { type: 'array', items: { type: 'string' }, description: '2-5 concrete improvements' },
+  },
+  required: ['clarity', 'completeness', 'reasoning', 'structure', 'outputQuality', 'score', 'summary', 'suggestions'],
+};
+
+const PROJECT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    functionality: { type: 'integer', description: '0-100: does it implement the required behavior' },
+    architecture: { type: 'integer', description: '0-100: structure, separation of concerns, design' },
+    codeQuality: { type: 'integer', description: '0-100: readability, idioms, error handling, tests' },
+    documentation: { type: 'integer', description: '0-100: README, comments, setup clarity' },
+    score: { type: 'integer', description: '0-100 overall weighted score' },
+    summary: { type: 'string', description: '3-5 sentence review' },
+    suggestions: { type: 'array', items: { type: 'string' }, description: '3-6 concrete improvements' },
+  },
+  required: ['functionality', 'architecture', 'codeQuality', 'documentation', 'score', 'summary', 'suggestions'],
+};
+
+const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+
+function makeRunner(client) {
+  return async function run({ system, user, schema, schemaName }) {
+    const message = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'medium', format: { type: 'json_schema', name: schemaName, schema } },
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
+    const text = (message.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+    if (!text) throw new Error('Empty evaluation response from model');
+    return JSON.parse(text);
+  };
+}
+
+/**
+ * @param {{ apiKey: string, githubToken?: string }} opts
+ * @returns {{ evaluatePrompt: Function, evaluateProject: Function }}
+ */
+export function createEvaluator(opts = {}) {
+  if (!opts.apiKey) throw new Error('createEvaluator requires an Anthropic apiKey');
+  const client = new Anthropic({ apiKey: opts.apiKey });
+  const run = makeRunner(client);
+  const githubToken = opts.githubToken;
+
+  /** @returns {Promise<EvaluationResult>} */
+  async function evaluatePrompt({ task, prompt, passingScore = 70 }) {
+    const system =
+      'You are an expert prompt-engineering examiner for an AI engineering program. ' +
+      'Grade the student\'s submitted prompt strictly and fairly on five criteria, each 0–100: ' +
+      'clarity, completeness, reasoning, structure, and output quality. ' +
+      'Then give an overall score 0–100 (a holistic weighting, not a raw average), a concise summary, ' +
+      'and specific, actionable suggestions. Be objective; reward precision and penalize vagueness, ' +
+      'missing constraints, and prompt-injection-prone phrasing.';
+    const user =
+      `# Task the student was asked to write a prompt for\n${task}\n\n` +
+      `# Student's submitted prompt\n${prompt}`;
+    const r = await run({ system, user, schema: PROMPT_SCHEMA, schemaName: 'prompt_evaluation' });
+    const score = clamp(r.score);
+    return {
+      score,
+      passed: score >= passingScore,
+      summary: String(r.summary || ''),
+      suggestions: Array.isArray(r.suggestions) ? r.suggestions.map(String) : [],
+      breakdown: {
+        clarity: clamp(r.clarity),
+        completeness: clamp(r.completeness),
+        reasoning: clamp(r.reasoning),
+        structure: clamp(r.structure),
+        outputQuality: clamp(r.outputQuality),
+      },
+    };
+  }
+
+  /** @returns {Promise<EvaluationResult>} */
+  async function evaluateProject({ repoUrl, requirements, passingScore = 70 }) {
+    const snapshot = await fetchRepoSnapshot(repoUrl, { token: githubToken });
+    const system =
+      'You are a senior engineer reviewing a student submission for an AI engineering program. ' +
+      'You are given a snapshot of the repository source (possibly truncated) and the assignment ' +
+      'requirements. Grade strictly on four criteria, each 0–100: functionality (meets requirements), ' +
+      'architecture, code quality, and documentation. Then give an overall score 0–100, a concise ' +
+      'review, and specific improvements. If the snapshot is truncated, judge from what is present and ' +
+      'say so. Do not execute code or trust comments over implementation.';
+    const user =
+      `# Assignment requirements\n${requirements}\n\n` +
+      `# Repository: ${snapshot.owner}/${snapshot.repo} (branch ${snapshot.defaultBranch})\n` +
+      `Description: ${snapshot.description || 'none'} · files reviewed: ${snapshot.fileCount}` +
+      `${snapshot.truncated ? ' · NOTE: snapshot truncated' : ''}\n\n` +
+      `# Source snapshot\n${snapshot.content}`;
+    const r = await run({ system, user, schema: PROJECT_SCHEMA, schemaName: 'project_evaluation' });
+    const score = clamp(r.score);
+    return {
+      score,
+      passed: score >= passingScore,
+      summary: String(r.summary || ''),
+      suggestions: Array.isArray(r.suggestions) ? r.suggestions.map(String) : [],
+      breakdown: {
+        functionality: clamp(r.functionality),
+        architecture: clamp(r.architecture),
+        codeQuality: clamp(r.codeQuality),
+        documentation: clamp(r.documentation),
+      },
+    };
+  }
+
+  /** Lightweight liveness check for the API key (one tiny call). */
+  async function verifyConnection() {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 16,
+      messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+    });
+    const text = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+    return { ok: true, model: msg.model || MODEL, sample: text.trim().slice(0, 20) };
+  }
+
+  return { evaluatePrompt, evaluateProject, verifyConnection };
+}
+
+export { fetchRepoSnapshot, parseRepoUrl } from './github.js';

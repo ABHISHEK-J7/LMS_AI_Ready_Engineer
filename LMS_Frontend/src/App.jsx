@@ -1,0 +1,70 @@
+import { useEffect } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { FullPageSpinner } from '@/components/ui';
+import { useAuth } from '@/lib/auth';
+import { LoginPage } from '@/pages/LoginPage';
+import { RegisterPage } from '@/pages/RegisterPage';
+import { NotFound } from '@/pages/NotFound';
+import { DashboardRouter } from '@/pages/dashboards/DashboardRouter';
+import { ModulesPage } from '@/pages/modules/ModulesPage';
+import { ModuleDetailPage } from '@/pages/modules/ModuleDetailPage';
+import { BatchesPage } from '@/pages/batches/BatchesPage';
+import { BatchDetailPage } from '@/pages/batches/BatchDetailPage';
+import { SchedulePage } from '@/pages/schedule/SchedulePage';
+import { AttendancePage } from '@/pages/attendance/AttendancePage';
+import { AssessmentsPage } from '@/pages/assessments/AssessmentsPage';
+import { AssessmentDetail } from '@/pages/assessments/AssessmentDetail';
+import { CurriculumPage } from '@/pages/curriculum/CurriculumPage';
+import { CertificatesPage } from '@/pages/certificates/CertificatesPage';
+import { VerifyCertificatePage } from '@/pages/certificates/VerifyCertificatePage';
+import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage';
+import { DoubtsPage } from '@/pages/doubts/DoubtsPage';
+import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
+import { ProtectedRoute } from '@/routes/ProtectedRoute';
+
+/** Student & Trainer application. Administrators use the separate Admin portal. */
+export default function App() {
+  const { status, bootstrap } = useAuth();
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
+  if (status === 'loading') return <FullPageSpinner />;
+
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/verify/:certificateId" element={<VerifyCertificatePage />} />
+
+      <Route
+        path="/app"
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<DashboardRouter />} />
+        <Route path="curriculum" element={<CurriculumPage />} />
+        <Route path="modules" element={<ModulesPage />} />
+        <Route path="modules/:id" element={<ModuleDetailPage />} />
+        <Route path="batches" element={<BatchesPage />} />
+        <Route path="batches/:id" element={<BatchDetailPage />} />
+        <Route path="schedule" element={<SchedulePage />} />
+        <Route path="attendance" element={<AttendancePage />} />
+        <Route path="doubts" element={<DoubtsPage />} />
+        <Route path="announcements" element={<AnnouncementsPage />} />
+        <Route path="assessments" element={<AssessmentsPage />} />
+        <Route path="assessments/:id" element={<AssessmentDetail />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="certificates" element={<CertificatesPage />} />
+      </Route>
+
+      <Route path="/" element={<Navigate to="/app" replace />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}

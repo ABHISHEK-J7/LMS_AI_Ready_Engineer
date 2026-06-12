@@ -1,0 +1,13 @@
+{
+  "name": "@lms/shared",
+  "version": "0.1.0",
+  "description": "Shared domain enums, constants, and design-system tokens for the AI Ready Engineer LMS",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./theme": "./src/theme/index.js"
+  },
+  "files": ["src"],
+  "scripts": {}
+}

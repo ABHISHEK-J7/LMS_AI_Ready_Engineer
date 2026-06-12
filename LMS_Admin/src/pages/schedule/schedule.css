@@ -1,0 +1,90 @@
+.sched-tabs {
+  display: inline-flex;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.sched-tab {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+}
+.sched-tab.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-group {
+  margin-bottom: var(--space-6);
+}
+.day-header {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+}
+.day-header__count {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-normal);
+}
+
+.class-row {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.class-time {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+.class-time__end {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-normal);
+}
+.class-main {
+  min-width: 0;
+}
+.class-title {
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-1);
+}
+.class-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.class-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .class-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+  .class-actions {
+    justify-content: flex-start;
+  }
+}

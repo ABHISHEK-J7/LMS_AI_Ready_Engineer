@@ -1,0 +1,50 @@
+import { create } from 'zustand';
+import { UserRole } from '@lms/shared';
+import { api, tokenStore, unwrap } from './api';
+
+/** The main app serves students & trainers. Administrators use the separate Admin portal. */
+function rejectAdmin(user) {
+  if (user?.role === UserRole.ADMIN) {
+    const err = new Error('Administrators sign in through the Admin portal.');
+    err.code = 'IS_ADMIN';
+    throw err;
+  }
+}
+
+export const useAuth = create((set) => ({
+  user: null,
+  status: 'loading',
+
+  async login(email, password) {
+    const result = await unwrap(api.post('/auth/login', { email, password }));
+    try {
+      rejectAdmin(result.user);
+    } catch (err) {
+      tokenStore.clear();
+      throw err;
+    }
+    tokenStore.set(result.tokens);
+    set({ user: result.user, status: 'authenticated' });
+    return result.user;
+  },
+
+  logout() {
+    tokenStore.clear();
+    set({ user: null, status: 'unauthenticated' });
+  },
+
+  async bootstrap() {
+    if (!tokenStore.access) {
+      set({ status: 'unauthenticated' });
+      return;
+    }
+    try {
+      const { user } = await unwrap(api.get('/auth/me'));
+      rejectAdmin(user); // an admin token must not unlock the student/trainer app
+      set({ user, status: 'authenticated' });
+    } catch {
+      tokenStore.clear();
+      set({ user: null, status: 'unauthenticated' });
+    }
+  },
+}));

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import * as classes from '../controllers/class.controller.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -12,6 +12,8 @@ const adminOnly = requireRole(UserRole.ADMIN);
 const adminOrTrainer = requireRole(UserRole.ADMIN, UserRole.TRAINER);
 
 router.get('/', validate({ query: classes.listClassesQuery }), asyncHandler(classes.listClasses));
+// Student's pending class ratings (must be before the /:id route).
+router.get('/ratings/pending', requireRole(UserRole.STUDENT), asyncHandler(classes.pendingRatings));
 router.get('/:id', validate({ params: classes.classIdParam }), asyncHandler(classes.getClass));
 
 // Student records their entry time when joining the video (first click sticks).
@@ -20,6 +22,15 @@ router.post(
   requireRole(UserRole.STUDENT),
   validate({ params: classes.classIdParam }),
   asyncHandler(classes.joinClass),
+);
+
+// Student rates the class/trainer after attending (≥¾ — enforced client-side
+// via entry time; server requires they joined and haven't already rated).
+router.post(
+  '/:id/rating',
+  requireRole(UserRole.STUDENT),
+  validate({ params: classes.classIdParam, body: classes.rateClassSchema }),
+  asyncHandler(classes.rateClass),
 );
 
 router.post(

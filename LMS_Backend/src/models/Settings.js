@@ -4,7 +4,7 @@ import {
   DEFAULT_MIN_ATTENDANCE,
   DEFAULT_PASSING_SCORE,
   DEFAULT_THEME,
-} from '@lms/shared';
+} from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const settingsSchema = new Schema(
@@ -14,6 +14,10 @@ const settingsSchema = new Schema(
     minAttendance: { type: Number, default: DEFAULT_MIN_ATTENDANCE },
     allowSelfRegistration: { type: Boolean, default: DEFAULT_ALLOW_SELF_REGISTRATION },
     activeTheme: { type: String, default: DEFAULT_THEME },
+    // Safe Exam Browser: one global Config Key (the entire secret behind the SEB
+    // gate — never returned by the API, like the other keys) + the .seb config URL.
+    sebConfigKey: { type: String, select: false, default: '' },
+    sebConfigUrl: { type: String, default: '' },
     // Admin-configurable Claude API key for AI grading. Stored server-side only;
     // NEVER returned by the API (the controller exposes a boolean instead) and
     // hidden from default queries. The env var takes precedence over this.
@@ -39,6 +43,12 @@ export async function getSettings() {
 export async function getStoredAiApiKey() {
   const doc = await SettingsModel.findOne({ key: 'global' }).select('+aiApiKey');
   return doc?.aiApiKey || '';
+}
+
+/** Read the stored SEB Config Key (explicitly, since it is `select: false`). */
+export async function getStoredSebConfigKey() {
+  const doc = await SettingsModel.findOne({ key: 'global' }).select('+sebConfigKey');
+  return doc?.sebConfigKey || '';
 }
 
 /** Read the stored Zoom credentials (explicitly, since they are `select: false`). */

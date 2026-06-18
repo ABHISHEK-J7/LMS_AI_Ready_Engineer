@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { MulterError } from 'multer';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
+import { logger, captureError } from '../utils/logger.js';
 
 /** 404 for unmatched routes. */
 export function notFoundHandler(req, _res, next) {
@@ -11,7 +12,7 @@ export function notFoundHandler(req, _res, next) {
 /** Global error handler — converts anything thrown into the standard envelope. */
 export function errorHandler(
   err,
-  _req,
+  req,
   res,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next,
@@ -34,8 +35,15 @@ export function errorHandler(
   }
 
   if (apiError.statusCode >= 500) {
-    // eslint-disable-next-line no-console
-    console.error('[error]', err);
+    logger.error('[error] request failed', {
+      requestId: req?.id,
+      method: req?.method,
+      path: req?.originalUrl,
+      status: apiError.statusCode,
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    captureError(err, { requestId: req?.id, method: req?.method, path: req?.originalUrl });
   }
 
   const body = {
@@ -44,6 +52,8 @@ export function errorHandler(
       code: apiError.code,
       message: apiError.message,
       details: env.isProd && apiError.statusCode >= 500 ? undefined : apiError.details,
+      // Surface the correlation id so a user can quote it in a bug report.
+      requestId: req?.id,
     },
   };
   res.status(apiError.statusCode).json(body);

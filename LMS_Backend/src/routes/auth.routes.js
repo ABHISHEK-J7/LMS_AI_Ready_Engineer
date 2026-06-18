@@ -44,6 +44,7 @@ router.post('/login', credentialLimiter, validate({ body: auth.loginSchema }), a
 router.post('/register', credentialLimiter, validate({ body: auth.registerSchema }), asyncHandler(auth.register));
 router.post('/refresh', refreshLimiter, validate({ body: auth.refreshSchema }), asyncHandler(auth.refresh));
 router.get('/me', authenticate, asyncHandler(auth.me));
+router.post('/logout', authenticate, asyncHandler(auth.logout));
 
 // Passwordless onboarding / password reset via email OTP.
 router.post('/check-email', refreshLimiter, validate({ body: auth.checkEmailSchema }), asyncHandler(auth.checkEmail));

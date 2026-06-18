@@ -1,4 +1,5 @@
-import { Badge, Card, CardHeader, FullPageSpinner } from "@/components/ui";
+import { BarChart3 } from "lucide-react";
+import { Badge, Card, CardHeader, EmptyState, ErrorState, SkeletonCards } from "@/components/ui";
 import { PageHeader, Stat } from "@/components/PageHeader";
 import { BarChart } from "@/components/charts/BarChart";
 import { apiErrorMessage } from "@/lib/api";
@@ -10,9 +11,17 @@ export function AnalyticsPage() {
 }
 
 function TrainerAnalytics() {
-  const { data, isLoading, isError, error } = useTrainerAnalytics();
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
+  const { data, isLoading, isError, error, refetch } = useTrainerAnalytics();
+
+  if (isError) return <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />;
+  if (isLoading && !data) {
+    return (
+      <>
+        <PageHeader title="Analytics" subtitle="Performance across your batches and modules." />
+        <SkeletonCards count={4} height="7rem" />
+      </>
+    );
+  }
 
   const { counts, batches, assessments } = data;
   return (
@@ -38,7 +47,11 @@ function TrainerAnalytics() {
       <Card>
         <CardHeader title="Assessment Performance" subtitle="Submissions, pass rate & average score" />
         {assessments.length === 0 ? (
-          <p className="lms-muted">No assessments in your modules yet.</p>
+          <EmptyState
+            icon={<BarChart3 size={26} />}
+            title="No assessments yet"
+            description="No assessments in your modules yet."
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">

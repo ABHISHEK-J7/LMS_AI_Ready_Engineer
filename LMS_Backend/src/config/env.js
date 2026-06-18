@@ -25,11 +25,24 @@ export const env = {
     .filter(Boolean),
   // Public base URL of the SPA — used to build certificate verification links / QR codes.
   appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:5173',
+  // Optional override for the public origin used to verify Safe Exam Browser
+  // request hashes (e.g. https://exam.yourdomain.com). When unset, the request's
+  // own protocol + host is used. Set this if a proxy rewrites the host SEB saw.
+  sebBaseUrl: process.env.SEB_BASE_URL ?? '',
   mongoUri: required('MONGO_URI', 'mongodb://localhost:27017/lms_ai_ready'),
   jwt: {
     accessSecret: required('JWT_ACCESS_SECRET', 'dev-access-secret'),
     refreshSecret: required('JWT_REFRESH_SECRET', 'dev-refresh-secret'),
   },
+  // Log level: 'debug' | 'info' | 'warn' | 'error'. Logs emit structured JSON in
+  // production (one line per event) and a readable form in development.
+  logLevel: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  // Optional Sentry DSN for error monitoring. When set AND @sentry/node is
+  // installed, 5xx errors + uncaught exceptions are reported. No-op otherwise.
+  sentryDsn: process.env.SENTRY_DSN ?? '',
+  // Webcam proctor snapshots are personal data: purge them (files + DB refs)
+  // this many days after the attempt. 0 disables the sweep (keep forever).
+  proctorRetentionDays: Number(process.env.PROCTOR_RETENTION_DAYS ?? 90),
   openaiApiKey: process.env.OPENAI_API_KEY ?? '',
   // AI evaluation engine (LMS_AI_Engine) — Claude API.
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',

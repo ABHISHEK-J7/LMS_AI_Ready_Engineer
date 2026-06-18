@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { TriangleAlert } from 'lucide-react';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, CardHeader, FullPageSpinner, Select } from '@/components/ui';
+import { TriangleAlert, CalendarX, Users } from 'lucide-react';
+import { UserRole } from '@/shared';
+import { Badge, Button, Card, CardHeader, Select, Skeleton, SkeletonTable, EmptyState, ErrorState } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -10,7 +10,7 @@ import { useBatches } from '@/lib/batches';
 import { useClasses } from '@/lib/classes';
 import { formatDate } from '@/lib/format';
 import { RosterEditor } from './RosterEditor';
-import { ATT_LABEL, ATT_TONE, pctTone } from './attendanceUi';
+import { ATT_LABEL, ATT_TONE, pctTone, summarize } from './attendanceUi';
 import '../schedule/schedule.css';
 
 export function AttendancePage() {
@@ -22,15 +22,59 @@ export function AttendancePage() {
 // ── Student: my attendance ─────────────────────────────────────────────────────
 
 function StudentAttendanceView() {
-  const { data, isLoading, isError, error } = useMyAttendance();
+  const { data, isLoading, isError, error, refetch } = useMyAttendance();
+  const [moduleId, setModuleId] = useState('');
 
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
+  const records = data?.records ?? [];
 
-  const { summary, records } = data;
+  // Modules the student actually has attendance for → the filter options.
+  const modules = [];
+  const seen = new Set();
+  for (const r of records) {
+    const m = r.module;
+    if (m?.id && !seen.has(m.id)) { seen.add(m.id); modules.push(m); }
+  }
+  modules.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Filter + recompute the cards for the selected module ('' = overall).
+  const shown = moduleId ? records.filter((r) => r.module?.id === moduleId) : records;
+  const summary = summarize(shown);
+  const scope = moduleId ? (modules.find((m) => m.id === moduleId)?.name ?? 'Module') : 'all modules';
+
   return (
     <>
-      <PageHeader title="My Attendance" subtitle="Your class attendance record." />
+      <div className="att-overall-head">
+        <PageHeader title="Overall Attendance" subtitle={`Your class attendance across ${scope}.`} />
+        <div className="att-overall-filter">
+          <Select
+            label="Module"
+            value={moduleId}
+            onChange={(e) => setModuleId(e.target.value)}
+            options={[
+              { value: '', label: 'All modules' },
+              ...modules.map((m) => ({ value: m.id, label: m.name })),
+            ]}
+          />
+        </div>
+      </div>
+
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !data ? (
+        <>
+          <div className="stat-grid">
+            <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+            <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+            <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+            <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+          </div>
+          <Card>
+            <CardHeader title="History" subtitle="All classes" />
+            <SkeletonTable rows={5} cols={5} />
+          </Card>
+        </>
+      ) : (
+        <>
       <div className="stat-grid">
         <Stat label="Attendance" value={`${summary.percentage}%`} accent />
         <Stat label="Classes Attended" value={`${summary.attended} / ${summary.totalClasses}`} />
@@ -39,9 +83,13 @@ function StudentAttendanceView() {
       </div>
 
       <Card>
-        <CardHeader title="History" />
-        {records.length === 0 ? (
-          <p className="lms-muted">No attendance recorded yet.</p>
+        <CardHeader title="History" subtitle={moduleId ? scope : 'All classes'} />
+        {shown.length === 0 ? (
+          <EmptyState
+            icon={<CalendarX size={26} />}
+            title="No attendance yet"
+            description={moduleId ? 'No attendance recorded for this module yet.' : 'No attendance recorded yet.'}
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -49,7 +97,7 @@ function StudentAttendanceView() {
                 <tr><th>Date</th><th>Class</th><th>Module</th><th>Status</th><th>Remarks</th></tr>
               </thead>
               <tbody>
-                {records.map((r) => (
+                {shown.map((r) => (
                   <tr key={r.id}>
                     <td>{formatDate(r.classSession?.date ?? r.markedAt)}</td>
                     <td>{r.classSession?.title ?? '—'}</td>
@@ -63,6 +111,8 @@ function StudentAttendanceView() {
           </div>
         )}
       </Card>
+        </>
+      )}
     </>
   );
 }
@@ -93,14 +143,18 @@ function EntryView() {
   const { data: classes, isLoading } = useClasses();
   const [selected, setSelected] = useState(null);
 
-  if (isLoading) return <FullPageSpinner />;
-
   return (
     <>
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader title="Select a class" subtitle="Choose a session to record attendance for." />
-        {!classes || classes.length === 0 ? (
-          <p className="lms-muted">No classes scheduled yet.</p>
+        {isLoading && !classes ? (
+          <SkeletonTable rows={5} cols={5} />
+        ) : !classes || classes.length === 0 ? (
+          <EmptyState
+            icon={<CalendarX size={26} />}
+            title="No classes scheduled"
+            description="No classes scheduled yet."
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -157,7 +211,11 @@ function ComplianceView() {
         />
       </Card>
 
-      {batchId && isLoading && <FullPageSpinner />}
+      {batchId && isLoading && !data && (
+        <Card>
+          <SkeletonTable rows={5} cols={7} />
+        </Card>
+      )}
 
       {data && (
         <Card>
@@ -168,7 +226,11 @@ function ComplianceView() {
             } below minimum`}
           />
           {data.students.length === 0 ? (
-            <p className="lms-muted">No students enrolled.</p>
+            <EmptyState
+              icon={<Users size={26} />}
+              title="No students enrolled"
+              description="No students enrolled."
+            />
           ) : (
             <div className="table-wrap">
               <table className="table">

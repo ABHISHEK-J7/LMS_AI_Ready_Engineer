@@ -11,7 +11,7 @@ import {
   ThemeMode,
   scalesToCssVars,
   themeToCssVars,
-} from '@lms/shared';
+} from '@/shared';
 
 const ThemeContext = createContext(null);
 

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
-import { ThemeName } from '@lms/shared';
-import { Badge, Button, Card, CardHeader, FullPageSpinner, Input, Select } from '@/components/ui';
+import { ThemeName } from '@/shared';
+import { Badge, Button, Card, CardHeader, ErrorState, Input, Select, SkeletonText } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
-import { useSettings, useTestAiConnection, useTestZoomConnection, useUpdateSettings } from '@/lib/settings';
+import { useSettings, useTestAiConnection, useTestZoomConnection, useUpdateSettings, useUploadSebConfig } from '@/lib/settings';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export function SettingsPage() {
-  const { data, isLoading, isError, error } = useSettings();
+  const { data, isLoading, isError, error, refetch } = useSettings();
   const update = useUpdateSettings();
   const { setTheme } = useTheme();
 
@@ -25,7 +25,25 @@ export function SettingsPage() {
     });
   }, [data]);
 
-  if (isLoading || !form) return isError ? <Card><p className="field__error">{apiErrorMessage(error)}</p></Card> : <FullPageSpinner />;
+  if (isError) {
+    return (
+      <>
+        <PageHeader title="Platform Settings" subtitle="Institution-wide rules applied across the platform." />
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      </>
+    );
+  }
+
+  if (isLoading || !form) {
+    return (
+      <>
+        <PageHeader title="Platform Settings" subtitle="Institution-wide rules applied across the platform." />
+        <Card style={{ maxWidth: '40rem' }}>
+          <SkeletonText lines={6} />
+        </Card>
+      </>
+    );
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -111,7 +129,83 @@ export function SettingsPage() {
 
       <AiGradingCard settings={data} />
       <ZoomCard settings={data} />
+      <SafeExamBrowserCard settings={data} />
     </>
+  );
+}
+
+function SafeExamBrowserCard({ settings }) {
+  const update = useUpdateSettings();
+  const upload = useUploadSebConfig();
+  // The Config Key is write-only (never returned). Leave blank to keep the saved one.
+  const [form, setForm] = useState({ sebConfigKey: '', sebConfigUrl: settings.sebConfigUrl || '' });
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  async function save(e) {
+    e.preventDefault();
+    setErr('');
+    setMsg('');
+    try {
+      const body = { sebConfigUrl: form.sebConfigUrl.trim() };
+      if (form.sebConfigKey.trim()) body.sebConfigKey = form.sebConfigKey.trim();
+      await update.mutateAsync(body);
+      setForm((f) => ({ ...f, sebConfigKey: '' }));
+      setMsg('Saved.');
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+  async function onUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErr('');
+    try {
+      const data = await upload.mutateAsync(file);
+      setForm((f) => ({ ...f, sebConfigUrl: data.sebConfigUrl }));
+      setMsg('.seb config uploaded.');
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+
+  return (
+    <Card style={{ maxWidth: '40rem', marginTop: 'var(--space-6)' }}>
+      <CardHeader title="Safe Exam Browser (SEB)" subtitle="One global Config Key locks proctored exams to the SEB kiosk browser." />
+      <div style={{ marginBottom: 'var(--space-3)' }}>
+        {settings.sebConfigured ? <Badge tone="success">Config Key set</Badge> : <Badge tone="neutral">Not configured</Badge>}
+      </div>
+      <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        <Input
+          label="SEB Config Key"
+          autoComplete="off"
+          placeholder={settings.sebConfigured ? 'A key is saved — enter a new one to replace it' : 'Paste the Config Key from SEB Config Tool'}
+          value={form.sebConfigKey}
+          onChange={(e) => setForm({ ...form, sebConfigKey: e.target.value })}
+        />
+        <Input
+          label="SEB config (.seb) download URL"
+          autoComplete="off"
+          placeholder="https://…/exam.seb  (students launch from here)"
+          value={form.sebConfigUrl}
+          onChange={(e) => setForm({ ...form, sebConfigUrl: e.target.value })}
+        />
+        <label className="field">
+          <span className="field__label">…or upload a .seb file</span>
+          <input type="file" accept=".seb" onChange={onUpload} disabled={upload.isPending} />
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <Button type="submit" loading={update.isPending}>Save SEB settings</Button>
+          {msg && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>{msg}</span>}
+        </div>
+        {err && <span className="field__error">{err}</span>}
+        <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>
+          In the <strong>SEB Config Tool</strong>, set the exam Start URL to this app, copy the generated{' '}
+          <strong>Config Key</strong> here, and upload the same <strong>.seb</strong> file so students can launch it.
+          Then tick “Require Safe Exam Browser” on a proctored exam. SEB is desktop-only (Windows/macOS).
+        </p>
+      </form>
+    </Card>
   );
 }
 

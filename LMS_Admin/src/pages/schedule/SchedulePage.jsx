@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner } from '@/components/ui';
+import { UserRole } from '@/shared';
+import { CalendarX } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -33,7 +34,7 @@ export function SchedulePage() {
       : tab === 'calendar'
         ? { from: ymd(monthStart), to: ymd(monthEnd) }
         : {};
-  const { data: classes, isLoading, isError, error } = useClasses(filters);
+  const { data: classes, isLoading, isError, error, refetch } = useClasses(filters);
   const shiftMonth = (delta) => setMonth((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
 
   // Options for the schedule modal (only fetched when the user can manage).
@@ -90,14 +91,10 @@ export function SchedulePage() {
         </div>
       )}
 
-      {isError && (
-        <Card>
-          <p className="field__error">{apiErrorMessage(error)}</p>
-        </Card>
-      )}
+      {isError && <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {isLoading ? (
-        <FullPageSpinner />
+      {isLoading && !classes ? (
+        <SkeletonCards count={4} height="7rem" />
       ) : tab === 'calendar' ? (
         <MonthCalendar
           month={month}
@@ -105,11 +102,17 @@ export function SchedulePage() {
           onSelect={(c) => ownerCanManage(c) && setModal({ open: true, mode: 'edit', initial: c })}
         />
       ) : groups.length === 0 ? (
-        <Card>
-          <p className="lms-muted">
-            {tab === 'upcoming' ? 'No upcoming classes scheduled.' : 'No classes found.'}
-          </p>
-        </Card>
+        <EmptyState
+          icon={<CalendarX size={26} />}
+          title={tab === 'upcoming' ? 'No upcoming classes scheduled.' : 'No classes found.'}
+          action={
+            canManage ? (
+              <Button onClick={() => setModal({ open: true, mode: 'create', initial: null })}>
+                + Schedule Class
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         groups.map((g) => (
           <div className="day-group" key={g.key}>

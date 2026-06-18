@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import * as a from '../controllers/assessment.controller.js';
 import * as sub from '../controllers/submission.controller.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
@@ -25,16 +25,22 @@ router.delete('/:id', adminOrTrainer, validate({ params: a.assessmentIdParam }),
 router.post('/:id/unlock', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.unlockSchema }), asyncHandler(a.unlockAssessment));
 router.post('/:id/lock', adminOrTrainer, validate({ params: a.assessmentIdParam }), asyncHandler(a.lockAssessment));
 
-// Question authoring.
-router.post('/:id/questions', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.questionParamBody }), asyncHandler(a.addQuestion));
-router.post('/:id/questions/bulk', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.bulkQuestionsSchema }), asyncHandler(a.addQuestionsBulk));
-router.patch('/:id/questions/:questionId', adminOrTrainer, validate({ params: a.questionParam, body: a.questionParamBody }), asyncHandler(a.updateQuestion));
+// Build a test by hand-picking from the module's question bank (bank-only authoring).
+router.post('/:id/questions/from-bank', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.fromBankSchema }), asyncHandler(a.addQuestionsFromBank));
 router.delete('/:id/questions/:questionId', adminOrTrainer, validate({ params: a.questionParam }), asyncHandler(a.deleteQuestion));
+
+// Timed/proctored attempts.
+router.post('/:id/start', studentOnly, validate({ params: sub.assessmentIdParam }), asyncHandler(sub.startAttempt));
+router.patch('/:id/progress', studentOnly, validate({ params: sub.assessmentIdParam, body: sub.progressSchema }), asyncHandler(sub.saveProgress));
+router.post('/:id/disqualify', studentOnly, validate({ params: sub.assessmentIdParam, body: sub.disqualifySchema }), asyncHandler(sub.disqualifyAttempt));
+router.post('/:id/proctor-shot', studentOnly, validate({ params: sub.assessmentIdParam }), sub.uploadProctorShot, asyncHandler(sub.proctorShot));
+router.post('/:id/warning', studentOnly, validate({ params: sub.assessmentIdParam, body: sub.warningSchema }), asyncHandler(sub.recordWarning));
 
 // Submissions.
 router.post('/:id/submit', studentOnly, validate({ params: sub.assessmentIdParam, body: sub.submitSchema }), asyncHandler(sub.submit));
 router.get('/:id/submission', studentOnly, validate({ params: sub.assessmentIdParam }), asyncHandler(sub.getMySubmission));
 router.get('/:id/submissions', adminOrTrainer, validate({ params: sub.assessmentIdParam }), asyncHandler(sub.listSubmissions));
+router.get('/:id/submissions.csv', adminOrTrainer, validate({ params: sub.assessmentIdParam }), asyncHandler(sub.exportSubmissionsCsv));
 router.get('/:id/leaderboard', validate({ params: sub.assessmentIdParam }), asyncHandler(sub.leaderboard));
 router.post('/:id/submissions/:submissionId/regrade', adminOrTrainer, validate({ params: sub.submissionParam }), asyncHandler(sub.regradeSubmission));
 

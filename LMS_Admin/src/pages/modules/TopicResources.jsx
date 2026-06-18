@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FileText, Film, Link2, Plus, PencilLine, Presentation, Trash2 } from 'lucide-react';
-import { ResourceType } from '@lms/shared';
+import { ResourceType } from '@/shared';
 import { Button, Input, Select } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useAddResource, useDeleteResource, useResources } from '@/lib/resources';

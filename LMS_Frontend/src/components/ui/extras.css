@@ -11,7 +11,7 @@
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
   width: 100%;
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .select {
   height: 2.5rem;
@@ -21,6 +21,10 @@
   min-height: 5rem;
   resize: vertical;
   line-height: 1.5;
+}
+.select:hover:not(:focus),
+.textarea:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border));
 }
 .select:focus,
 .textarea:focus {
@@ -44,12 +48,12 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-xl);
   width: 100%;
   max-width: 32rem;
   max-height: 90vh;
   overflow: auto;
-  animation: modal-pop var(--transition-base);
+  animation: modal-pop 220ms var(--ease-out);
 }
 .modal--md { max-width: 32rem; }
 .modal--lg { max-width: 62rem; }
@@ -87,6 +91,13 @@
   color: var(--color-primary);
   border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
+.modal__action:active {
+  transform: scale(0.92);
+}
+.modal__action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
 .modal__close {
   background: none;
   border: none;
@@ -95,9 +106,18 @@
   line-height: 1;
   color: var(--color-text-muted);
   padding: var(--space-1);
+  border-radius: var(--radius-md);
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 .modal__close:hover {
   color: var(--color-text-primary);
+}
+.modal__close:active {
+  transform: scale(0.92);
+}
+.modal__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 .modal__body {
   padding: var(--space-6);
@@ -114,10 +134,12 @@
     opacity: 0;
   }
 }
+/* Modals stay centered (transform-origin: center) — they aren't anchored to a
+   trigger. Scale up from 0.96 + fade so they don't appear from nothing. */
 @keyframes modal-pop {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(8px) scale(0.96);
   }
 }
 

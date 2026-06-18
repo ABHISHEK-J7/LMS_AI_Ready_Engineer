@@ -6,6 +6,9 @@ import { env } from './env.js';
 // error instead of hanging ~30s (same approach as the team's JinSei backend).
 mongoose.set('bufferCommands', false);
 mongoose.set('strictQuery', true);
+// In production, indexes are built explicitly at boot (server.js) — don't also
+// let Mongoose build them lazily mid-traffic on a large dataset.
+mongoose.set('autoIndex', !env.isProd);
 
 // Atlas SRV records sometimes fail through the OS resolver; pin public DNS.
 try {
@@ -28,7 +31,14 @@ export async function connectDatabase() {
     console.warn('[db] MongoDB disconnected');
   });
 
-  await mongoose.connect(env.mongoUri);
+  await mongoose.connect(env.mongoUri, {
+    // Bounded pool + fail-fast timeouts so total connections stay within Atlas
+    // limits as instances scale, and a hung server doesn't hang requests.
+    maxPoolSize: Number(process.env.MONGO_MAX_POOL ?? 20),
+    minPoolSize: Number(process.env.MONGO_MIN_POOL ?? 2),
+    serverSelectionTimeoutMS: 10_000,
+    socketTimeoutMS: 45_000,
+  });
 }
 
 export async function disconnectDatabase() {

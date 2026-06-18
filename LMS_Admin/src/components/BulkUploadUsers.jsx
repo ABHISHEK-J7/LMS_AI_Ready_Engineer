@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '@/shared';
 import { Button, Select } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useBulkCreateUsers } from '@/lib/users';

@@ -1,5 +1,5 @@
-import { createEvaluator } from '@lms/ai-engine';
-import { QuestionType, SubmissionStatus } from '@lms/shared';
+import { createEvaluator } from '../ai-engine/index.js';
+import { QuestionType, SubmissionStatus } from '#shared';
 import { Assessment, Submission, getStoredAiApiKey } from '../models/index.js';
 import { env } from '../config/env.js';
 
@@ -134,6 +134,13 @@ export async function gradeInBackground(assessmentId, submissionId) {
     // A passed final may complete a module → issue any earned certificates.
     const { issueEligibleCertificates } = await import('./certificates.js');
     await issueEligibleCertificates(submission.student).catch(() => {});
+    const { notify } = await import('./notify.js');
+    await notify(submission.student, {
+      type: 'result',
+      title: `Result: ${assessment.title}`,
+      body: `Your submission was graded — ${submission.score}% (${submission.passed ? 'Passed' : 'Not passed'}).`,
+      link: `/app/assessments/${assessment._id}`,
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[aiGrading] background grading failed:', err.message);

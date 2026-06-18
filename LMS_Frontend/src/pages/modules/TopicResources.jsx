@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FileText, Film, Link2, Lock, Plus, PencilLine, Presentation, Trash2 } from 'lucide-react';
-import { ResourceType, UserRole } from '@lms/shared';
-import { Button, Input, Select } from '@/components/ui';
+import { ResourceType, UserRole } from '@/shared';
+import { Button, Input, Select, SkeletonText } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useAddResource, useDeleteResource, useResources } from '@/lib/resources';
@@ -83,7 +83,7 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
       )}
 
       {isLoading ? (
-        <p className="lms-muted">Loading…</p>
+        <SkeletonText lines={3} />
       ) : view === 'table' ? (
         <div className="res-matrix-wrap">
           <div className="res-matrix-scroll">

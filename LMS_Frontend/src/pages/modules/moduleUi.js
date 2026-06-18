@@ -1,4 +1,4 @@
-import { SkillLevel } from '@lms/shared';
+import { SkillLevel } from '@/shared';
 
 /** Badge tone for each skill level — consistent across list + detail. */
 export function levelTone(level) {

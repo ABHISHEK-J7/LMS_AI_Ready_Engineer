@@ -1,4 +1,4 @@
-import { UserRole } from '@lms/shared';
+import { UserRole } from '@/shared';
 import { useAuth } from '@/lib/auth';
 import { StudentDashboard } from './StudentDashboard';
 import { TrainerDashboard } from './TrainerDashboard';

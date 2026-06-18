@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Trash2, UploadCloud, X } from 'lucide-react';
-import { UserRole } from '@lms/shared';
+import { BookOpen, Trash2, UploadCloud, X } from 'lucide-react';
+import { UserRole } from '@/shared';
 import {
   Badge,
   Button,
   Card,
   CardHeader,
-  FullPageSpinner,
+  EmptyState,
+  ErrorState,
   Input,
   Modal,
   Select,
+  Skeleton,
+  SkeletonText,
 } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { BulkUploadUsers } from '@/components/BulkUploadUsers';
@@ -34,15 +37,38 @@ import '../modules/modules.css';
 export function BatchDetailPage() {
   const { id } = useParams();
   const isAdmin = useAuth((s) => s.user?.role) === UserRole.ADMIN;
-  const { data: batch, isLoading, isError, error } = useBatch(id);
+  const { data: batch, isLoading, isError, error, refetch } = useBatch(id);
 
-  if (isLoading) return <FullPageSpinner />;
+  if (isLoading && !batch) {
+    return (
+      <>
+        <PageHeader
+          title={<Skeleton width="14rem" height="1.6rem" />}
+          subtitle={
+            <Link to="/app/batches" className="lms-muted">
+              ← All batches
+            </Link>
+          }
+        />
+        <div style={{ marginTop: 'var(--space-6)' }}>
+          <SkeletonText lines={4} />
+        </div>
+      </>
+    );
+  }
   if (isError || !batch) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(error) || 'Batch not found'}</p>
-        <Link to="/app/batches">← Back to batches</Link>
-      </Card>
+      <>
+        <PageHeader
+          title="Batch"
+          subtitle={
+            <Link to="/app/batches" className="lms-muted">
+              ← All batches
+            </Link>
+          }
+        />
+        <ErrorState message={apiErrorMessage(error) || 'Batch not found'} onRetry={refetch} />
+      </>
     );
   }
 
@@ -209,7 +235,11 @@ function ModuleTrainersPanel({ batch, isAdmin }) {
       </div>
 
       {modules.length === 0 ? (
-        <p className="lms-muted">No modules in this batch yet.</p>
+        <EmptyState
+          icon={<BookOpen size={26} />}
+          title="No modules in this batch yet"
+          description={isAdmin ? 'Add a module above to start mapping trainers.' : 'No modules in this batch yet.'}
+        />
       ) : (
         <div className="map-grid">
           {modules.map((m) => (

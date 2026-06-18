@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import mongoose, { Schema } from 'mongoose';
-import { UserRole, UserStatus } from '@lms/shared';
+import { UserRole, UserStatus } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const userSchema = new Schema(
@@ -23,6 +23,21 @@ const userSchema = new Schema(
     },
     phone: String,
     avatarUrl: String,
+    bio: { type: String, trim: true },
+    // Coding / professional platform links shown on the profile (see SOCIAL_PLATFORMS).
+    links: {
+      github: String,
+      leetcode: String,
+      codechef: String,
+      hackerrank: String,
+      linkedin: String,
+      portfolio: String,
+    },
+    // Extra user-added links beyond the fixed platforms (label + url).
+    customLinks: { type: [{ _id: false, label: String, url: String }], default: [] },
+    // Bumped to invalidate all outstanding refresh tokens (logout, password change,
+    // suspension). Refresh tokens carrying an older `tv` are rejected.
+    tokenVersion: { type: Number, default: 0 },
     batch: { type: Schema.Types.ObjectId, ref: 'Batch' },
     assignedModules: [{ type: Schema.Types.ObjectId, ref: 'Module' }],
     assignedBatches: [{ type: Schema.Types.ObjectId, ref: 'Batch' }],

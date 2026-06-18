@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner } from '@/components/ui';
+import { UserRole } from '@/shared';
+import { CalendarClock } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useBatches } from '@/lib/batches';
 import { useClasses, useDeleteClass, useJoinClass, useUpdateClass } from '@/lib/classes';
+import { useClassRatingsPending, ratingEligible } from '@/lib/classRatings';
 import { useModules } from '@/lib/modules';
 import { useTrainers } from '@/lib/users';
 import { ClassModal } from './ClassModal';
+import { ClassRatingModal } from './ClassRatingModal';
 import { MonthCalendar } from './MonthCalendar';
 import { STATUS_LABEL, STATUS_TONE, PROVIDER_LABEL, classHasEnded, groupByDay, todayISO } from './scheduleUi';
 import { downloadIcs } from '@/lib/ics';
@@ -33,7 +36,7 @@ export function SchedulePage() {
       : tab === 'calendar'
         ? { from: ymd(monthStart), to: ymd(monthEnd) }
         : {};
-  const { data: classes, isLoading, isError, error } = useClasses(filters);
+  const { data: classes, isLoading, isError, error, refetch } = useClasses(filters);
   const shiftMonth = (delta) => setMonth((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
 
   // Options for the schedule modal (only fetched when the user can manage).
@@ -45,6 +48,25 @@ export function SchedulePage() {
   const updateClass = useUpdateClass();
   const deleteClass = useDeleteClass();
   const joinClass = useJoinClass();
+
+  const isStudent = role === UserRole.STUDENT;
+  // Classes the student attended but hasn't rated yet. Only those they were
+  // eligible for (attended ≥¾, class is over) block joining the next class.
+  const { data: pendingRatings } = useClassRatingsPending(isStudent);
+  const eligiblePending = (pendingRatings ?? []).filter(ratingEligible);
+  const mustRate = eligiblePending.length > 0;
+  const [rateTarget, setRateTarget] = useState(null);
+
+  // Student Join: if an eligible class is unrated, block and open the rating
+  // modal; otherwise record entry time and open the meeting in a new tab.
+  function handleStudentJoin(c) {
+    if (mustRate) {
+      setRateTarget(eligiblePending[0]);
+      return;
+    }
+    joinClass.mutate(c.id);
+    window.open(c.meetingLink, '_blank', 'noopener,noreferrer');
+  }
 
   const groups = groupByDay(classes ?? []);
 
@@ -62,6 +84,19 @@ export function SchedulePage() {
             : 'Trainer-led sessions across your batches.'
         }
       />
+
+      {mustRate && (
+        <Card className="rate-gate">
+          <div>
+            <strong>Rate your previous class to continue.</strong>
+            <div className="lms-muted">
+              You have {eligiblePending.length} class{eligiblePending.length > 1 ? 'es' : ''} awaiting your
+              rating. You can&apos;t join a new class until you do.
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setRateTarget(eligiblePending[0])}>Rate now</Button>
+        </Card>
+      )}
 
       <div className="toolbar">
         <div className="sched-tabs">
@@ -91,14 +126,10 @@ export function SchedulePage() {
         </div>
       )}
 
-      {isError && (
-        <Card>
-          <p className="field__error">{apiErrorMessage(error)}</p>
-        </Card>
-      )}
+      {isError && <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {isLoading ? (
-        <FullPageSpinner />
+      {isLoading && !classes ? (
+        <SkeletonCards count={4} height="5rem" />
       ) : tab === 'calendar' ? (
         <MonthCalendar
           month={month}
@@ -106,11 +137,11 @@ export function SchedulePage() {
           onSelect={(c) => ownerCanManage(c) && setModal({ open: true, mode: 'edit', initial: c })}
         />
       ) : groups.length === 0 ? (
-        <Card>
-          <p className="lms-muted">
-            {tab === 'upcoming' ? 'No upcoming classes scheduled.' : 'No classes found.'}
-          </p>
-        </Card>
+        <EmptyState
+          icon={<CalendarClock size={26} />}
+          title={tab === 'upcoming' ? 'No upcoming classes' : 'No classes found'}
+          description={tab === 'upcoming' ? 'No upcoming classes scheduled.' : 'No classes found.'}
+        />
       ) : (
         groups.map((g) => (
           <div className="day-group" key={g.key}>
@@ -146,14 +177,15 @@ export function SchedulePage() {
                 </div>
                 <div className="class-actions">
                   {c.meetingLink && c.status !== 'cancelled' && !ended ? (
-                    <a
-                      href={c.meetingLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => { if (role === UserRole.STUDENT) joinClass.mutate(c.id); }}
-                    >
-                      <Button size="sm">Join</Button>
-                    </a>
+                    isStudent ? (
+                      <Button size="sm" onClick={() => handleStudentJoin(c)}>
+                        {mustRate ? 'Rate to join' : 'Join'}
+                      </Button>
+                    ) : (
+                      <a href={c.meetingLink} target="_blank" rel="noreferrer">
+                        <Button size="sm">Join</Button>
+                      </a>
+                    )
                   ) : ended && c.status !== 'cancelled' ? (
                     <Button size="sm" variant="outline" disabled>Class ended</Button>
                   ) : null}
@@ -208,6 +240,12 @@ export function SchedulePage() {
           trainers={trainers ?? []}
         />
       )}
+
+      <ClassRatingModal
+        pending={rateTarget}
+        onClose={() => setRateTarget(null)}
+        onRated={() => setRateTarget(null)}
+      />
     </>
   );
 }

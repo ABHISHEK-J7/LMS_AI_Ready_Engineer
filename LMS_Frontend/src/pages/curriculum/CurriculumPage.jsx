@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Check, ChevronRight, Lock, Trophy, X } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, FullPageSpinner } from '@/components/ui';
+import { Check, ChevronRight, Lock, Trophy, X, GraduationCap } from 'lucide-react';
+import { Badge, Button, Card, Skeleton, SkeletonCards, EmptyState, ErrorState } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useMyProgress } from '@/lib/progress';
@@ -14,16 +14,40 @@ const STATUS = {
 };
 
 export function CurriculumPage() {
-  const { data, isLoading, isError, error } = useMyProgress();
+  const { data, isLoading, isError, error, refetch } = useMyProgress();
 
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
+  if (isLoading && !data) {
+    return (
+      <>
+        <PageHeader title="My Curriculum" subtitle="Your structured path from Beginner to Expert." />
+        <div className="stat-grid">
+          <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+          <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+          <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+          <Skeleton height="5.5rem" radius="var(--radius-lg)" />
+        </div>
+        <SkeletonCards count={4} height="6rem" />
+      </>
+    );
+  }
+  if (isError) {
+    return (
+      <>
+        <PageHeader title="My Curriculum" subtitle="Your structured path from Beginner to Expert." />
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      </>
+    );
+  }
 
   if (!data.hasBatch) {
     return (
       <>
         <PageHeader title="My Curriculum" subtitle="Your structured path from Beginner to Expert." />
-        <Card><p className="lms-muted">You are not enrolled in a batch yet. Your administrator will assign you to one.</p></Card>
+        <EmptyState
+          icon={<GraduationCap size={26} />}
+          title="Not enrolled yet"
+          description="You are not enrolled in a batch yet. Your administrator will assign you to one."
+        />
       </>
     );
   }
@@ -91,12 +115,25 @@ export function CurriculumPage() {
                     </span>
                     <span>·</span>
                     <span>{m.practiceTestsCompleted} practice passed</span>
+                    {m.passed ? (
+                      <>
+                        <span>·</span>
+                        <span style={{ color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          Passed <Check size={13} strokeWidth={3} />
+                        </span>
+                      </>
+                    ) : m.completed ? (
+                      <>
+                        <span>·</span>
+                        <span className="lms-muted">Advanced (final not passed)</span>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="list-actions">
                   {m.locked ? (
                     <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
-                      Complete the previous module to unlock
+                      Unlocks when your trainer finishes the previous module's syllabus
                     </span>
                   ) : (
                     <Link to={`/app/modules/${m.module.id}`}>

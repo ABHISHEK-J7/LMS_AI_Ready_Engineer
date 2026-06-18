@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud } from 'lucide-react';
-import { UserRole, UserStatus } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner, Input, Modal, Select } from '@/components/ui';
+import { Download, UploadCloud, Users } from 'lucide-react';
+import { UserRole, UserStatus } from '@/shared';
+import { Badge, Button, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { BulkUploadUsers } from '@/components/BulkUploadUsers';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, downloadFile } from '@/lib/api';
 import {
   useApproveUser,
   useArchiveUser,
   useCreateUser,
+  useEraseUser,
   useUpdateUser,
   useUsers,
 } from '@/lib/users';
@@ -27,6 +28,7 @@ const PAGE_SIZE = 20;
 
 export function UsersPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [filters, setFilters] = useState({ role: '', status: '', search: '', page: 1 });
   const query = useUsers({ ...filters, pageSize: PAGE_SIZE });
   const data = query.data;
@@ -41,6 +43,20 @@ export function UsersPage() {
   const update = useUpdateUser();
   const approve = useApproveUser();
   const archive = useArchiveUser();
+  const erase = useEraseUser();
+
+  async function onExport(u) {
+    try {
+      await downloadFile(`/users/${u.id}/export`, `user-${u.id}-export.json`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
+  }
+
+  function onErase(u) {
+    if (!window.confirm(`Permanently erase ${u.name}'s personal data and uploaded files? This cannot be undone. Academic records are kept but de-identified.`)) return;
+    erase.mutate(u.id, { onError: (err) => toast.error(apiErrorMessage(err)) });
+  }
 
   function setFilter(patch) {
     setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
@@ -98,12 +114,16 @@ export function UsersPage() {
         </div>
       </div>
 
-      {query.isError && <Card><p className="field__error">{apiErrorMessage(query.error)}</p></Card>}
+      {query.isError && <ErrorState message={apiErrorMessage(query.error)} onRetry={query.refetch} />}
 
       {query.isLoading && !data ? (
-        <FullPageSpinner />
+        <SkeletonTable rows={5} cols={5} />
       ) : data && data.items.length === 0 ? (
-        <Card><p className="lms-muted">No users match these filters.</p></Card>
+        <EmptyState
+          icon={<Users size={26} />}
+          title="No users match these filters"
+          description="Try adjusting the search term, role, or status filters above."
+        />
       ) : (
         <>
           <div className="table-wrap">
@@ -127,9 +147,11 @@ export function UsersPage() {
                           <Button size="sm" loading={approve.isPending} onClick={() => approve.mutate(u.id)}>Approve</Button>
                         )}
                         <Button size="sm" variant="outline" onClick={() => setEditing({ id: u.id, name: u.name, phone: u.phone ?? '', status: u.status })}>Edit</Button>
+                        <Button size="sm" variant="outline" title="Export this user's data (GDPR)" onClick={() => onExport(u)}><Download size={14} /></Button>
                         {u.status !== UserStatus.ARCHIVED && (
                           <Button size="sm" variant="ghost" onClick={() => window.confirm(`Archive ${u.name}?`) && archive.mutate(u.id)}>Archive</Button>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => onErase(u)}>Erase</Button>
                       </div>
                     </td>
                   </tr>

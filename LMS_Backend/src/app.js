@@ -5,8 +5,11 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env.js';
-import { ensureUploadsDir, UPLOADS_URL_PREFIX } from './config/storage.js';
+import { UPLOADS_URL_PREFIX } from './config/storage.js';
+import { serveUpload } from './services/fileStore.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import { requestId } from './middleware/requestId.js';
+import { asyncHandler } from './utils/http.js';
 import apiRoutes from './routes/index.js';
 
 export function createApp() {
@@ -17,6 +20,9 @@ export function createApp() {
   // attacker could spoof X-Forwarded-For to dodge rate limits.
   if (env.isProd) app.set('trust proxy', 1);
   app.disable('x-powered-by');
+
+  // Correlation id first, so it's available to every downstream log + error.
+  app.use(requestId);
 
   app.use(helmet());
   app.use(
@@ -32,9 +38,11 @@ export function createApp() {
   app.use(mongoSanitize());
   if (!env.isProd) app.use(morgan('dev'));
 
-  // Serve uploaded learning resources (before the rate limiter so downloads
-  // don't count against the API budget). Files live in LMS_Storage/uploads.
-  app.use(UPLOADS_URL_PREFIX, express.static(ensureUploadsDir()));
+  // Serve uploaded files straight from MongoDB/GridFS (before the rate limiter so
+  // downloads don't count against the API budget). The handler streams with HTTP
+  // Range support (video/audio seeking) and re-applies the hardening headers
+  // (nosniff + a media-friendly CSP). See services/fileStore.js.
+  app.get(`${UPLOADS_URL_PREFIX}/:filename`, asyncHandler(serveUpload));
 
   // Basic abuse protection on the API surface.
   app.use(

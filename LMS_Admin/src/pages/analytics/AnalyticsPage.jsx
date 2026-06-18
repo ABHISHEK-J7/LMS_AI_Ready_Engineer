@@ -1,6 +1,6 @@
-import { CircleCheck } from 'lucide-react';
-import { UserRole } from '@lms/shared';
-import { Badge, Card, CardHeader, FullPageSpinner } from '@/components/ui';
+import { ClipboardList, CircleCheck } from 'lucide-react';
+import { UserRole } from '@/shared';
+import { Badge, Card, CardHeader, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { BarChart } from '@/components/charts/BarChart';
 import { apiErrorMessage } from '@/lib/api';
@@ -13,9 +13,24 @@ export function AnalyticsPage() {
 }
 
 function AdminAnalytics() {
-  const { data, isLoading, isError, error } = useAdminAnalytics();
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
+  const { data, isLoading, isError, error, refetch } = useAdminAnalytics();
+
+  if (isError && !data) {
+    return (
+      <>
+        <PageHeader title="Analytics" subtitle="Institution-wide overview." />
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      </>
+    );
+  }
+  if (isLoading && !data) {
+    return (
+      <>
+        <PageHeader title="Analytics" subtitle="Institution-wide overview." />
+        <SkeletonCards count={5} height="7rem" />
+      </>
+    );
+  }
 
   const { counts, lowAttendance, batchSizes, moduleCompletion } = data;
   return (
@@ -30,7 +45,7 @@ function AdminAnalytics() {
         <Stat label="Certificates Issued" value={counts.certificates} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
+      <div className="dash-grid-2" style={{ marginBottom: 'var(--space-6)' }}>
         <Card>
           <CardHeader title="Module Completion" subtitle="Students who have completed each module" />
           <BarChart data={moduleCompletion.map((m) => ({ label: m.module, value: m.completed }))} />
@@ -73,9 +88,24 @@ function AdminAnalytics() {
 }
 
 function TrainerAnalytics() {
-  const { data, isLoading, isError, error } = useTrainerAnalytics();
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
+  const { data, isLoading, isError, error, refetch } = useTrainerAnalytics();
+
+  if (isError && !data) {
+    return (
+      <>
+        <PageHeader title="Analytics" subtitle="Performance across your batches and modules." />
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      </>
+    );
+  }
+  if (isLoading && !data) {
+    return (
+      <>
+        <PageHeader title="Analytics" subtitle="Performance across your batches and modules." />
+        <SkeletonCards count={4} height="7rem" />
+      </>
+    );
+  }
 
   const { counts, batches, assessments } = data;
   return (
@@ -101,7 +131,10 @@ function TrainerAnalytics() {
       <Card>
         <CardHeader title="Assessment Performance" subtitle="Submissions, pass rate & average score" />
         {assessments.length === 0 ? (
-          <p className="lms-muted">No assessments in your modules yet.</p>
+          <EmptyState
+            icon={<ClipboardList size={26} />}
+            title="No assessments in your modules yet."
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">

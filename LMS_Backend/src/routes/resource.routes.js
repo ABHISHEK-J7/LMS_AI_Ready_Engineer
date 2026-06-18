@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import * as resources from '../controllers/resource.controller.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';

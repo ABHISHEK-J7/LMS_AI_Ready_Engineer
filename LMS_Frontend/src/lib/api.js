@@ -80,6 +80,25 @@ export async function unwrap(promise) {
   return data.data;
 }
 
+/**
+ * Download a file from an authenticated endpoint (e.g. a CSV/JSON export).
+ * Fetches as a blob (so the Authorization header is sent) and triggers a save.
+ */
+export async function downloadFile(path, fallbackName = 'download') {
+  const res = await api.get(path, { responseType: 'blob' });
+  const disposition = res.headers['content-disposition'] ?? '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match ? match[1] : fallbackName;
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function apiErrorMessage(err) {
   if (axios.isAxiosError(err)) {
     const body = err.response?.data;

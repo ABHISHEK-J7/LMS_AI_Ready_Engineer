@@ -1,4 +1,4 @@
-import { AttendanceStatus } from '@lms/shared';
+import { AttendanceStatus } from '@/shared';
 
 export const ATT_LABEL = {
   [AttendanceStatus.PRESENT]: 'Present',

@@ -1,6 +1,7 @@
-import { BookOpen, CalendarClock, GraduationCap, TriangleAlert, UsersRound } from 'lucide-react';
-import { Badge, Card, CardHeader, FullPageSpinner } from '@/components/ui';
+import { BookOpen, CalendarCheck, CalendarClock, GraduationCap, MessageCircleQuestion, Star, TriangleAlert, UsersRound } from 'lucide-react';
+import { Badge, Card, CardHeader, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
+import { apiErrorMessage } from '@/lib/api';
 import { CountUp } from '@/lib/anim';
 import { BarChart } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
@@ -8,11 +9,12 @@ import { GaugeRing } from '@/components/charts/GaugeRing';
 import { StackedBarChart } from '@/components/charts/StackedBarChart';
 import { useAuth } from '@/lib/auth';
 import { useTrainerAnalytics } from '@/lib/analytics';
+import { useTrainerStats } from '@/lib/profile';
 
 export function TrainerDashboard() {
   const user = useAuth((s) => s.user);
-  const { data, isLoading } = useTrainerAnalytics();
-  if (isLoading) return <FullPageSpinner />;
+  const { data, isLoading, isError, error, refetch } = useTrainerAnalytics();
+  const { data: scoreboard } = useTrainerStats();
 
   const counts = data?.counts ?? {};
   const batches = data?.batches ?? [];
@@ -36,6 +38,15 @@ export function TrainerDashboard() {
         subtitle="Performance across your assigned modules, batches, and assessments."
       />
 
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !data ? (
+        <div className="dash-stack">
+          <SkeletonCards count={4} height="5.5rem" />
+          <SkeletonCards count={4} height="5.5rem" />
+          <SkeletonCards count={3} height="14rem" />
+        </div>
+      ) : (
       <div className="dash-stack">
       {/* KPIs */}
       <div className="stat-grid">
@@ -43,6 +54,14 @@ export function TrainerDashboard() {
         <Stat label="Assigned Batches" value={<CountUp value={counts.batches ?? 0} />} icon={<UsersRound size={20} />} />
         <Stat label="Students" value={<CountUp value={counts.students ?? 0} />} icon={<GraduationCap size={20} />} />
         <Stat label="Upcoming Classes" value={<CountUp value={counts.upcomingClasses ?? 0} />} icon={<CalendarClock size={20} />} />
+      </div>
+
+      {/* Teaching scoreboard — classes conducted + ratings received */}
+      <div className="stat-grid">
+        <Stat label="Classes Conducted" value={<CountUp value={scoreboard?.classesConducted ?? 0} />} icon={<CalendarCheck size={20} />} />
+        <Stat label="Doubts Cleared" value={<CountUp value={scoreboard?.doubtsResolved ?? 0} />} icon={<MessageCircleQuestion size={20} />} />
+        <Stat label="Avg Doubt Rating" value={scoreboard?.doubtsAvgRating ? `${scoreboard.doubtsAvgRating} ★` : '—'} icon={<Star size={20} />} />
+        <Stat label="Avg Class Rating" value={scoreboard?.classAvgRating ? `${scoreboard.classAvgRating} ★` : '—'} accent icon={<Star size={20} />} />
       </div>
 
       {/* Rings row */}
@@ -143,6 +162,7 @@ export function TrainerDashboard() {
         </Card>
       )}
       </div>
+      )}
     </>
   );
 }

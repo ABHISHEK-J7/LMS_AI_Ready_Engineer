@@ -14,6 +14,7 @@ export function useAssessments(filters = {}) {
   return useQuery({
     queryKey: assessmentKeys.list(params),
     queryFn: () => unwrap(api.get('/assessments', { params })),
+    refetchInterval: 60_000, // keep the "live assessments" sidebar count fresh
   });
 }
 
@@ -54,20 +55,13 @@ export function useSetAvailability() {
   });
 }
 
-export function useAddQuestion() {
-  const invalidate = useInvalidate();
-  return useMutation({ mutationFn: ({ id, ...q }) => unwrap(api.post(`/assessments/${id}/questions`, q)), onSuccess: invalidate });
-}
-export function useBulkAddQuestions() {
+/** Build a test by hand-picking questions from the module's bank. */
+export function useAddQuestionsFromBank() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: ({ id, questions }) => unwrap(api.post(`/assessments/${id}/questions/bulk`, { questions })),
+    mutationFn: ({ id, questionIds }) => unwrap(api.post(`/assessments/${id}/questions/from-bank`, { questionIds })),
     onSuccess: invalidate,
   });
-}
-export function useUpdateQuestion() {
-  const invalidate = useInvalidate();
-  return useMutation({ mutationFn: ({ id, questionId, ...q }) => unwrap(api.patch(`/assessments/${id}/questions/${questionId}`, q)), onSuccess: invalidate });
 }
 export function useDeleteQuestion() {
   const invalidate = useInvalidate();
@@ -83,6 +77,52 @@ export function useMySubmission(id) {
     enabled: Boolean(id),
     // Poll while the AI engine is grading so the result appears automatically.
     refetchInterval: (query) => (query.state.data?.status === 'evaluating' ? 3000 : false),
+  });
+}
+
+/** Begin a proctored timed attempt — returns timing + the revealed questions. */
+export function useStartAttempt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => unwrap(api.post(`/assessments/${id}/start`)),
+    onSuccess: (_d, id) => qc.invalidateQueries({ queryKey: assessmentKeys.submission(id) }),
+  });
+}
+
+/** Autosave in-progress answers (best-effort; failures are non-fatal). */
+export function useSaveProgress() {
+  return useMutation({
+    mutationFn: ({ id, answers }) => unwrap(api.patch(`/assessments/${id}/progress`, { answers })),
+  });
+}
+
+/** Upload a webcam proctoring snapshot (best-effort). */
+export function useProctorShot() {
+  return useMutation({
+    mutationFn: ({ id, blob }) => {
+      const fd = new FormData();
+      fd.append('shot', blob, 'shot.jpg');
+      return unwrap(api.post(`/assessments/${id}/proctor-shot`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }));
+    },
+  });
+}
+
+/** Record a proctoring warning (blocked shortcut / left the exam). Returns the new count. */
+export function useRecordWarning() {
+  return useMutation({
+    mutationFn: ({ id, reason }) => unwrap(api.post(`/assessments/${id}/warning`, { reason })),
+  });
+}
+
+/** Proctoring kick-out — terminates the attempt with a "caught cheating" (0%) result. */
+export function useDisqualifyAttempt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }) => unwrap(api.post(`/assessments/${id}/disqualify`, { reason })),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: assessmentKeys.submission(id) });
+      qc.invalidateQueries({ queryKey: assessmentKeys.all });
+    },
   });
 }
 

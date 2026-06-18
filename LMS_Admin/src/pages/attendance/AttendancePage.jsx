@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { TriangleAlert } from 'lucide-react';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, CardHeader, FullPageSpinner, Select } from '@/components/ui';
+import { CalendarX, Download, TriangleAlert, Users } from 'lucide-react';
+import { UserRole } from '@/shared';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Select, SkeletonCards, SkeletonTable, useToast } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, downloadFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useBatchAttendance, useMyAttendance } from '@/lib/attendance';
 import { useBatches } from '@/lib/batches';
@@ -22,15 +22,29 @@ export function AttendancePage() {
 // ── Student: my attendance ─────────────────────────────────────────────────────
 
 function StudentAttendanceView() {
-  const { data, isLoading, isError, error } = useMyAttendance();
+  const { data, isLoading, isError, error, refetch } = useMyAttendance();
 
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
-
-  const { summary, records } = data;
   return (
     <>
       <PageHeader title="My Attendance" subtitle="Your class attendance record." />
+      {isLoading && !data ? (
+        <>
+          <SkeletonCards count={4} height="7rem" />
+          <Card><SkeletonTable rows={5} cols={5} /></Card>
+        </>
+      ) : isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : (
+        <StudentAttendanceContent data={data} />
+      )}
+    </>
+  );
+}
+
+function StudentAttendanceContent({ data }) {
+  const { summary, records } = data;
+  return (
+    <>
       <div className="stat-grid">
         <Stat label="Attendance" value={`${summary.percentage}%`} accent />
         <Stat label="Classes Attended" value={`${summary.attended} / ${summary.totalClasses}`} />
@@ -41,7 +55,10 @@ function StudentAttendanceView() {
       <Card>
         <CardHeader title="History" />
         {records.length === 0 ? (
-          <p className="lms-muted">No attendance recorded yet.</p>
+          <EmptyState
+            icon={<CalendarX size={26} />}
+            title="No attendance recorded yet"
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -93,14 +110,17 @@ function EntryView() {
   const { data: classes, isLoading } = useClasses();
   const [selected, setSelected] = useState(null);
 
-  if (isLoading) return <FullPageSpinner />;
-
   return (
     <>
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader title="Select a class" subtitle="Choose a session to record attendance for." />
-        {!classes || classes.length === 0 ? (
-          <p className="lms-muted">No classes scheduled yet.</p>
+        {isLoading && !classes ? (
+          <SkeletonTable rows={5} cols={5} />
+        ) : !classes || classes.length === 0 ? (
+          <EmptyState
+            icon={<CalendarX size={26} />}
+            title="No classes scheduled yet"
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -139,6 +159,7 @@ function EntryView() {
 }
 
 function ComplianceView() {
+  const toast = useToast();
   const { data: batches } = useBatches();
   const [batchId, setBatchId] = useState('');
   const { data, isLoading } = useBatchAttendance(batchId);
@@ -157,18 +178,39 @@ function ComplianceView() {
         />
       </Card>
 
-      {batchId && isLoading && <FullPageSpinner />}
+      {batchId && isLoading && !data && (
+        <Card><SkeletonTable rows={5} cols={7} /></Card>
+      )}
 
       {data && (
         <Card>
-          <CardHeader
-            title={`${data.batch.name} — Attendance Compliance`}
-            subtitle={`Minimum required: ${data.minAttendance}% · ${
-              data.students.filter((s) => s.belowMinimum).length
-            } below minimum`}
-          />
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <CardHeader
+              title={`${data.batch.name} — Attendance Compliance`}
+              subtitle={`Minimum required: ${data.minAttendance}% · ${
+                data.students.filter((s) => s.belowMinimum).length
+              } below minimum`}
+            />
+            {data.students.length > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                style={{ flexShrink: 0 }}
+                onClick={() =>
+                  downloadFile(`/attendance/batch/${batchId}/export.csv`, 'attendance.csv').catch((err) =>
+                    toast.error(apiErrorMessage(err)),
+                  )
+                }
+              >
+                <Download size={16} /> Export CSV
+              </Button>
+            )}
+          </div>
           {data.students.length === 0 ? (
-            <p className="lms-muted">No students enrolled.</p>
+            <EmptyState
+              icon={<Users size={26} />}
+              title="No students enrolled"
+            />
           ) : (
             <div className="table-wrap">
               <table className="table">

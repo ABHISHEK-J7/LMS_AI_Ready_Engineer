@@ -1,7 +1,7 @@
 /*
  * Global design-system stylesheet.
  * Color variables (--color-*) are injected at runtime by ThemeProvider from
- * @lms/shared tokens; scale variables (--space-*, --radius-*, etc.) too.
+ * @/shared tokens; scale variables (--space-*, --radius-*, etc.) too.
  * This file only consumes them — never hardcode a hex value here or anywhere.
  */
 
@@ -68,6 +68,19 @@ pre {
 
 ::selection {
   background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+}
+
+/* Respect users who prefer reduced motion — collapse movement to near-instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Scrollbar polish */

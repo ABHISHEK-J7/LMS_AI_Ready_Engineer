@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ResourceType } from '@lms/shared';
+import { ResourceType } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const resourceSchema = new Schema(

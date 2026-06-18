@@ -1,19 +1,37 @@
-import { CalendarCheck, Compass, GraduationCap, Percent } from 'lucide-react';
-import { Badge, Card, CardHeader } from '@/components/ui';
+import { useState } from 'react';
+import { CalendarCheck, CalendarX, Compass, GraduationCap, Percent } from 'lucide-react';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
+import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useMyAttendance } from '@/lib/attendance';
 import { useClasses, useJoinClass } from '@/lib/classes';
+import { useClassRatingsPending, ratingEligible } from '@/lib/classRatings';
 import { useMyProgress } from '@/lib/progress';
 import { classHasEnded, todayISO } from '@/pages/schedule/scheduleUi';
+import { ClassRatingModal } from '@/pages/schedule/ClassRatingModal';
 import { AttendanceHeatmap } from './AttendanceHeatmap';
+import '@/pages/schedule/schedule.css';
 
 export function StudentDashboard() {
   const user = useAuth((s) => s.user);
-  const { data: attendance } = useMyAttendance();
+  const { data: attendance, isLoading: attLoading, isError: attError, error: attErr, refetch: refetchAtt } = useMyAttendance();
   const { data: upcoming } = useClasses({ from: todayISO() });
   const { data: progress } = useMyProgress();
   const joinClass = useJoinClass();
+  const { data: pendingRatings } = useClassRatingsPending(true);
+  const eligiblePending = (pendingRatings ?? []).filter(ratingEligible);
+  const mustRate = eligiblePending.length > 0;
+  const [rateTarget, setRateTarget] = useState(null);
+
+  function handleJoin(c) {
+    if (mustRate) {
+      setRateTarget(eligiblePending[0]);
+      return;
+    }
+    joinClass.mutate(c.id);
+    window.open(c.meetingLink, '_blank', 'noopener,noreferrer');
+  }
 
   const pct = attendance ? `${attendance.summary.percentage}%` : '—%';
   const attended = attendance
@@ -32,6 +50,28 @@ export function StudentDashboard() {
         subtitle="Track your AI engineering journey from Beginner to Expert."
       />
 
+      {attError ? (
+        <ErrorState message={apiErrorMessage(attErr)} onRetry={refetchAtt} />
+      ) : attLoading && !attendance ? (
+        <div className="dash-stack">
+          <SkeletonCards count={4} height="5.5rem" />
+          <SkeletonCards count={2} height="12rem" />
+        </div>
+      ) : (
+      <>
+      {mustRate && (
+        <Card className="rate-gate">
+          <div>
+            <strong>Rate your previous class to continue.</strong>
+            <div className="lms-muted">
+              You have {eligiblePending.length} class{eligiblePending.length > 1 ? 'es' : ''} awaiting your
+              rating. You can&apos;t join a new class until you do.
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setRateTarget(eligiblePending[0])}>Rate now</Button>
+        </Card>
+      )}
+
       <div className="dash-stack">
       <div className="stat-grid">
         <Stat label="Attendance" value={pct} accent icon={<Percent size={20} />} />
@@ -46,7 +86,7 @@ export function StudentDashboard() {
         <Card>
           <CardHeader title="Upcoming Classes" subtitle="Your scheduled live sessions" />
           {next.length === 0 ? (
-            <p className="lms-muted">No upcoming classes scheduled.</p>
+            <EmptyState icon={<CalendarX size={26} />} title="No upcoming classes" description="No upcoming classes scheduled." />
           ) : (
             next.map((c) => (
               <div
@@ -66,9 +106,13 @@ export function StudentDashboard() {
                   </div>
                 </span>
                 {c.meetingLink && !classHasEnded(c) ? (
-                  <a href={c.meetingLink} target="_blank" rel="noreferrer" onClick={() => joinClass.mutate(c.id)}>
-                    <Badge tone="primary">Join</Badge>
-                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleJoin(c)}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                  >
+                    <Badge tone="primary">{mustRate ? 'Rate to join' : 'Join'}</Badge>
+                  </button>
                 ) : classHasEnded(c) ? (
                   <Badge tone="neutral">Ended</Badge>
                 ) : null}
@@ -85,6 +129,14 @@ export function StudentDashboard() {
         </Card>
       </div>
       </div>
+      </>
+      )}
+
+      <ClassRatingModal
+        pending={rateTarget}
+        onClose={() => setRateTarget(null)}
+        onRated={() => setRateTarget(null)}
+      />
     </>
   );
 }

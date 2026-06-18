@@ -21,6 +21,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: 0 var(--space-2);
+  flex: none; /* stay pinned above the scrollable nav */
 }
 .sidebar__logo {
   width: 36px;
@@ -46,6 +47,22 @@
   flex-direction: column;
   gap: var(--space-1);
   flex: 1;
+  /* Scroll the nav itself when there are more items than fit — the brand stays
+     pinned and the bottom items (e.g. Settings) are never clipped. */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Vertical breathing room so the active pill on the first/last item isn't
+     clipped against the scroll edges. */
+  padding-block: var(--space-1);
+  /* Scrollable, but the scrollbar stays hidden (Firefox + old Edge). */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+/* Hide the scrollbar (WebKit/Blink) while keeping scroll functional. */
+.sidebar__nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 .sidebar__link {
   display: flex;
@@ -56,7 +73,7 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
 .sidebar__link:hover {
   background: var(--color-background);
@@ -90,19 +107,76 @@
   top: 0;
   z-index: 10;
 }
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
 .topbar__title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* Hamburger + drawer close button — hidden on desktop, shown < 1024px. */
+.topbar__menu,
+.sidebar__close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.topbar__menu:hover,
+.sidebar__close:hover {
+  background: var(--color-background);
+  color: var(--color-text-primary);
+}
+.sidebar__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.45);
+  z-index: 55;
+  animation: overlay-fade var(--transition-base);
+}
+@keyframes overlay-fade { from { opacity: 0; } }
 .topbar__right {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  flex: none;
 }
 .user-chip {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  /* Clickable → opens the profile page. */
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.user-chip:hover {
+  background: var(--color-background);
+}
+.user-chip:active {
+  transform: scale(0.98);
+}
+.user-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 .user-chip__avatar {
   width: 36px;
@@ -114,6 +188,14 @@
   place-items: center;
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
+  overflow: hidden; /* clip an uploaded avatar image to the circle */
+  flex: none;
+}
+.user-chip__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .user-chip__name {
   font-size: var(--font-size-sm);
@@ -162,19 +244,87 @@
   margin-top: var(--space-1);
 }
 
-@media (max-width: 860px) {
+/* ── Responsive ───────────────────────────────────────────
+   ≥1024px: fixed sidebar.  <1024px (tablet + phones): the sidebar becomes an
+   off-canvas drawer toggled by the hamburger — every nav item stays reachable,
+   nothing is permanently hidden. */
+@media (max-width: 1023px) {
   .layout {
     grid-template-columns: 1fr;
   }
   .sidebar {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    overflow-x: auto;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(84vw, 300px);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 280ms var(--ease-out);
+    box-shadow: var(--shadow-lg);
+    overflow-y: auto;
   }
-  .sidebar__nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .sidebar--open {
+    transform: translateX(0);
+  }
+  .topbar__menu,
+  .sidebar__close {
+    display: inline-flex;
+  }
+  .content {
+    padding: var(--space-6) var(--space-5);
+  }
+}
+
+/* Tablet down */
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 var(--space-4);
+  }
+  .topbar__right {
+    gap: var(--space-3);
+  }
+  .content {
+    padding: var(--space-5) var(--space-4);
+  }
+  .stat-grid {
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+  }
+}
+
+/* Phones: condense the topbar so it never overflows, but keep everything
+   reachable (full name lives in the sidebar/drawer; sign-out stays as an icon). */
+@media (max-width: 560px) {
+  .topbar {
+    height: 58px;
+  }
+  .topbar__right {
+    gap: var(--space-2);
+  }
+  .user-chip__text {
+    display: none;
+  }
+  .topbar__signout-label {
+    display: none;
+  }
+  .topbar__signout {
+    padding: 0 var(--space-2);
+  }
+  .topbar__title {
+    font-size: var(--font-size-base);
+  }
+  .content {
+    padding: var(--space-4) var(--space-3);
+  }
+}
+
+/* Very small (≈320px) — tighten the smallest gaps. */
+@media (max-width: 360px) {
+  .topbar {
+    padding: 0 var(--space-3);
+  }
+  .content {
+    padding: var(--space-4) var(--space-2);
   }
 }

@@ -5,11 +5,9 @@
   "description": "AI Ready Engineer — AI Engineering College & Training Institute Management System",
   "type": "module",
   "workspaces": [
-    "LMS_Shared",
     "LMS_Backend",
     "LMS_Frontend",
-    "LMS_Admin",
-    "LMS_AI_Engine"
+    "LMS_Admin"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace LMS_Backend",

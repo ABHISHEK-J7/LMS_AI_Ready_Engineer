@@ -4,7 +4,7 @@
  *
  *   npm run seed   (from LMS_Backend)
  */
-import { DEFAULT_CURRICULUM, UserRole, UserStatus } from '@lms/shared';
+import { DEFAULT_CURRICULUM, UserRole, UserStatus } from '#shared';
 import { connectDatabase, disconnectDatabase } from '../config/db.js';
 import { env } from '../config/env.js';
 import { Module, User, getSettings } from '../models/index.js';

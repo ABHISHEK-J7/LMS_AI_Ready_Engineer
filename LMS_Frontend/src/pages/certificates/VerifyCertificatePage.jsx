@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
-import { Badge, Card, FullPageSpinner } from '@/components/ui';
+import { Badge, Card, Skeleton, SkeletonText } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import { useVerifyCertificate } from '@/lib/certificates';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
@@ -23,7 +23,11 @@ export function VerifyCertificatePage() {
         </div>
 
         {isLoading ? (
-          <FullPageSpinner />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', alignItems: 'center' }}>
+            <Skeleton width="3rem" height="3rem" radius="var(--radius-full)" />
+            <Skeleton width="60%" height="1.75rem" />
+            <SkeletonText lines={4} />
+          </div>
         ) : isError || !data?.valid ? (
           <>
             <div style={{ fontSize: 'var(--font-size-4xl)' }}>❌</div>

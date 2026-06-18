@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import { Batch, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';

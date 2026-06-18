@@ -1,0 +1,108 @@
+import { useState } from 'react';
+import { FolderOpen, Github } from 'lucide-react';
+import { Badge, Card, CardHeader, EmptyState, SkeletonCards } from '@/components/ui';
+import { apiErrorMessage } from '@/lib/api';
+import { useProjectReviews, useReviewProject } from '@/lib/projects';
+import { ProjectDetailModal } from './ProjectDetailModal';
+import { formatDate } from '@/lib/format';
+import './projects.css';
+
+const STATUS = {
+  approved: { label: 'Approved', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'error' },
+};
+
+/** Projects panel for the Approvals page — cards open a detail modal to approve/reject. */
+export function ProjectsApprovalSection() {
+  const { data, isLoading } = useProjectReviews();
+  const review = useReviewProject();
+  const [viewing, setViewing] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const list = data ?? [];
+  const pending = list.filter((p) => p.status === 'pending');
+  const reviewed = list.filter((p) => p.status !== 'pending');
+
+  async function act(project, decision) {
+    setErr('');
+    let note;
+    if (decision === 'reject') {
+      const input = window.prompt('Reason for rejection (optional):');
+      if (input === null) return;
+      note = input || undefined;
+    }
+    setBusy(true);
+    try {
+      await review.mutateAsync({ id: project.id, decision, note });
+      setViewing(null);
+    } catch (e) {
+      setErr(apiErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const card = (p) => (
+    <div key={p.id} className="project-card" onClick={() => setViewing(p)}>
+      <div className="project-card__cover" style={{ position: 'relative' }}>
+        {p.images?.length > 1 && <span className="project-card__count">{p.images.length} images</span>}
+        {p.images?.[0] ? <img src={p.images[0]} alt={p.title} /> : <Github size={28} />}
+      </div>
+      <div className="project-card__body">
+        <div className="project-card__title">{p.title}</div>
+        <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+          {p.student?.name} · {formatDate(p.createdAt)}
+        </div>
+        <div className="project-card__foot">
+          {p.status === 'pending' ? (
+            <Badge tone="warning">Pending</Badge>
+          ) : (
+            <Badge tone={STATUS[p.status]?.tone ?? 'neutral'}>
+              {STATUS[p.status]?.label ?? p.status}{p.reviewedBy?.name ? ` · ${p.reviewedBy.name}` : ''}
+            </Badge>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {err && <Card style={{ marginBottom: 'var(--space-4)' }}><p className="field__error">{err}</p></Card>}
+
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <CardHeader
+          title={`Projects · Pending (${pending.length})`}
+          subtitle="Tap a card to review the screenshots, repo & description, then approve or reject."
+        />
+        {isLoading && !data ? (
+          <div style={{ marginTop: 'var(--space-3)' }}><SkeletonCards count={3} height="9rem" /></div>
+        ) : pending.length === 0 ? (
+          <EmptyState
+            icon={<FolderOpen size={26} />}
+            title="No projects awaiting review"
+            description="No projects awaiting review."
+          />
+        ) : (
+          <div className="project-grid" style={{ marginTop: 'var(--space-3)' }}>{pending.map(card)}</div>
+        )}
+      </Card>
+
+      {!isLoading && reviewed.length > 0 && (
+        <Card>
+          <CardHeader title="Projects · Reviewed" subtitle="Recently approved or rejected" />
+          <div className="project-grid" style={{ marginTop: 'var(--space-3)' }}>{reviewed.map(card)}</div>
+        </Card>
+      )}
+
+      <ProjectDetailModal
+        project={viewing}
+        onClose={() => setViewing(null)}
+        onApprove={viewing ? () => act(viewing, 'approve') : undefined}
+        onReject={viewing ? () => act(viewing, 'reject') : undefined}
+        busy={busy}
+      />
+    </>
+  );
+}

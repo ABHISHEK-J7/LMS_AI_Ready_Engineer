@@ -45,11 +45,21 @@ export function useReplyDoubt() {
   });
 }
 
-export function useSetDoubtStatus() {
+/** Student closes their doubt and rates the trainer (1–5). */
+export function useCloseDoubt() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: ({ id, status }) => unwrap(api.patch(`/doubts/${id}/status`, { status })),
+    mutationFn: ({ id, rating }) => unwrap(api.post(`/doubts/${id}/close`, { rating })),
     onSuccess: invalidate,
+  });
+}
+
+/** Trainer scoreboard — doubts answered/cleared + average rating. */
+export function useMyDoubtStats(enabled = true) {
+  return useQuery({
+    queryKey: ['doubts', 'my-stats'],
+    queryFn: () => unwrap(api.get('/doubts/my-stats')),
+    enabled,
   });
 }
 

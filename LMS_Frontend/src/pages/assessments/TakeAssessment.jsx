@@ -1,29 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { CheckCircle2, Trophy } from 'lucide-react';
-import { QuestionType } from '@lms/shared';
-import { Badge, Button, Card, CardHeader, FullPageSpinner, Spinner, Textarea } from '@/components/ui';
+import { Check, CheckCircle2, Lock, ShieldAlert, Trophy, X } from 'lucide-react';
+import { QuestionType } from '@/shared';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Skeleton, SkeletonText, Spinner, Textarea } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
-import { useAssessment, useLeaderboard, useMySubmission, useSubmitAssessment } from '@/lib/assessments';
+import { assessmentKeys, useAssessment, useLeaderboard, useMySubmission, useSubmitAssessment } from '@/lib/assessments';
 import { assessmentLabel } from './assessmentsUi';
+import { ProctoredFlow } from './ProctoredExam';
 import '../modules/modules.css';
+import './exam.css';
+
+const DONE = ['submitted', 'evaluating', 'graded'];
 
 export function TakeAssessment() {
   const { id } = useParams();
-  const { data: a, isLoading, isError, error } = useAssessment(id);
+  const { data: a, isLoading, isError, error, refetch } = useAssessment(id);
   const { data: submission, isLoading: subLoading } = useMySubmission(id);
 
-  if (isLoading || subLoading) return <FullPageSpinner />;
-  if (isError || !a) {
+  if ((isLoading || subLoading) && !a) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(error) || 'This assessment is not available.'}</p>
-        <Link to="/app/assessments">← Back to assessments</Link>
-      </Card>
+      <>
+        <PageHeader
+          title={<Skeleton width="16rem" height="1.75rem" />}
+          subtitle={<Link to="/app/assessments" className="lms-muted">← All assessments</Link>}
+        />
+        <Card>
+          <SkeletonText lines={4} />
+        </Card>
+      </>
     );
   }
+  if (isError || !a) {
+    return <ErrorState message={apiErrorMessage(error) || 'This assessment is not available.'} onRetry={refetch} />;
+  }
 
+  const done = submission && DONE.includes(submission.status);
+  if (a.proctored) {
+    return done ? <Result a={a} submission={submission} /> : <ProctoredFlow a={a} />;
+  }
   const submitted = submission && submission.status !== 'not_started';
   return submitted ? <Result a={a} submission={submission} /> : <Quiz a={a} />;
 }
@@ -66,6 +82,27 @@ function Result({ a, submission }) {
     );
   }
 
+  if (submission.disqualified) {
+    return (
+      <>
+        {header}
+        <Card style={{ textAlign: 'center', padding: 'var(--space-10)', borderColor: 'var(--color-error)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-3)' }}>
+            <ShieldAlert size={44} style={{ color: 'var(--color-error)' }} />
+          </div>
+          <h2 style={{ margin: 0 }}>Disqualified</h2>
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Badge tone="error">Caught cheating · 0%</Badge>
+          </div>
+          <p className="lms-muted" style={{ marginTop: 'var(--space-4)' }}>
+            {submission.disqualifiedReason || 'You left the exam.'} The test was stopped automatically. Contact your
+            trainer if you believe this was a mistake.
+          </p>
+        </Card>
+      </>
+    );
+  }
+
   const passed = submission.passed;
   const fb = submission.feedback;
   return (
@@ -86,6 +123,10 @@ function Result({ a, submission }) {
               {passed ? 'Great work — this section is complete.' : 'Review the material and ask your trainer about a re-attempt.'}
             </p>
           </Card>
+
+          {a.answersLockedUntil
+            ? <LockedAnswersCard a={a} />
+            : a.questions?.length > 0 && <ReviewCard a={a} submission={submission} />}
 
           {fb && (fb.summary || (fb.suggestions && fb.suggestions.length > 0)) && (
             <Card>
@@ -120,6 +161,104 @@ function Result({ a, submission }) {
   );
 }
 
+const fmtLeft = (ms) => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`;
+};
+
+/** Holds the answer review until the exam window closes (anti-leak), with a live
+ *  countdown; auto-refetches the assessment when the window ends so answers appear. */
+function LockedAnswersCard({ a }) {
+  const qc = useQueryClient();
+  const [left, setLeft] = useState(() => new Date(a.answersLockedUntil).getTime() - Date.now());
+  useEffect(() => {
+    const t = setInterval(() => {
+      const ms = new Date(a.answersLockedUntil).getTime() - Date.now();
+      setLeft(ms);
+      if (ms <= 0) {
+        clearInterval(t);
+        qc.invalidateQueries({ queryKey: assessmentKeys.detail(a.id) });
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [a.answersLockedUntil, a.id, qc]);
+
+  return (
+    <Card style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-3)' }}>
+        <Lock size={32} style={{ color: 'var(--color-primary)' }} />
+      </div>
+      <h3 style={{ margin: 0 }}>Answers locked</h3>
+      <p className="lms-muted" style={{ marginTop: 'var(--space-2)' }}>
+        Your score is recorded. The questions and correct answers unlock when the exam window closes — so no one can
+        share them while others are still taking the test.
+      </p>
+      <div className="exam-timer" style={{ marginTop: 'var(--space-3)' }}>
+        <Lock size={16} /> {fmtLeft(left)}
+      </div>
+      <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-2)' }}>
+        Unlocks at {new Date(a.answersLockedUntil).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+      </div>
+    </Card>
+  );
+}
+
+function ReviewCard({ a, submission }) {
+  const map = {};
+  (submission.answers ?? []).forEach((an) => { map[an.question] = an; });
+
+  return (
+    <Card>
+      <CardHeader title="Your answers" subtitle="What you got right and wrong" />
+      <div className="q-review">
+        {a.questions.map((q, i) => {
+          const ans = map[q.id];
+          const picked = ans?.selectedOption;
+          const isMcq = q.type === QuestionType.MCQ;
+          const correct = isMcq && picked === q.correctOption;
+          return (
+            <div key={q.id} className="q-review__item">
+              <div className="q-review__head">
+                <span className="q-review__num">{i + 1}</span>
+                <span style={{ flex: 1 }}>{q.prompt}</span>
+                {isMcq && (
+                  <Badge tone={correct ? 'success' : picked === undefined ? 'neutral' : 'error'}>
+                    {correct ? 'Correct' : picked === undefined ? 'Skipped' : 'Wrong'}
+                  </Badge>
+                )}
+              </div>
+              {isMcq ? (
+                <ul className="q-review__opts">
+                  {q.options?.map((opt, oi) => {
+                    const isCorrect = oi === q.correctOption;
+                    const isPicked = oi === picked;
+                    return (
+                      <li key={oi} className={isCorrect ? 'is-correct' : isPicked ? 'is-wrong' : ''}>
+                        <span>{opt}</span>
+                        {isCorrect && <Check size={14} strokeWidth={3} />}
+                        {isPicked && !isCorrect && <X size={14} strokeWidth={3} />}
+                        {isPicked && <span className="q-review__you">your answer</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="q-review__text">
+                  <strong>Your answer:</strong> {ans?.text ? ans.text : <em className="lms-muted">Not answered</em>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function Leaderboard({ id }) {
   const { data, isLoading } = useLeaderboard(id);
   const entries = data?.entries ?? [];
@@ -137,7 +276,7 @@ function Leaderboard({ id }) {
       {isLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-4)' }}><Spinner /></div>
       ) : entries.length === 0 ? (
-        <p className="lms-muted">No graded results in your batch yet.</p>
+        <EmptyState icon={<Trophy size={26} />} title="No results yet" description="No graded results in your batch yet." />
       ) : (
         <div className="lb-list">
           {entries.slice(0, 10).map((e) => (

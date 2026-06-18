@@ -1,44 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, X } from 'lucide-react';
-import { AssessmentAvailability, QuestionType } from '@lms/shared';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  FullPageSpinner,
-  Input,
-  Modal,
-  Select,
-} from '@/components/ui';
+import { Check, Database, Download, HelpCircle, ScrollText, Trash2 } from 'lucide-react';
+import { AssessmentAvailability, ProctoringMode, QuestionType } from '@/shared';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, SkeletonText, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, downloadFile } from '@/lib/api';
 import {
-  useAddQuestion,
   useAssessment,
   useDeleteQuestion,
   useSetAvailability,
   useSubmissions,
-  useUpdateQuestion,
+  useUpdateAssessment,
 } from '@/lib/assessments';
-import { assessmentLabel, QUESTION_TYPE_LABEL, QUESTION_TYPE_OPTIONS } from './assessmentsUi';
+import {
+  assessmentLabel,
+  ASSESSMENT_TYPE_LABEL,
+  ASSESSMENT_TYPE_TONE,
+  PROCTORING_LABEL,
+  PROCTORING_OPTIONS,
+  PROCTORING_TONE,
+  QUESTION_TYPE_LABEL,
+} from './assessmentsUi';
+import { combineDateTime, splitDateTime } from './examWindow';
+import { BankPicker } from './BankPicker';
 import { formatDate } from '@/lib/format';
 import '../modules/modules.css';
 
 export function AssessmentEditor() {
   const { id } = useParams();
-  const { data: a, isLoading, isError, error } = useAssessment(id);
+  const { data: a, isLoading, isError, error, refetch } = useAssessment(id);
   const setAvailability = useSetAvailability();
-  const [qModal, setQModal] = useState({ open: false, question: null });
+  const del = useDeleteQuestion();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  if (isLoading) return <FullPageSpinner />;
+  if (isLoading && !a) {
+    return (
+      <>
+        <PageHeader
+          title="Assessment"
+          subtitle={<Link to="/app/assessments" className="lms-muted">← All assessments</Link>}
+        />
+        <Card><SkeletonText lines={4} /></Card>
+      </>
+    );
+  }
   if (isError || !a) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(error) || 'Assessment not found'}</p>
-        <Link to="/app/assessments">← Back</Link>
-      </Card>
+      <>
+        <PageHeader
+          title="Assessment"
+          subtitle={<Link to="/app/assessments" className="lms-muted">← All assessments</Link>}
+        />
+        <ErrorState message={apiErrorMessage(error) || 'Assessment not found'} onRetry={refetch} />
+      </>
     );
   }
 
@@ -53,7 +67,10 @@ export function AssessmentEditor() {
 
       <div className="module-card__meta" style={{ marginBottom: 'var(--space-6)' }}>
         <Badge tone="neutral">{a.module?.name}</Badge>
+        <Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge>
+        {a.topicTitle && <Badge tone="primary">{a.topicTitle}</Badge>}
         <Badge tone="neutral">Pass ≥ {a.passingScore}%</Badge>
+        <Badge tone={PROCTORING_TONE[a.proctoring] ?? 'neutral'}>{PROCTORING_LABEL[a.proctoring] ?? 'No proctoring'}</Badge>
         <Badge tone={unlocked ? 'success' : 'neutral'}>{unlocked ? 'Unlocked' : 'Locked'}</Badge>
         <Button
           size="sm"
@@ -67,9 +84,27 @@ export function AssessmentEditor() {
         </Button>
       </div>
 
+      <ProctoringCard a={a} />
+
       <Card style={{ marginBottom: 'var(--space-6)' }}>
-        <CardHeader title={`Questions (${a.questions.length})`} subtitle="MCQ questions are auto-graded. Other types await the AI evaluation engine." />
-        {a.questions.length === 0 && <p className="lms-muted">No questions yet.</p>}
+        <div className="panel-head">
+          <CardHeader
+            title={`Questions (${a.questions.length})`}
+            subtitle="Hand-picked from this module's question bank. MCQs are auto-graded."
+          />
+          <Button onClick={() => setPickerOpen(true)}>
+            <Database size={15} style={{ marginRight: 6 }} /> Add from question bank
+          </Button>
+        </div>
+
+        {a.questions.length === 0 && (
+          <EmptyState
+            icon={<HelpCircle size={26} />}
+            title="No questions yet"
+            description="Add some from the question bank to build this test."
+            action={<Button onClick={() => setPickerOpen(true)}><Database size={15} style={{ marginRight: 6 }} /> Add from question bank</Button>}
+          />
+        )}
         {a.questions.map((q, i) => (
           <div key={q.id} className="topic-row" style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
@@ -91,47 +126,165 @@ export function AssessmentEditor() {
               )}
             </div>
             <div className="list-actions">
-              <Button size="sm" variant="ghost" onClick={() => setQModal({ open: true, question: q })}>Edit</Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                title="Remove from this test"
+                onClick={() => window.confirm('Remove this question from the test?') && del.mutate({ id: a.id, questionId: q.id })}
+              >
+                <Trash2 size={15} />
+              </Button>
             </div>
           </div>
         ))}
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <Button variant="outline" onClick={() => setQModal({ open: true, question: null })}>+ Add question</Button>
-        </div>
       </Card>
 
       <SubmissionsCard id={a.id} />
 
-      <QuestionModal
-        open={qModal.open}
-        assessmentId={a.id}
-        question={qModal.question}
-        onClose={() => setQModal({ open: false, question: null })}
-      />
+      <Modal open={pickerOpen} title="Add questions from the bank" size="lg" onClose={() => setPickerOpen(false)}>
+        <BankPicker assessment={a} onClose={() => setPickerOpen(false)} />
+      </Modal>
     </>
   );
 }
 
+function ProctoringCell({ s }) {
+  const shots = s.proctorShots ?? [];
+  const warnings = s.warnings ?? 0;
+  if (!s.disqualified && warnings === 0 && shots.length === 0) return <span className="lms-muted">—</span>;
+  const reasons = (s.warningLog ?? []).map((w) => w.reason).filter(Boolean).join('\n');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {s.disqualified && (
+        <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' }}>
+          ⚠ {s.disqualifiedReason || 'Left the exam'}
+        </span>
+      )}
+      {warnings > 0 && (
+        <span title={reasons} style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)', fontWeight: 'var(--font-weight-semibold)' }}>
+          ⚠ {warnings} warning{warnings === 1 ? '' : 's'}
+        </span>
+      )}
+      {shots.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {shots.map((u, i) => (
+            <a key={i} href={u} target="_blank" rel="noreferrer" title="Open snapshot">
+              <img src={u} alt={`Snapshot ${i + 1}`} style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--color-border)' }} />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProctoringCard({ a }) {
+  const update = useUpdateAssessment();
+  const init = splitDateTime(a.availableFrom);
+  const end = splitDateTime(a.deadline);
+  const [form, setForm] = useState({
+    proctoring: a.proctoring ?? ProctoringMode.NONE,
+    examDate: init.date || end.date,
+    windowStart: init.time,
+    windowEnd: end.time,
+    durationMinutes: a.durationMinutes ?? '',
+  });
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const timed = form.proctoring !== ProctoringMode.NONE;
+
+  async function save() {
+    setErr('');
+    setMsg('');
+    try {
+      await update.mutateAsync({
+        id: a.id,
+        proctoring: form.proctoring,
+        availableFrom: timed ? combineDateTime(form.examDate, form.windowStart) ?? null : null,
+        deadline: timed ? combineDateTime(form.examDate, form.windowEnd) ?? null : null,
+        durationMinutes: timed && form.durationMinutes ? Number(form.durationMinutes) : null,
+      });
+      setMsg('Saved.');
+    } catch (e) {
+      setErr(apiErrorMessage(e));
+    }
+  }
+
+  return (
+    <Card style={{ marginBottom: 'var(--space-6)' }}>
+      <CardHeader title="Proctoring & exam window" subtitle="Choose how this test is invigilated. Built-in and SEB run a timed, full-screen exam." />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+        <div style={{ maxWidth: '24rem' }}>
+          <Select label="Proctoring mode" value={form.proctoring} onChange={(e) => setForm({ ...form, proctoring: e.target.value })} options={PROCTORING_OPTIONS} />
+        </div>
+        {timed && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'flex-end' }}>
+            <Input label="Test date" type="date" value={form.examDate} onChange={(e) => setForm({ ...form, examDate: e.target.value })} />
+            <Input label="Window opens" type="time" value={form.windowStart} onChange={(e) => setForm({ ...form, windowStart: e.target.value })} />
+            <Input label="Window closes" type="time" value={form.windowEnd} onChange={(e) => setForm({ ...form, windowEnd: e.target.value })} />
+            <Input label="Duration (min)" type="number" min="1" max="600" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} style={{ maxWidth: '8rem' }} />
+          </div>
+        )}
+        {form.proctoring === ProctoringMode.SEB && (
+          <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+            Set the global SEB Config Key in Settings and give students the .seb launch file.
+          </span>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <Button onClick={save} loading={update.isPending}>Save proctoring</Button>
+          {msg && <span className="lms-muted" style={{ color: 'var(--color-success)' }}>{msg}</span>}
+        </div>
+      </div>
+      {err && <span className="field__error" style={{ display: 'block', marginTop: 'var(--space-2)' }}>{err}</span>}
+    </Card>
+  );
+}
+
 function SubmissionsCard({ id }) {
+  const toast = useToast();
   const { data: subs, isLoading } = useSubmissions(id);
+  const [exporting, setExporting] = useState(false);
+  const hasSubs = subs && subs.length > 0;
+  const onExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile(`/assessments/${id}/submissions.csv`, 'submissions.csv');
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  };
   return (
     <Card>
-      <CardHeader title="Submissions" subtitle="Student attempts and scores" />
-      {isLoading ? (
-        <FullPageSpinner />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+        <CardHeader title="Submissions" subtitle="Student attempts and scores" />
+        {hasSubs && (
+          <Button variant="secondary" size="sm" onClick={onExport} loading={exporting} style={{ flexShrink: 0 }}>
+            <Download size={16} /> Export CSV
+          </Button>
+        )}
+      </div>
+      {isLoading && !subs ? (
+        <SkeletonTable rows={5} cols={5} />
       ) : !subs || subs.length === 0 ? (
-        <p className="lms-muted">No submissions yet.</p>
+        <EmptyState
+          icon={<ScrollText size={26} />}
+          title="No submissions yet"
+        />
       ) : (
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Student</th><th>Score</th><th>Result</th><th>Submitted</th></tr></thead>
+            <thead><tr><th>Student</th><th>Score</th><th>Result</th><th>Proctoring</th><th>Submitted</th></tr></thead>
             <tbody>
               {subs.map((s) => (
                 <tr key={s.id}>
                   <td>{s.student?.name}<div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{s.student?.email}</div></td>
                   <td>{s.score ?? '—'}%</td>
                   <td>
-                    {s.status === 'graded' ? (
+                    {s.disqualified ? (
+                      <Badge tone="error">Disqualified</Badge>
+                    ) : s.status === 'graded' ? (
                       <Badge tone={s.passed ? 'success' : 'error'}>{s.passed ? 'Passed' : 'Failed'}</Badge>
                     ) : s.status === 'evaluating' ? (
                       <Badge tone="primary">Evaluating</Badge>
@@ -139,6 +292,7 @@ function SubmissionsCard({ id }) {
                       <Badge tone="warning">Pending review</Badge>
                     )}
                   </td>
+                  <td><ProctoringCell s={s} /></td>
                   <td>{formatDate(s.submittedAt)}</td>
                 </tr>
               ))}
@@ -147,115 +301,5 @@ function SubmissionsCard({ id }) {
         </div>
       )}
     </Card>
-  );
-}
-
-const BLANK_Q = { type: QuestionType.MCQ, prompt: '', options: ['', ''], correctOption: 0, points: 1 };
-
-function QuestionModal({ open, assessmentId, question, onClose }) {
-  const isEdit = Boolean(question);
-  const [form, setForm] = useState(BLANK_Q);
-  const [err, setErr] = useState('');
-  const add = useAddQuestion();
-  const update = useUpdateQuestion();
-  const del = useDeleteQuestion();
-
-  useEffect(() => {
-    if (!open) return;
-    setErr('');
-    setForm(
-      question
-        ? {
-            type: question.type,
-            prompt: question.prompt,
-            options: question.options?.length ? [...question.options] : ['', ''],
-            correctOption: question.correctOption ?? 0,
-            points: question.points ?? 1,
-          }
-        : BLANK_Q,
-    );
-  }, [open, question]);
-
-  const isMcq = form.type === QuestionType.MCQ;
-
-  function setOption(i, v) {
-    setForm((f) => ({ ...f, options: f.options.map((o, idx) => (idx === i ? v : o)) }));
-  }
-  function addOption() {
-    setForm((f) => ({ ...f, options: [...f.options, ''] }));
-  }
-  function removeOption(i) {
-    setForm((f) => {
-      const options = f.options.filter((_, idx) => idx !== i);
-      return { ...f, options, correctOption: Math.min(f.correctOption, options.length - 1) };
-    });
-  }
-
-  async function save(e) {
-    e.preventDefault();
-    setErr('');
-    const payload = {
-      type: form.type,
-      prompt: form.prompt,
-      points: Number(form.points) || 1,
-      ...(isMcq
-        ? { options: form.options.map((o) => o.trim()).filter(Boolean), correctOption: form.correctOption }
-        : {}),
-    };
-    try {
-      if (isEdit) await update.mutateAsync({ id: assessmentId, questionId: question.id, ...payload });
-      else await add.mutateAsync({ id: assessmentId, ...payload });
-      onClose();
-    } catch (e2) {
-      setErr(apiErrorMessage(e2));
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      title={isEdit ? 'Edit Question' : 'Add Question'}
-      onClose={onClose}
-      footer={
-        <>
-          {isEdit && (
-            <Button
-              variant="ghost"
-              onClick={() => window.confirm('Delete this question?') && del.mutateAsync({ id: assessmentId, questionId: question.id }).then(onClose)}
-              style={{ marginRight: 'auto' }}
-            >
-              Delete
-            </Button>
-          )}
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button form="question-form" type="submit" loading={add.isPending || update.isPending}>Save</Button>
-        </>
-      }
-    >
-      <form id="question-form" onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={QUESTION_TYPE_OPTIONS} />
-        <Input label="Question prompt" value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} required />
-
-        {isMcq && (
-          <div className="field">
-            <label className="field__label">Options (select the correct answer)</label>
-            {form.options.map((opt, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-                <input type="radio" name="correct" checked={form.correctOption === i} onChange={() => setForm({ ...form, correctOption: i })} />
-                <input className="input" value={opt} onChange={(e) => setOption(i, e.target.value)} placeholder={`Option ${i + 1}`} />
-                {form.options.length > 2 && (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => removeOption(i)}><X size={15} /></Button>
-                )}
-              </div>
-            ))}
-            <Button type="button" size="sm" variant="outline" onClick={addOption}>+ Option</Button>
-          </div>
-        )}
-
-        <Input label="Points" type="number" min="1" max="100" value={form.points} onChange={(e) => setForm({ ...form, points: e.target.value })} />
-        {!isMcq && <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>Non-MCQ questions are graded by the AI evaluation engine (coming soon).</p>}
-        {err && <span className="field__error">{err}</span>}
-      </form>
-    </Modal>
   );
 }

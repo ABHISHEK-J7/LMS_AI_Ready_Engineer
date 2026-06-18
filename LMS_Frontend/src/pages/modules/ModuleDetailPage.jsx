@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, X } from 'lucide-react';
-import { UserRole } from '@lms/shared';
+import { ChevronRight, Target, Users, X } from 'lucide-react';
+import { UserRole } from '@/shared';
 import {
   Badge,
   Button,
   Card,
   CardHeader,
-  FullPageSpinner,
+  EmptyState,
+  ErrorState,
   Input,
   Modal,
   Select,
+  Skeleton,
+  SkeletonText,
   Textarea,
 } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
@@ -33,16 +36,27 @@ export function ModuleDetailPage() {
   const user = useAuth((s) => s.user);
   const isAdmin = user?.role === UserRole.ADMIN;
 
-  const { data: module, isLoading, isError, error } = useModule(id);
+  const { data: module, isLoading, isError, error, refetch } = useModule(id);
 
-  if (isLoading) return <FullPageSpinner />;
-  if (isError || !module) {
+  if (isLoading && !module) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(error) || 'Module not found'}</p>
-        <Link to="/app/modules">← Back to modules</Link>
-      </Card>
+      <>
+        <PageHeader
+          title={<Skeleton width="14rem" height="1.75rem" />}
+          subtitle={
+            <Link to="/app/modules" className="lms-muted">
+              ← All modules
+            </Link>
+          }
+        />
+        <Card>
+          <SkeletonText lines={4} />
+        </Card>
+      </>
     );
+  }
+  if (isError || !module) {
+    return <ErrorState message={apiErrorMessage(error) || 'Module not found'} onRetry={refetch} />;
   }
 
   const assignedTrainers = module.assignedTrainers ?? [];
@@ -208,7 +222,9 @@ function ObjectivesEditor({ module, canEdit }) {
   return (
     <Card>
       <CardHeader title="Learning Objectives" />
-      {items.length === 0 && <p className="lms-muted">No objectives defined yet.</p>}
+      {items.length === 0 && (
+        <EmptyState icon={<Target size={26} />} title="No objectives yet" description="No objectives defined yet." />
+      )}
       {items.map((obj, idx) => (
         <div className="objective-row" key={`${obj}-${idx}`}>
           <ChevronRight size={15} strokeWidth={2.5} style={{ color: 'var(--color-primary)', flex: 'none' }} />
@@ -268,7 +284,9 @@ function TrainersPanel({ module, isAdmin }) {
     <Card>
       <CardHeader title="Assigned Trainers" subtitle="Trainers who manage this module's content" />
 
-      {assigned.length === 0 && <p className="lms-muted">No trainers assigned.</p>}
+      {assigned.length === 0 && (
+        <EmptyState icon={<Users size={26} />} title="No trainers assigned" description="No trainers assigned." />
+      )}
       {assigned.map((t) => (
         <div className="objective-row" key={t.id}>
           <span style={{ flex: 1 }}>

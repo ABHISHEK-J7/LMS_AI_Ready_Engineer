@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import * as users from '../controllers/user.controller.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -24,6 +24,9 @@ router.post(
   validate({ params: users.userIdParam }),
   asyncHandler(users.approveUser),
 );
+// GDPR: export a user's data bundle, or irreversibly erase their personal data.
+router.get('/:id/export', validate({ params: users.userIdParam }), asyncHandler(users.exportUser));
+router.post('/:id/erase', validate({ params: users.userIdParam }), asyncHandler(users.eraseUser));
 router.delete('/:id', validate({ params: users.userIdParam }), asyncHandler(users.archiveUser));
 
 export default router;

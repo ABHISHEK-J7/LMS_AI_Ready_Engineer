@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FullPageSpinner } from '@/components/ui';
@@ -17,7 +17,11 @@ import { SchedulePage } from '@/pages/schedule/SchedulePage';
 import { AttendancePage } from '@/pages/attendance/AttendancePage';
 import { AssessmentsPage } from '@/pages/assessments/AssessmentsPage';
 import { AssessmentEditor } from '@/pages/assessments/AssessmentEditor';
+import { AuditPage } from '@/pages/audit/AuditPage';
+// Lazy — pulls in the heavy xlsx parser only when the page is opened.
+const QuestionBankPage = lazy(() => import('@/pages/questionBank/QuestionBankPage').then((m) => ({ default: m.QuestionBankPage })));
 import { CertificatesPage } from '@/pages/certificates/CertificatesPage';
+import { ApprovalsPage } from '@/pages/approvals/ApprovalsPage';
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage';
 import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
@@ -56,8 +60,11 @@ export default function App() {
         <Route path="announcements" element={<AnnouncementsPage />} />
         <Route path="assessments" element={<AssessmentsPage />} />
         <Route path="assessments/:id" element={<AssessmentEditor />} />
+        <Route path="question-bank" element={<Suspense fallback={<FullPageSpinner />}><QuestionBankPage /></Suspense>} />
         <Route path="certificates" element={<CertificatesPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="audit" element={<AuditPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 

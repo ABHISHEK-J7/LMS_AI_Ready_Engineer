@@ -88,3 +88,32 @@
     justify-content: flex-start;
   }
 }
+
+/* ── Overall Attendance: title left, module filter at the top-right corner ── */
+.att-overall-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.att-overall-head > :first-child { margin-bottom: 0; }
+.att-overall-filter {
+  min-width: 16rem;
+  margin-bottom: var(--space-6);
+}
+@media (max-width: 640px) {
+  .att-overall-filter { min-width: 100%; }
+}
+
+/* Mandatory "rate your previous class" gate banner */
+.rate-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+  border-left: 4px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+}

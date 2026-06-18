@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ExternalLink, FileText, Trash2, Upload } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, FullPageSpinner, Input, Modal } from '@/components/ui';
+import { Award, ExternalLink, FileText, Trash2, Upload } from 'lucide-react';
+import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Skeleton, SkeletonCards } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -25,12 +25,17 @@ function certTitle(c) {
 
 const isImage = (url = '') => /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url);
 
+// Approval state badges for student-uploaded certificates.
+const CERT_STATUS = {
+  pending: { label: 'Pending', tone: 'warning' },
+  approved: { label: 'Approved', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'error' },
+};
+
 function StudentCertificates() {
   const user = useAuth((s) => s.user);
   const { data: certs, isLoading } = useMyCertificates();
   const [view, setView] = useState(null);
-
-  if (isLoading) return <FullPageSpinner />;
 
   return (
     <>
@@ -46,11 +51,14 @@ function StudentCertificates() {
             title="AI Ready Engineer Certificates"
             subtitle="Earned automatically as you complete each module in the program."
           />
-          {certs && certs.length === 0 ? (
-            <p className="lms-muted">
-              No certificates yet. Complete a module — pass its final assessment and meet the
-              attendance requirement — to earn one automatically.
-            </p>
+          {isLoading && !certs ? (
+            <SkeletonCards count={3} height="4rem" />
+          ) : certs && certs.length === 0 ? (
+            <EmptyState
+              icon={<Award size={26} />}
+              title="No certificates yet"
+              description="No certificates yet. Complete a module — pass its final assessment and meet the attendance requirement — to earn one automatically."
+            />
           ) : (
             <div className="cert-list">
               {certs?.map((c) => (
@@ -141,31 +149,45 @@ function ExternalCertificates() {
         subtitle="Add certificates you've earned outside the program — paste a link or upload a PDF/image."
       />
 
-      {isLoading ? (
-        <p className="lms-muted">Loading…</p>
+      {isLoading && !items ? (
+        <Skeleton height="7rem" radius="var(--radius-lg)" />
       ) : !items || items.length === 0 ? (
-        <p className="lms-muted">Nothing here yet. Add your first external certificate below.</p>
+        <EmptyState
+          icon={<Award size={26} />}
+          title="Nothing here yet"
+          description="Nothing here yet. Add your first external certificate below."
+        />
       ) : (
         <div className="ext-cert-grid">
           {items.map((c) => (
-            <a key={c.id} href={c.url} target="_blank" rel="noreferrer" className="ext-cert">
-              <div className="ext-cert__thumb">
-                {isImage(c.url) ? <img src={c.url} alt={c.title} /> : <FileText size={26} />}
+            <div key={c.id} className="ext-cert">
+              <div className="ext-cert__head">
+                <div className="ext-cert__thumb">
+                  {isImage(c.url) ? <img src={c.url} alt={c.title} /> : <FileText size={20} />}
+                </div>
+                <Badge tone={CERT_STATUS[c.status]?.tone ?? 'neutral'}>
+                  {CERT_STATUS[c.status]?.label ?? 'Pending'}
+                </Badge>
               </div>
-              <div className="ext-cert__body">
-                <div className="ext-cert__title">{c.title}</div>
-                {c.issuer && <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{c.issuer}</div>}
-                <span className="ext-cert__open"><ExternalLink size={12} /> Open</span>
+              <div className="ext-cert__title">{c.title}</div>
+              {c.issuer && <div className="ext-cert__issuer lms-muted">{c.issuer}</div>}
+              {c.status === 'rejected' && c.note && (
+                <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>“{c.note}”</div>
+              )}
+              <div className="ext-cert__foot">
+                <a href={c.url} target="_blank" rel="noreferrer" className="ext-cert__open">
+                  <ExternalLink size={13} /> Open
+                </a>
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--danger"
+                  aria-label={`Delete ${c.title}`}
+                  onClick={() => window.confirm('Remove this certificate?') && del.mutate(c.id)}
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
-              <button
-                type="button"
-                className="icon-btn icon-btn--danger ext-cert__del"
-                aria-label={`Delete ${c.title}`}
-                onClick={(e) => { e.preventDefault(); window.confirm('Remove this certificate?') && del.mutate(c.id); }}
-              >
-                <Trash2 size={13} />
-              </button>
-            </a>
+            </div>
           ))}
         </div>
       )}

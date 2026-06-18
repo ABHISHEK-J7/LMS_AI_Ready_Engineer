@@ -1,28 +1,23 @@
 import path from 'node:path';
-import fs from 'node:fs';
 import multer from 'multer';
 import { z } from 'zod';
-import { ExternalCertificate } from '../models/index.js';
-import { ensureUploadsDir, UPLOADS_URL_PREFIX } from '../config/storage.js';
+import { ExternalCertStatus, UserRole } from '#shared';
+import { Batch, ExternalCertificate, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
+import { storeUpload, deleteByUrl } from '../services/fileStore.js';
 
 const objectId = z.string().length(24);
 export const externalCertIdParam = z.object({ id: objectId });
-
-// ── Multer (single file → LMS_Storage/uploads) ────────────────────────────────
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, ensureUploadsDir()),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40);
-    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    cb(null, `cert-${stamp}-${base}${ext}`);
-  },
+export const reviewSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  note: z.string().max(500).optional(),
 });
+
+// ── Multer (single file → MongoDB/GridFS) ─────────────────────────────────────
 const ALLOWED_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp']);
 export const uploadCertFile = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024, files: 1 }, // 25 MB
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -53,7 +48,7 @@ export async function create(req, res) {
 
   let finalUrl = url;
   if (req.file) {
-    finalUrl = `${UPLOADS_URL_PREFIX}/${req.file.filename}`;
+    finalUrl = (await storeUpload(req.file, 'cert')).url;
   } else if (!url) {
     throw ApiError.badRequest('Provide a link or upload a file');
   }
@@ -73,10 +68,63 @@ export async function remove(req, res) {
   if (!cert) throw ApiError.notFound('Certificate not found');
 
   // Best-effort cleanup of an uploaded file.
-  if (cert.url?.startsWith(UPLOADS_URL_PREFIX)) {
-    const file = path.join(ensureUploadsDir(), path.basename(cert.url));
-    fs.promises.unlink(file).catch(() => {});
-  }
+  await deleteByUrl(cert.url);
   await cert.deleteOne();
   ok(res, { id: req.params.id, deleted: true });
+}
+
+// ── Review (trainer / admin) ──────────────────────────────────────────────────
+
+/** Which students' certs may this reviewer act on? Admin = all; trainer = the
+ *  students in the batches they're assigned to. Returns null for "all". */
+async function reviewableStudentIds(req) {
+  if (req.auth.role === UserRole.ADMIN) return null;
+  const batches = await Batch.find({ trainers: req.auth.userId }).select('students');
+  return [...new Set(batches.flatMap((b) => b.students.map((s) => s.toString())))];
+}
+
+/** Certs a trainer/admin can review — pending first, then recently reviewed. */
+export async function listForReview(req, res) {
+  const studentIds = await reviewableStudentIds(req);
+  const filter = studentIds ? { student: { $in: studentIds } } : {};
+  const certs = await ExternalCertificate.find(filter)
+    .sort({ status: 1, createdAt: -1 }) // 'approved','pending','rejected' → pending mid; re-sorted below
+    .populate('student', 'name email')
+    .populate('reviewedBy', 'name');
+  // Surface pending first regardless of alpha order.
+  const rank = { [ExternalCertStatus.PENDING]: 0, [ExternalCertStatus.APPROVED]: 1, [ExternalCertStatus.REJECTED]: 2 };
+  const sorted = certs.sort((a, b) => (rank[a.status] - rank[b.status]) || (b.createdAt - a.createdAt));
+  ok(res, sorted.map((c) => c.toJSON()));
+}
+
+/** Approve or reject a student's external certificate. */
+export async function review(req, res) {
+  const { decision, note } = req.body;
+  const cert = await ExternalCertificate.findById(req.params.id);
+  if (!cert) throw ApiError.notFound('Certificate not found');
+
+  // Trainers may only review their own batches' students.
+  const studentIds = await reviewableStudentIds(req);
+  if (studentIds && !studentIds.includes(cert.student.toString())) {
+    throw ApiError.forbidden('This student is not in your batches');
+  }
+
+  cert.status = decision === 'approve' ? ExternalCertStatus.APPROVED : ExternalCertStatus.REJECTED;
+  cert.reviewedBy = req.auth.userId;
+  cert.reviewedAt = new Date();
+  cert.note = note ?? undefined;
+  await cert.save();
+
+  const { notify } = await import('../services/notify.js');
+  notify(cert.student, {
+    type: 'approval',
+    title: `Certificate ${decision === 'approve' ? 'approved' : 'rejected'}: ${cert.title}`,
+    body: decision === 'approve' ? 'It now shows on your certificates page.' : (note || 'Please review and resubmit.'),
+    link: '/app/certificates',
+  });
+
+  const populated = await ExternalCertificate.findById(cert._id)
+    .populate('student', 'name email')
+    .populate('reviewedBy', 'name');
+  ok(res, populated.toJSON());
 }

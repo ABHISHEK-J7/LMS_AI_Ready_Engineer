@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 /**

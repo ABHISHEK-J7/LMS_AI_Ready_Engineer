@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import { Announcement, Batch, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
@@ -48,6 +48,18 @@ export async function createAnnouncement(req, res) {
     module,
     isGlobal: role === UserRole.ADMIN ? Boolean(isGlobal) : false,
   });
+  // Notify the audience.
+  let recipients = [];
+  if (doc.isGlobal) {
+    recipients = (await User.find({ role: UserRole.STUDENT, status: 'active' }).select('_id')).map((u) => u._id);
+  } else if (doc.batch) {
+    recipients = (await Batch.findById(doc.batch).select('students'))?.students ?? [];
+  } else if (doc.module) {
+    recipients = (await Batch.find({ modules: doc.module }).select('students')).flatMap((b) => b.students);
+  }
+  const { notifyMany } = await import('../services/notify.js');
+  notifyMany(recipients, { type: 'announcement', title: `Announcement: ${title}`, body: body.slice(0, 140), link: '/app/announcements' });
+
   const populated = await Announcement.findById(doc._id).populate(POP);
   ok(res, populated.toJSON(), 201);
 }

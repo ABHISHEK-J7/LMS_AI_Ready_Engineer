@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, ChevronRight } from 'lucide-react';
-import { Badge, Card, CardHeader, FullPageSpinner, Modal } from '@/components/ui';
+import { Check, ChevronRight, Users, BookOpen } from 'lucide-react';
+import { Badge, Card, CardHeader, Modal, Skeleton, SkeletonText, EmptyState, ErrorState } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useBatch, useSetTopicTaught } from '@/lib/batches';
@@ -19,16 +19,41 @@ function taughtSet(batch, moduleId) {
 /** Trainer's view of a batch they're assigned to — mark which topics they've taught. */
 export function BatchDetailPage() {
   const { id } = useParams();
-  const { data: batch, isLoading, isError, error } = useBatch(id);
+  const { data: batch, isLoading, isError, error, refetch } = useBatch(id);
   const [topicModule, setTopicModule] = useState(null); // module whose topics we're ticking
 
-  if (isLoading) return <FullPageSpinner />;
+  if (isLoading && !batch) {
+    return (
+      <>
+        <PageHeader
+          title={<Skeleton width="14rem" height="1.75rem" />}
+          subtitle={
+            <Link to="/app/batches" className="lms-muted">
+              ← All batches
+            </Link>
+          }
+        />
+        <div className="batch-grid-two">
+          <Card><SkeletonText lines={4} /></Card>
+          <Card><SkeletonText lines={4} /></Card>
+        </div>
+        <Card style={{ marginTop: 'var(--space-6)' }}><SkeletonText lines={4} /></Card>
+      </>
+    );
+  }
   if (isError || !batch) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(error) || 'Batch not found'}</p>
-        <Link to="/app/batches">← Back to batches</Link>
-      </Card>
+      <>
+        <PageHeader
+          title="Batch"
+          subtitle={
+            <Link to="/app/batches" className="lms-muted">
+              ← All batches
+            </Link>
+          }
+        />
+        <ErrorState message={apiErrorMessage(error) || 'Batch not found'} onRetry={refetch} />
+      </>
     );
   }
 
@@ -60,7 +85,11 @@ export function BatchDetailPage() {
         <Card>
           <CardHeader title={`Students (${students.length})`} subtitle="Enrolled in this batch" />
           {students.length === 0 ? (
-            <p className="lms-muted">No students enrolled yet.</p>
+            <EmptyState
+              icon={<Users size={26} />}
+              title="No students"
+              description="No students enrolled yet."
+            />
           ) : (
             <div className="chip-list">
               {students.map((s) => (
@@ -73,7 +102,11 @@ export function BatchDetailPage() {
         <Card>
           <CardHeader title={`Trainers (${trainers.length})`} subtitle="Delivering this batch" />
           {trainers.length === 0 ? (
-            <p className="lms-muted">No trainers assigned yet.</p>
+            <EmptyState
+              icon={<Users size={26} />}
+              title="No trainers"
+              description="No trainers assigned yet."
+            />
           ) : (
             <div className="chip-list">
               {trainers.map((t) => (
@@ -88,7 +121,11 @@ export function BatchDetailPage() {
       <Card style={{ marginTop: 'var(--space-6)' }}>
         <CardHeader title={`Modules (${modules.length})`} subtitle="Open a module to tick the topics you've taught this batch" />
         {modules.length === 0 ? (
-          <p className="lms-muted">No modules assigned to this batch yet.</p>
+          <EmptyState
+            icon={<BookOpen size={26} />}
+            title="No modules"
+            description="No modules assigned to this batch yet."
+          />
         ) : (
           <div className="module-list">
             {modules.map((m) => {
@@ -129,9 +166,15 @@ function TopicTaughtPanel({ batch, module }) {
   const taught = taughtSet(batch, module.id);
   const topics = (full?.topics ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-  if (isLoading) return <FullPageSpinner />;
+  if (isLoading && !full) return <SkeletonText lines={5} />;
   if (topics.length === 0) {
-    return <p className="lms-muted">This module has no syllabus topics yet.</p>;
+    return (
+      <EmptyState
+        icon={<BookOpen size={26} />}
+        title="No topics"
+        description="This module has no syllabus topics yet."
+      />
+    );
   }
 
   return (

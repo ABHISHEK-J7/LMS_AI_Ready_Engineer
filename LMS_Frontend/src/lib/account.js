@@ -5,7 +5,8 @@ export function checkEmail(email) {
   return unwrap(api.post('/auth/check-email', { email }));
 }
 
-/** Request a one-time code by email. Resolves with { sent, devOtp? }. */
+/** Request a one-time code by email. Resolves with { sent }. The code is only
+ *  ever delivered by email — never returned to the client. */
 export function requestOtp(email) {
   return unwrap(api.post('/auth/request-otp', { email }));
 }

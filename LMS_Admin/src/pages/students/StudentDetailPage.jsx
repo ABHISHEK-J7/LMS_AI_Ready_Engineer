@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
-import { Check, X } from 'lucide-react';
-import { Badge, Card, CardHeader, FullPageSpinner } from '@/components/ui';
+import { Check, Users, X } from 'lucide-react';
+import { Badge, Card, CardHeader, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useStudentProgress } from '@/lib/progress';
@@ -24,13 +24,20 @@ export function StudentDetailPage() {
   const attendance = useStudentAttendance(id);
   const certs = useStudentCertificates(id);
 
-  if (progress.isLoading) return <FullPageSpinner />;
+  if (progress.isLoading && !progress.data) {
+    return (
+      <>
+        <PageHeader title="Student" subtitle={<Link to="/app/users" className="lms-muted">← All users</Link>} />
+        <SkeletonCards count={4} height="5rem" />
+      </>
+    );
+  }
   if (progress.isError) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(progress.error)}</p>
-        <Link to="/app/users">← Back to users</Link>
-      </Card>
+      <>
+        <PageHeader title="Student" subtitle={<Link to="/app/users" className="lms-muted">← All users</Link>} />
+        <ErrorState message={apiErrorMessage(progress.error)} onRetry={progress.refetch} />
+      </>
     );
   }
 
@@ -56,7 +63,11 @@ export function StudentDetailPage() {
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <CardHeader title="Curriculum progression" subtitle={p.hasBatch ? `Pass ≥ ${p.passingScore}% · attendance ≥ ${p.minAttendance}%` : undefined} />
         {!p.hasBatch ? (
-          <p className="lms-muted">This student is not enrolled in a batch.</p>
+          <EmptyState
+            icon={<Users size={26} />}
+            title="Not enrolled in a batch"
+            description="This student is not enrolled in a batch."
+          />
         ) : (
           <div className="table-wrap">
             <table className="table">

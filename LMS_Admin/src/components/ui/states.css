@@ -1,0 +1,75 @@
+/* Loading / empty / error state primitives. Design-system variables only. */
+
+/* ── Skeleton ─────────────────────────────────────────── */
+.skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-text-muted) 14%, var(--color-surface));
+}
+/* GPU-friendly shimmer: a translucent band swept across with transform only. */
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-surface) 65%, transparent),
+    transparent
+  );
+  animation: skeleton-sweep 1.5s var(--ease-in-out, ease-in-out) infinite;
+}
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+.skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+/* ── Empty / error block ──────────────────────────────── */
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
+}
+.state-block__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: var(--radius-full, 999px);
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, var(--color-surface));
+}
+.state-block__icon--error {
+  color: var(--color-error, #dc2626);
+  background: color-mix(in srgb, var(--color-error, #dc2626) 12%, var(--color-surface));
+}
+.state-block__title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.state-block__desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  max-width: 32rem;
+  line-height: 1.5;
+}
+.state-block__action {
+  margin-top: var(--space-2);
+}

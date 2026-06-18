@@ -1,0 +1,43 @@
+/**
+ * Platform-wide defaults. All of these are admin-configurable at runtime
+ * (stored in a Settings document); these are the seed/fallback values.
+ */
+
+/** Minimum % score to pass a final assessment and unlock the next module. */
+export const DEFAULT_PASSING_SCORE = 70;
+
+/** Minimum overall attendance % required for certification eligibility. */
+export const DEFAULT_MIN_ATTENDANCE = 75;
+
+/** Practice tests per module (Practice Test 1..5). */
+export const PRACTICE_TESTS_PER_MODULE = 5;
+
+/** Preparation tests per module (Preparation Test 1..2) — both mandatory before the final. */
+export const PREPARATION_TESTS_PER_MODULE = 2;
+
+/** Prompt-evaluation engine scores out of this maximum. */
+export const PROMPT_SCORE_MAX = 100;
+
+/** JWT access-token lifetime (string accepted by `jsonwebtoken`). */
+export const ACCESS_TOKEN_TTL = '15m';
+export const REFRESH_TOKEN_TTL = '7d';
+
+/** Whether public student self-registration is allowed (admin-configurable). */
+export const DEFAULT_ALLOW_SELF_REGISTRATION = false;
+
+/**
+ * Coding / professional platform links a user can put on their profile. The
+ * `key` is the User.links field name; the `label` + `placeholder` drive the UI.
+ * Single source of truth shared by backend validation and both frontends.
+ */
+export const SOCIAL_PLATFORMS = [
+  { key: 'github', label: 'GitHub', placeholder: 'https://github.com/username' },
+  { key: 'leetcode', label: 'LeetCode', placeholder: 'https://leetcode.com/u/username' },
+  { key: 'codechef', label: 'CodeChef', placeholder: 'https://codechef.com/users/username' },
+  { key: 'hackerrank', label: 'HackerRank', placeholder: 'https://hackerrank.com/profile/username' },
+  { key: 'linkedin', label: 'LinkedIn', placeholder: 'https://linkedin.com/in/username' },
+  { key: 'portfolio', label: 'Portfolio', placeholder: 'https://your-site.com' },
+];
+
+/** Max screenshots a student may attach to a profile project. */
+export const PROJECT_MAX_IMAGES = 5;

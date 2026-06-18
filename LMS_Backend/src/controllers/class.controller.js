@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ClassStatus, MeetingProvider, UserRole } from '@lms/shared';
-import { Batch, ClassJoin, ClassSchedule, Module, User } from '../models/index.js';
+import { ClassStatus, MeetingProvider, UserRole } from '#shared';
+import { Batch, ClassJoin, ClassRating, ClassSchedule, Module, User } from '../models/index.js';
 import { createZoomMeeting } from '../services/meetings.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
@@ -127,6 +127,35 @@ export async function getClass(req, res) {
  * Student clicked "Join" — record their entry time. Only the FIRST click sticks
  * ($setOnInsert), so later clicks don't overwrite it. Returns the meeting link.
  */
+/**
+ * Returns a prior class the student must rate before joining a new one: one they
+ * joined, that is OVER, that they were eligible to rate (present for the last ¾ —
+ * entry within the first quarter), and that they haven't rated. Null if none.
+ * Time math uses the server's local zone (set TZ to the institute's region).
+ */
+async function unratedEligibleClass(studentId) {
+  const joins = await ClassJoin.find({ student: studentId }).select('classSession joinedAt');
+  if (!joins.length) return null;
+  const joinedAt = new Map(joins.map((j) => [j.classSession.toString(), j.joinedAt]));
+  const rated = await ClassRating.find({ student: studentId }).select('classSession');
+  const ratedSet = new Set(rated.map((r) => r.classSession.toString()));
+  const candidateIds = [...joinedAt.keys()].filter((id) => !ratedSet.has(id));
+  if (!candidateIds.length) return null;
+
+  const classes = await ClassSchedule.find({ _id: { $in: candidateIds } }).select('title date startTime endTime');
+  const now = Date.now();
+  for (const c of classes) {
+    const day = new Date(c.date).toISOString().slice(0, 10);
+    const start = new Date(`${day}T${c.startTime}:00`).getTime();
+    const end = new Date(`${day}T${c.endTime}:00`).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    if (end >= now) continue; // class not over yet
+    const jt = new Date(joinedAt.get(c._id.toString())).getTime();
+    if (jt <= start + 0.25 * (end - start)) return { id: c._id, title: c.title }; // eligible + over + unrated
+  }
+  return null;
+}
+
 export async function joinClass(req, res) {
   const cls = await ClassSchedule.findById(req.params.id);
   if (!cls) throw ApiError.notFound('Class not found');
@@ -136,6 +165,12 @@ export async function joinClass(req, res) {
     throw ApiError.forbidden('You are not enrolled in this class');
   }
 
+  // Mandatory feedback gate: must rate the previous (eligible) class first.
+  const pending = await unratedEligibleClass(req.auth.userId);
+  if (pending) {
+    throw ApiError.forbidden(`Rate your previous class "${pending.title}" before joining a new one.`);
+  }
+
   await ClassJoin.updateOne(
     { classSession: cls._id, student: req.auth.userId },
     { $setOnInsert: { joinedAt: new Date() } },
@@ -143,6 +178,69 @@ export async function joinClass(req, res) {
   );
   const join = await ClassJoin.findOne({ classSession: cls._id, student: req.auth.userId });
   ok(res, { joinedAt: join?.joinedAt ?? null, meetingLink: cls.meetingLink });
+}
+
+// ── Class ratings (student rates the trainer after attending) ─────────────────
+
+export const rateClassSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().max(1000).optional(),
+});
+
+/** Submit a rating + comment for a class the student attended. */
+export async function rateClass(req, res) {
+  const cls = await ClassSchedule.findById(req.params.id);
+  if (!cls) throw ApiError.notFound('Class not found');
+
+  // Must have actually joined the class.
+  const joined = await ClassJoin.findOne({ classSession: cls._id, student: req.auth.userId });
+  if (!joined) throw ApiError.badRequest('You can only rate a class you attended');
+
+  const exists = await ClassRating.findOne({ classSession: cls._id, student: req.auth.userId });
+  if (exists) throw ApiError.badRequest('You have already rated this class');
+
+  await ClassRating.create({
+    classSession: cls._id,
+    student: req.auth.userId,
+    trainer: cls.trainer,
+    rating: req.body.rating,
+    comment: req.body.comment,
+  });
+  ok(res, { rated: true }, 201);
+}
+
+/**
+ * Classes this student attended, that are past, and hasn't rated yet — the
+ * candidates for the mandatory rating gate. The client applies the ¾-attendance
+ * rule (entry time vs class window) in the viewer's timezone.
+ */
+export async function pendingRatings(req, res) {
+  const studentId = req.auth.userId;
+  const joins = await ClassJoin.find({ student: studentId }).select('classSession joinedAt');
+  if (!joins.length) return ok(res, []);
+
+  const joinedAt = new Map(joins.map((j) => [j.classSession.toString(), j.joinedAt]));
+  const rated = await ClassRating.find({ student: studentId }).select('classSession');
+  const ratedSet = new Set(rated.map((r) => r.classSession.toString()));
+  const candidateIds = [...joinedAt.keys()].filter((id) => !ratedSet.has(id));
+  if (!candidateIds.length) return ok(res, []);
+
+  const classes = await ClassSchedule.find({ _id: { $in: candidateIds } })
+    .select('title date startTime endTime trainer')
+    .populate('trainer', 'name');
+
+  ok(
+    res,
+    classes.map((c) => ({
+      id: c._id.toString(),
+      title: c.title,
+      date: c.date,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      trainer: c.trainer ? { id: c.trainer._id.toString(), name: c.trainer.name } : null,
+      joinedAt: joinedAt.get(c._id.toString()),
+    })),
+  );
 }
 
 // ── Create (admin or assigned trainer) ────────────────────────────────────────

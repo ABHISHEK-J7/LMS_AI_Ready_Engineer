@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ClassStatus, MeetingProvider } from '@lms/shared';
+import { ClassStatus, MeetingProvider } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -22,6 +22,9 @@ const classScheduleSchema = new Schema(
     recordingLink: String,
     status: { type: String, enum: Object.values(ClassStatus), default: ClassStatus.SCHEDULED },
     attendanceMarked: { type: Boolean, default: false },
+    // Grace window (minutes after startTime) within which a join counts as
+    // on-time. Beyond it → late. Drives the automated attendance status.
+    attendanceBufferMinutes: { type: Number, default: 10, min: 0, max: 240 },
   },
   baseSchemaOptions,
 );

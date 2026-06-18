@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner, Input, Modal, Select, Textarea } from '@/components/ui';
+import { UserRole } from '@/shared';
+import { BookOpen } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -17,7 +18,7 @@ export function ModulesPage() {
   const navigate = useNavigate();
 
   const [showArchived, setShowArchived] = useState(false);
-  const { data: modules, isLoading, isError, error } = useModules({ archived: showArchived });
+  const { data: modules, isLoading, isError, error, refetch } = useModules({ archived: showArchived });
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY);
@@ -53,8 +54,6 @@ export function ModulesPage() {
     await archiveModule.mutateAsync(id);
   }
 
-  if (isLoading) return <FullPageSpinner />;
-
   return (
     <>
       <PageHeader title={isAdmin ? 'Modules' : 'My Modules'} subtitle={subtitle} />
@@ -74,20 +73,21 @@ export function ModulesPage() {
         {isAdmin && <Button onClick={() => setCreating(true)}>+ New Module</Button>}
       </div>
 
-      {isError && (
-        <Card>
-          <p className="field__error">{apiErrorMessage(error)}</p>
-        </Card>
-      )}
+      {isError && <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {modules && modules.length === 0 ? (
-        <Card>
-          <p className="lms-muted">
-            {isAdmin
+      {isLoading && !modules ? (
+        <SkeletonCards count={6} height="13rem" />
+      ) : modules && modules.length === 0 ? (
+        <EmptyState
+          icon={<BookOpen size={26} />}
+          title={isAdmin ? 'No modules yet' : 'No modules assigned'}
+          description={
+            isAdmin
               ? 'No modules yet. Create one, or run the seed script to load the default 10-module curriculum.'
-              : 'No modules are assigned to you yet.'}
-          </p>
-        </Card>
+              : 'No modules are assigned to you yet.'
+          }
+          action={isAdmin ? <Button onClick={() => setCreating(true)}>+ New Module</Button> : undefined}
+        />
       ) : (
         <div className="module-grid">
           {modules?.map((m) => {

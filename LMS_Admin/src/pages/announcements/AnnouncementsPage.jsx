@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner, Input, Modal, Select, Textarea, useToast } from '@/components/ui';
+import { UserRole } from '@/shared';
+import { Megaphone } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -17,7 +18,7 @@ export function AnnouncementsPage() {
   const canPost = role === UserRole.ADMIN || role === UserRole.TRAINER;
   const isAdmin = role === UserRole.ADMIN;
 
-  const { data: items, isLoading } = useAnnouncements();
+  const { data: items, isLoading, isError, error, refetch } = useAnnouncements();
   const { data: batches } = useBatches({ enabled: canPost });
   const { data: modules } = useModules({ enabled: canPost });
   const create = useCreateAnnouncement();
@@ -60,8 +61,6 @@ export function AnnouncementsPage() {
     }
   }
 
-  if (isLoading) return <FullPageSpinner />;
-
   return (
     <>
       <PageHeader
@@ -74,8 +73,17 @@ export function AnnouncementsPage() {
         {canPost && <Button onClick={() => setOpen(true)}>+ New Announcement</Button>}
       </div>
 
-      {items && items.length === 0 ? (
-        <Card><p className="lms-muted">No announcements yet.</p></Card>
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !items ? (
+        <SkeletonCards count={4} height="7rem" />
+      ) : items && items.length === 0 ? (
+        <EmptyState
+          icon={<Megaphone size={26} />}
+          title="No announcements yet."
+          description={canPost ? 'Post your first update to your batches and modules.' : undefined}
+          action={canPost ? <Button onClick={() => setOpen(true)}>+ New Announcement</Button> : undefined}
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {items?.map((a) => (

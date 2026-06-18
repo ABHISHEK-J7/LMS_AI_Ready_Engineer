@@ -1,7 +1,9 @@
 import { z } from 'zod';
-import { UserRole, UserStatus } from '@lms/shared';
+import { UserRole, UserStatus } from '#shared';
 import { Batch, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
+import { audit } from '../services/audit.js';
+import { collectUserData, eraseUserData } from '../services/gdpr.js';
 import { ok } from '../utils/http.js';
 
 export const listUsersQuery = z.object({
@@ -107,6 +109,7 @@ export async function createUser(req, res) {
     phone,
     status: UserStatus.ACTIVE,
   });
+  audit(req, 'user.create', { targetType: 'user', targetId: user.id, meta: { email: user.email, role: user.role } });
   ok(res, user.toJSON(), 201);
 }
 
@@ -192,16 +195,42 @@ export async function approveUser(req, res) {
   }
   user.status = UserStatus.ACTIVE;
   await user.save();
+  audit(req, 'user.approve', { targetType: 'user', targetId: user.id, meta: { email: user.email } });
   ok(res, user.toJSON());
+}
+
+/** Admin: export a specific user's full data bundle (GDPR right of access). */
+export async function exportUser(req, res) {
+  const data = await collectUserData(req.params.id);
+  if (!data) throw ApiError.notFound('User not found');
+  audit(req, 'user.export', { targetType: 'user', targetId: req.params.id });
+  res.setHeader('Content-Disposition', `attachment; filename="user-${req.params.id}-export.json"`);
+  ok(res, data);
+}
+
+/**
+ * Admin: GDPR erasure — irreversibly anonymize a user's personal data and delete
+ * the files they uploaded, keeping de-identified academic records. This is a
+ * destructive, non-reversible operation (distinct from archive).
+ */
+export async function eraseUser(req, res) {
+  const user = await User.findById(req.params.id).select('+passwordHash +otpHash +otpExpiresAt');
+  if (!user) throw ApiError.notFound('User not found');
+  if (user.id === req.auth.userId) throw ApiError.badRequest('You cannot erase your own admin account');
+  const summary = await eraseUserData(user);
+  audit(req, 'user.erase', { targetType: 'user', targetId: user.id, meta: { filesRemoved: summary.filesRemoved } });
+  ok(res, { erased: true, ...summary });
 }
 
 /** Soft-delete: archive rather than destroy, to preserve attendance/assessment history. */
 export async function archiveUser(req, res) {
+  // Archiving also revokes the user's outstanding refresh tokens.
   const user = await User.findByIdAndUpdate(
     req.params.id,
-    { status: UserStatus.ARCHIVED },
+    { status: UserStatus.ARCHIVED, $inc: { tokenVersion: 1 } },
     { new: true },
   );
   if (!user) throw ApiError.notFound('User not found');
+  audit(req, 'user.archive', { targetType: 'user', targetId: user.id, meta: { email: user.email } });
   ok(res, user.toJSON());
 }

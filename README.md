@@ -12,14 +12,14 @@ automatic certification.
 
 | Folder | Purpose | Stack |
 | --- | --- | --- |
-| `LMS_Shared` | Shared domain enums, constants, and the **centralized design system** (both themes) | JavaScript (ESM) |
-| `LMS_Backend` | REST API, auth, business logic | Node · Express · Mongoose (MongoDB) · JavaScript (ESM) |
-| `LMS_Frontend` | Single SPA for all roles (role-based routing) | React · Vite · JavaScript (JSX) |
-| `LMS_AI_Engine` | AI prompt & project evaluation engines | JavaScript (ESM) · OpenAI SDK |
-| `LMS_Database` | Schemas, seed data, migrations docs | — |
-| `LMS_Storage` | Uploaded resources, recordings, certificates | — |
-| `LMS_Deployment` | Docker / deployment configs | — |
-| `LMS_Documentation` | Specs, API docs, ADRs | — |
+| `LMS_Backend` | REST API, auth, business logic, AI evaluation engine, **GridFS file storage** | Node · Express · Mongoose (MongoDB) · JavaScript (ESM) |
+| `LMS_Frontend` | Single SPA for students & trainers (role-based routing) | React · Vite · JavaScript (JSX) |
+| `LMS_Admin` | Admin console SPA | React · Vite · JavaScript (JSX) |
+
+Shared domain enums/constants and the centralized design-system tokens live inside each
+app under `src/shared/`. All uploaded files (avatars, learning resources/videos, project
+shots, certificates, proctor snapshots) are stored **in MongoDB via GridFS** and served
+through `/api/uploads/:filename` — there is no on-disk upload directory.
 
 ## Theme system
 
@@ -28,8 +28,8 @@ The platform supports **exactly two** official themes, each with light + dark mo
 - **AI Ready Green** (default) — primary `#008738`
 - **AI Ready Orange** — primary `#F15D27`
 
-All tokens live in `LMS_Shared/src/theme` and are consumed by every module. No module
-may introduce its own colors. See `LMS_Documentation/DESIGN_SYSTEM.md`.
+Design tokens live in each app under `src/shared/theme` and are consumed app-wide. No
+module may introduce its own colors.
 
 ## Getting started
 

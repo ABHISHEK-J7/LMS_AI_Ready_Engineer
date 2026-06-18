@@ -1,21 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
-import { DoubtStatus, UserRole } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner, Input, Modal, Select, Textarea } from '@/components/ui';
-import { PageHeader } from '@/components/PageHeader';
+import { MessageCircleQuestion, Star } from 'lucide-react';
+import { DoubtStatus, UserRole } from '@/shared';
+import { Badge, Button, Card, EmptyState, Input, Modal, Select, SkeletonCards, Skeleton, Textarea } from '@/components/ui';
+import { PageHeader, Stat } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import {
   markDoubtRead,
   newMessageCount,
+  useCloseDoubt,
   useCreateDoubt,
   useDoubt,
   useDoubts,
+  useMyDoubtStats,
   useReplyDoubt,
-  useSetDoubtStatus,
 } from '@/lib/doubts';
 import { useModules } from '@/lib/modules';
 import { formatDate } from '@/lib/format';
 import '../modules/modules.css';
+
+/** Clickable (or read-only) 5-star rating. */
+function StarRating({ value = 0, onChange, size = 26, readOnly = false }) {
+  return (
+    <div style={{ display: 'inline-flex', gap: 4 }} role={readOnly ? 'img' : 'radiogroup'} aria-label={`${value} of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange?.(n)}
+          aria-label={`${n} star${n > 1 ? 's' : ''}`}
+          style={{ background: 'none', border: 'none', padding: 0, lineHeight: 0, cursor: readOnly ? 'default' : 'pointer', color: n <= value ? 'var(--color-rating-star)' : 'var(--color-border)' }}
+        >
+          <Star size={size} fill={n <= value ? 'var(--color-rating-star)' : 'none'} strokeWidth={1.5} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const STATUS_TONE = { open: 'warning', answered: 'success', closed: 'neutral' };
 const titleCase = (s = '') => s.charAt(0).toUpperCase() + s.slice(1);
@@ -28,6 +50,7 @@ export function DoubtsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const { data: doubts, isLoading } = useDoubts({ status: statusFilter });
   const { data: modules } = useModules();
+  const { data: stats } = useMyDoubtStats(!isStudent);
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: '', body: '', module: '' });
@@ -39,11 +62,12 @@ export function DoubtsPage() {
   async function submitCreate(e) {
     e.preventDefault();
     setErr('');
+    if (!form.module) return setErr('Select the module your doubt is about.');
     try {
       const created = await create.mutateAsync({
         title: form.title,
         body: form.body,
-        module: form.module || undefined,
+        module: form.module,
       });
       setCreating(false);
       setForm({ title: '', body: '', module: '' });
@@ -60,6 +84,19 @@ export function DoubtsPage() {
         subtitle={isStudent ? 'Ask your trainers questions and track answers.' : 'Answer questions from your students.'}
       />
 
+      {!isStudent && stats && (
+        <div className="stat-grid" style={{ marginBottom: 'var(--space-5)' }}>
+          <Stat label="Doubts Answered" value={stats.answered ?? 0} />
+          <Stat label="Resolved" value={stats.resolved ?? 0} />
+          <Stat
+            label="Average Rating"
+            accent
+            value={stats.ratingCount ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{stats.averageRating}<Star size={20} fill="var(--color-rating-star)" strokeWidth={0} /></span> : '—'}
+          />
+          <Stat label="Ratings Received" value={stats.ratingCount ?? 0} />
+        </div>
+      )}
+
       <div className="toolbar">
         <Select
           value={statusFilter}
@@ -74,14 +111,23 @@ export function DoubtsPage() {
         {isStudent && <Button onClick={() => setCreating(true)}>+ Ask a Doubt</Button>}
       </div>
 
-      {isLoading ? (
-        <FullPageSpinner />
+      {isLoading && !doubts ? (
+        <SkeletonCards count={4} height="4.5rem" />
       ) : !doubts || doubts.length === 0 ? (
-        <Card>
-          <p className="lms-muted">
-            {isStudent ? 'No doubts yet. Ask your first question.' : 'No student doubts in your modules/batches yet.'}
-          </p>
-        </Card>
+        isStudent ? (
+          <EmptyState
+            icon={<MessageCircleQuestion size={26} />}
+            title="No doubts yet"
+            description="No doubts yet. Ask your first question."
+            action={<Button onClick={() => setCreating(true)}>Ask a question</Button>}
+          />
+        ) : (
+          <EmptyState
+            icon={<MessageCircleQuestion size={26} />}
+            title="No student doubts"
+            description="No student doubts in your modules/batches yet."
+          />
+        )
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {doubts.map((d) => {
@@ -101,6 +147,11 @@ export function DoubtsPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 'none' }}>
+                  {d.status === DoubtStatus.CLOSED && d.rating ? (
+                    <span title={`Rated ${d.rating}/5`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--color-rating-star)', fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-sm)' }}>
+                      <Star size={15} fill="var(--color-rating-star)" strokeWidth={0} /> {d.rating}
+                    </span>
+                  ) : null}
                   {unread > 0 && (
                     <span className="doubt-unread" title={`${unread} new message${unread === 1 ? '' : 's'}`} aria-label={`${unread} new messages`}>
                       {unread > 9 ? '9+' : unread}
@@ -129,11 +180,15 @@ export function DoubtsPage() {
         <form id="ask-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Short summary of your question" required />
           <Select
-            label="Module (optional)"
+            label="Module"
             value={form.module}
             onChange={(e) => setForm({ ...form, module: e.target.value })}
-            options={[{ value: '', label: 'General / not module-specific' }, ...(modules ?? []).map((m) => ({ value: m.id, label: m.name }))]}
+            options={[{ value: '', label: 'Select a module…' }, ...(modules ?? []).map((m) => ({ value: m.id, label: m.name }))]}
+            required
           />
+          <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: '-8px' }}>
+            You can have one open doubt per module at a time.
+          </p>
           <Textarea label="Your question" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} required style={{ minHeight: '7rem' }} />
           {err && <span className="field__error">{err}</span>}
         </form>
@@ -157,9 +212,20 @@ function DoubtThread({ id, role, onClose }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [doubt]);
   const reply = useReplyDoubt();
-  const setStatus = useSetDoubtStatus();
+  const close = useCloseDoubt();
   const [body, setBody] = useState('');
-  const isStaff = role === UserRole.ADMIN || role === UserRole.TRAINER;
+  const [rating, setRating] = useState(0);
+  const [rateOpen, setRateOpen] = useState(false);
+  const isStudent = role === UserRole.STUDENT;
+
+  // Reset the rating panel whenever a different thread opens.
+  useEffect(() => { setRateOpen(false); setRating(0); }, [id]);
+
+  async function submitClose() {
+    if (!rating) return;
+    await close.mutateAsync({ id, rating });
+    setRateOpen(false);
+  }
 
   async function send(e) {
     e?.preventDefault();
@@ -182,22 +248,29 @@ function DoubtThread({ id, role, onClose }) {
       title={doubt?.title ?? 'Doubt'}
       onClose={() => { setBody(''); onClose(); }}
       footer={
-        isStaff && doubt ? (
-          <>
-            {doubt.status !== DoubtStatus.CLOSED ? (
-              <Button variant="outline" onClick={() => setStatus.mutate({ id, status: DoubtStatus.CLOSED })}>Close</Button>
-            ) : (
-              <Button variant="outline" onClick={() => setStatus.mutate({ id, status: DoubtStatus.OPEN })}>Reopen</Button>
-            )}
-            <Button form="reply-form" type="submit" loading={reply.isPending}>Send reply</Button>
-          </>
-        ) : (
-          <Button form="reply-form" type="submit" loading={reply.isPending}>Send reply</Button>
-        )
+        doubt && doubt.status !== DoubtStatus.CLOSED ? (
+          rateOpen ? (
+            <>
+              <Button variant="outline" onClick={() => setRateOpen(false)}>Cancel</Button>
+              <Button disabled={!rating} loading={close.isPending} onClick={submitClose}>Close doubt</Button>
+            </>
+          ) : (
+            <>
+              {isStudent && (
+                <Button variant="outline" onClick={() => setRateOpen(true)}>Resolve &amp; rate</Button>
+              )}
+              <Button form="reply-form" type="submit" loading={reply.isPending}>Send reply</Button>
+            </>
+          )
+        ) : null
       }
     >
       {isLoading || !doubt ? (
-        <FullPageSpinner />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <Skeleton width="40%" height="1.25rem" />
+          <Skeleton height="4rem" radius="var(--radius-lg)" />
+          <Skeleton height="4rem" radius="var(--radius-lg)" />
+        </div>
       ) : (
         <>
           <div style={{ marginBottom: 'var(--space-3)' }}>
@@ -232,7 +305,29 @@ function DoubtThread({ id, role, onClose }) {
             })}
           </div>
           {doubt.status === DoubtStatus.CLOSED ? (
-            <p className="lms-muted">This doubt is closed.</p>
+            <div style={{ textAlign: 'center', padding: 'var(--space-4) 0' }}>
+              <p className="lms-muted" style={{ marginBottom: 'var(--space-2)' }}>
+                This doubt is resolved and closed.
+              </p>
+              {doubt.rating ? (
+                <>
+                  <StarRating value={doubt.rating} readOnly size={24} />
+                  <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
+                    You rated {doubt.answeredBy?.name ?? 'your trainer'} {doubt.rating}/5
+                  </p>
+                </>
+              ) : null}
+            </div>
+          ) : rateOpen ? (
+            <div style={{ textAlign: 'center', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-4)' }}>
+              <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-1)' }}>
+                Rate {doubt.answeredBy?.name ?? 'your trainer'}
+              </p>
+              <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
+                Give a rating to close this doubt.
+              </p>
+              <StarRating value={rating} onChange={setRating} size={32} />
+            </div>
           ) : (
             <form id="reply-form" onSubmit={send}>
               <Textarea

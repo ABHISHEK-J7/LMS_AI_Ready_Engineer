@@ -1,8 +1,10 @@
 import { z } from 'zod';
-import { AttendanceStatus, UserRole } from '@lms/shared';
+import { AttendanceStatus, UserRole } from '#shared';
 import { Attendance, Batch, ClassJoin, ClassSchedule, User, getSettings } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
+import { assertCanViewBatch, assertCanViewStudent } from '../utils/access.js';
 import { ok } from '../utils/http.js';
+import { toCsv, sendCsv } from '../utils/csv.js';
 
 const objectId = z.string().length(24);
 
@@ -11,6 +13,7 @@ export const studentIdParam = z.object({ studentId: objectId });
 export const batchIdParam = z.object({ batchId: objectId });
 
 export const saveAttendanceSchema = z.object({
+  bufferMinutes: z.number().int().min(0).max(240).optional(),
   records: z
     .array(
       z.object({
@@ -81,6 +84,8 @@ export async function getClassRoster(req, res) {
       id: cls._id.toString(),
       title: cls.title,
       date: cls.date,
+      startTime: cls.startTime,
+      bufferMinutes: cls.attendanceBufferMinutes ?? 10,
       attendanceMarked: cls.attendanceMarked,
     },
     roster,
@@ -120,6 +125,9 @@ export async function saveAttendance(req, res) {
     })),
   );
 
+  if (typeof req.body.bufferMinutes === 'number') {
+    cls.attendanceBufferMinutes = req.body.bufferMinutes;
+  }
   cls.attendanceMarked = true;
   await cls.save();
 
@@ -144,6 +152,7 @@ export async function myAttendance(req, res) {
 
 /** Admin/trainer: a specific student's attendance. */
 export async function getStudentAttendance(req, res) {
+  await assertCanViewStudent(req, req.params.studentId);
   const student = await User.findById(req.params.studentId);
   if (!student || student.role !== UserRole.STUDENT) throw ApiError.notFound('Student not found');
   ok(res, { student: student.toJSON(), ...(await studentAttendance(req.params.studentId)) });
@@ -151,8 +160,9 @@ export async function getStudentAttendance(req, res) {
 
 // ── Batch compliance (admin/trainer) ──────────────────────────────────────────
 
-/** Per-student attendance % for a batch, flagging those below the configured minimum. */
-export async function getBatchAttendance(req, res) {
+/** Shared computation behind the batch-attendance report (JSON + CSV views). */
+async function batchAttendanceReport(req) {
+  await assertCanViewBatch(req, req.params.batchId);
   const batch = await Batch.findById(req.params.batchId).populate('students', 'name email');
   if (!batch) throw ApiError.notFound('Batch not found');
 
@@ -176,9 +186,33 @@ export async function getBatchAttendance(req, res) {
     };
   });
 
-  ok(res, {
+  return {
     batch: { id: batch._id.toString(), name: batch.name, code: batch.code },
     minAttendance,
     students,
-  });
+  };
+}
+
+/** Per-student attendance % for a batch, flagging those below the configured minimum. */
+export async function getBatchAttendance(req, res) {
+  ok(res, await batchAttendanceReport(req));
+}
+
+/** CSV export of the per-student batch attendance report. */
+export async function exportBatchAttendanceCsv(req, res) {
+  const report = await batchAttendanceReport(req);
+  const csv = toCsv(report.students, [
+    { header: 'Student', value: (r) => r.student.name },
+    { header: 'Email', value: (r) => r.student.email },
+    { header: 'Total Classes', value: 'totalClasses' },
+    { header: 'Attended', value: 'attended' },
+    { header: 'Present', value: (r) => r.byStatus?.[AttendanceStatus.PRESENT] ?? 0 },
+    { header: 'Late', value: (r) => r.byStatus?.[AttendanceStatus.LATE] ?? 0 },
+    { header: 'Absent', value: (r) => r.byStatus?.[AttendanceStatus.ABSENT] ?? 0 },
+    { header: 'Excused', value: (r) => r.byStatus?.[AttendanceStatus.EXCUSED] ?? 0 },
+    { header: 'Attendance %', value: 'percentage' },
+    { header: `Below Minimum (${report.minAttendance}%)`, value: (r) => (r.belowMinimum ? 'Yes' : 'No') },
+  ]);
+  const code = String(report.batch.code || report.batch.id).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  sendCsv(res, `attendance-${code}.csv`, csv);
 }

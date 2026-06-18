@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SkillLevel, UserRole } from '@lms/shared';
+import { SkillLevel, UserRole } from '#shared';
 import { Module, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';

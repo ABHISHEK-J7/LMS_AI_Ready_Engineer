@@ -1,5 +1,5 @@
 import { Moon, Palette, Sun } from 'lucide-react';
-import { ThemeMode, ThemeName } from '@lms/shared';
+import { ThemeMode, ThemeName } from '@/shared';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export function ThemeSwitcher() {

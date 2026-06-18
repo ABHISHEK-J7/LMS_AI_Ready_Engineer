@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
-import { AttendanceStatus } from '@lms/shared';
-import { Button, Card, CardHeader, FullPageSpinner, Input, Select } from '@/components/ui';
+import { Check, Users } from 'lucide-react';
+import { AttendanceStatus } from '@/shared';
+import { Button, Card, CardHeader, EmptyState, ErrorState, Input, Select, SkeletonTable } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useClassRoster, useSaveAttendance } from '@/lib/attendance';
 import { ATT_OPTIONS } from './attendanceUi';
@@ -9,7 +9,7 @@ import { formatDate } from '@/lib/format';
 
 /** Per-session attendance entry: one row per enrolled student. */
 export function RosterEditor({ classId, onSaved }) {
-  const { data, isLoading, isError, error } = useClassRoster(classId);
+  const { data, isLoading, isError, error, refetch } = useClassRoster(classId);
   const save = useSaveAttendance();
   const [rows, setRows] = useState([]);
   const [saveError, setSaveError] = useState('');
@@ -51,8 +51,8 @@ export function RosterEditor({ classId, onSaved }) {
     }
   }
 
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
+  if (isLoading && !data) return <Card><SkeletonTable rows={5} cols={3} /></Card>;
+  if (isError) return <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />;
 
   return (
     <Card>
@@ -62,7 +62,10 @@ export function RosterEditor({ classId, onSaved }) {
       />
 
       {rows.length === 0 ? (
-        <p className="lms-muted">No students enrolled in this batch yet.</p>
+        <EmptyState
+          icon={<Users size={26} />}
+          title="No students enrolled in this batch yet"
+        />
       ) : (
         <>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>

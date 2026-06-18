@@ -1,3 +1,4 @@
+import { Star } from 'lucide-react';
 import { STATUS_TONE } from './scheduleUi';
 import './calendar.css';
 
@@ -14,14 +15,15 @@ function keyFor(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Month grid of class sessions. `month` is a Date within the displayed month. */
+/** Gamified month board of class sessions. `month` is a Date within the month. */
 export function MonthCalendar({ month, classes = [], onSelect }) {
   const year = month.getFullYear();
   const m = month.getMonth();
   const first = new Date(year, m, 1);
   const daysInMonth = new Date(year, m + 1, 0).getDate();
-  // Monday-first offset.
-  const startOffset = (first.getDay() + 6) % 7;
+  const startOffset = (first.getDay() + 6) % 7; // Monday-first
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+  const gridStart = new Date(year, m, 1 - startOffset);
   const todayKey = keyFor(new Date());
 
   const byDay = new Map();
@@ -33,9 +35,11 @@ export function MonthCalendar({ month, classes = [], onSelect }) {
   for (const list of byDay.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   const cells = [];
-  for (let i = 0; i < startOffset; i += 1) cells.push(null);
-  for (let day = 1; day <= daysInMonth; day += 1) cells.push(new Date(year, m, day));
-  while (cells.length % 7 !== 0) cells.push(null);
+  for (let i = 0; i < totalCells; i += 1) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    cells.push(d);
+  }
 
   return (
     <div className="cal">
@@ -46,25 +50,47 @@ export function MonthCalendar({ month, classes = [], onSelect }) {
       </div>
       <div className="cal__grid">
         {cells.map((date, i) => {
-          if (!date) return <div key={i} className="cal__cell cal__cell--empty" />;
           const k = keyFor(date);
           const items = byDay.get(k) ?? [];
+          const out = date.getMonth() !== m;
+          const isToday = k === todayKey;
+          const has = items.length > 0;
           return (
-            <div key={i} className={`cal__cell${k === todayKey ? ' cal__cell--today' : ''}`}>
-              <div className="cal__daynum">{date.getDate()}</div>
-              {items.slice(0, 4).map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="cal__event"
-                  title={`${c.startTime} ${c.title} · ${c.batch?.name ?? ''}`}
-                  onClick={() => onSelect?.(c)}
-                >
-                  <span className="cal__dot" style={{ background: TONE_VAR[STATUS_TONE[c.status]] }} />
-                  <span className="cal__event-time">{c.startTime}</span> {c.title}
-                </button>
-              ))}
-              {items.length > 4 && <div className="cal__more">+{items.length - 4} more</div>}
+            <div
+              key={i}
+              style={{ '--i': i }}
+              className={`cal__cell${out ? ' cal__cell--out' : ''}${has ? ' cal__cell--has' : ''}${isToday ? ' cal__cell--today' : ''}`}
+            >
+              <div className="cal__cell-top">
+                <span className="cal__daynum">{date.getDate()}</span>
+                {has ? (
+                  <span className="cal__count" title={`${items.length} session${items.length > 1 ? 's' : ''}`}>
+                    {items.length}
+                  </span>
+                ) : isToday ? (
+                  <Star size={15} className="cal__star" fill="currentColor" strokeWidth={1.5} />
+                ) : null}
+              </div>
+              <div className="cal__events">
+                {items.slice(0, 3).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`cal__event${c.status === 'cancelled' ? ' cal__event--off' : ''}`}
+                    style={{ '--ev': TONE_VAR[STATUS_TONE[c.status]] }}
+                    title={`${c.startTime} · ${c.title}${c.batch?.name ? ` · ${c.batch.name}` : ''}`}
+                    onClick={() => onSelect?.(c)}
+                  >
+                    <span className="cal__event-time">{c.startTime}</span>
+                    <span className="cal__event-title">{c.title}</span>
+                  </button>
+                ))}
+                {items.length > 3 && (
+                  <button type="button" className="cal__more" onClick={() => onSelect?.(items[3])}>
+                    +{items.length - 3} more
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

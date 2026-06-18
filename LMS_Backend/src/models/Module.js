@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { SkillLevel } from '@lms/shared';
+import { SkillLevel } from '#shared';
 import { baseSchemaOptions, subSchemaOptions } from './baseSchema.js';
 
 const topicSchema = new Schema(

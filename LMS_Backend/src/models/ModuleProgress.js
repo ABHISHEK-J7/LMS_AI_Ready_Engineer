@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ModuleProgressStatus } from '@lms/shared';
+import { ModuleProgressStatus } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const moduleProgressSchema = new Schema(

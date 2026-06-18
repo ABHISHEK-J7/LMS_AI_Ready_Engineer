@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, FullPageSpinner, Input, Modal } from '@/components/ui';
+import { Users } from 'lucide-react';
+import { UserRole } from '@/shared';
+import { Badge, Button, Card, Input, Modal, SkeletonCards, EmptyState, ErrorState } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -27,7 +28,7 @@ export function BatchesPage() {
   const navigate = useNavigate();
 
   const [showArchived, setShowArchived] = useState(false);
-  const { data: batches, isLoading, isError, error } = useBatches({ archived: showArchived });
+  const { data: batches, isLoading, isError, error, refetch } = useBatches({ archived: showArchived });
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY);
@@ -60,8 +61,6 @@ export function BatchesPage() {
     await archiveBatch.mutateAsync(id);
   }
 
-  if (isLoading) return <FullPageSpinner />;
-
   return (
     <>
       <PageHeader title={isAdmin ? 'Batches' : 'My Batches'} subtitle={subtitle} />
@@ -77,18 +76,17 @@ export function BatchesPage() {
         {isAdmin && <Button onClick={() => setCreating(true)}>+ New Batch</Button>}
       </div>
 
-      {isError && (
-        <Card>
-          <p className="field__error">{apiErrorMessage(error)}</p>
-        </Card>
-      )}
+      {isError && <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {batches && batches.length === 0 ? (
-        <Card>
-          <p className="lms-muted">
-            {isAdmin ? 'No batches yet. Create your first cohort.' : 'No batches assigned to you yet.'}
-          </p>
-        </Card>
+      {isLoading && !batches ? (
+        <SkeletonCards count={6} height="11rem" />
+      ) : batches && batches.length === 0 ? (
+        <EmptyState
+          icon={<Users size={26} />}
+          title={isAdmin ? 'No batches yet' : 'No batches assigned'}
+          description={isAdmin ? 'No batches yet. Create your first cohort.' : 'No batches assigned to you yet.'}
+          action={isAdmin ? <Button onClick={() => setCreating(true)}>Create cohort</Button> : undefined}
+        />
       ) : (
         <div className="module-grid">
           {batches?.map((b) => {

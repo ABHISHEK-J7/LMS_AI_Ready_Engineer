@@ -45,3 +45,16 @@ export function useTestAiConnection() {
 export function useTestZoomConnection() {
   return useMutation({ mutationFn: () => unwrap(api.post('/settings/test-zoom')) });
 }
+
+/** Admin: upload a Safe Exam Browser .seb config file (sets the launch URL). */
+export function useUploadSebConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file) => {
+      const fd = new FormData();
+      fd.append('config', file);
+      return unwrap(api.post('/settings/seb-config', fd, { headers: { 'Content-Type': 'multipart/form-data' } }));
+    },
+    onSuccess: (data) => qc.setQueryData(settingsKeys.all, data),
+  });
+}

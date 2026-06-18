@@ -67,3 +67,9 @@ export function useArchiveUser() {
   const invalidate = useUsersInvalidation();
   return useMutation({ mutationFn: (id) => unwrap(api.delete(`/users/${id}`)), onSuccess: invalidate });
 }
+
+/** GDPR erasure: irreversibly anonymize a user's personal data + delete their files. */
+export function useEraseUser() {
+  const invalidate = useUsersInvalidation();
+  return useMutation({ mutationFn: (id) => unwrap(api.post(`/users/${id}/erase`)), onSuccess: invalidate });
+}

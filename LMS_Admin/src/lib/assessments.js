@@ -54,13 +54,13 @@ export function useSetAvailability() {
   });
 }
 
-export function useAddQuestion() {
+/** Build a test by hand-picking questions from the module's bank. */
+export function useAddQuestionsFromBank() {
   const invalidate = useInvalidate();
-  return useMutation({ mutationFn: ({ id, ...q }) => unwrap(api.post(`/assessments/${id}/questions`, q)), onSuccess: invalidate });
-}
-export function useUpdateQuestion() {
-  const invalidate = useInvalidate();
-  return useMutation({ mutationFn: ({ id, questionId, ...q }) => unwrap(api.patch(`/assessments/${id}/questions/${questionId}`, q)), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: ({ id, questionIds }) => unwrap(api.post(`/assessments/${id}/questions/from-bank`, { questionIds })),
+    onSuccess: invalidate,
+  });
 }
 export function useDeleteQuestion() {
   const invalidate = useInvalidate();

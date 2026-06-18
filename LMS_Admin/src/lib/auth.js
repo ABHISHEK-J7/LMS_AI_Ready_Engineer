@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '@/shared';
 import { api, tokenStore, unwrap } from './api';
 
 /** This is the ADMIN portal — only administrators may sign in here. */
@@ -28,7 +28,8 @@ export const useAuth = create((set) => ({
     return result.user;
   },
 
-  logout() {
+  async logout() {
+    try { await api.post('/auth/logout'); } catch { /* best-effort: revoke refresh tokens server-side */ }
     tokenStore.clear();
     set({ user: null, status: 'unauthenticated' });
   },

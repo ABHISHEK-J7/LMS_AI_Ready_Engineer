@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronRight, X } from 'lucide-react';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '@/shared';
 import {
   Badge,
   Button,
   Card,
   CardHeader,
-  FullPageSpinner,
+  ErrorState,
   Input,
   Modal,
   Select,
+  Skeleton,
+  SkeletonText,
   Textarea,
 } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
@@ -33,15 +35,38 @@ export function ModuleDetailPage() {
   const user = useAuth((s) => s.user);
   const isAdmin = user?.role === UserRole.ADMIN;
 
-  const { data: module, isLoading, isError, error } = useModule(id);
+  const { data: module, isLoading, isError, error, refetch } = useModule(id);
 
-  if (isLoading) return <FullPageSpinner />;
+  if (isLoading && !module) {
+    return (
+      <>
+        <PageHeader
+          title={<Skeleton width="14rem" height="1.6rem" />}
+          subtitle={
+            <Link to="/app/modules" className="lms-muted">
+              ← All modules
+            </Link>
+          }
+        />
+        <div style={{ marginTop: 'var(--space-6)' }}>
+          <SkeletonText lines={4} />
+        </div>
+      </>
+    );
+  }
   if (isError || !module) {
     return (
-      <Card>
-        <p className="field__error">{apiErrorMessage(error) || 'Module not found'}</p>
-        <Link to="/app/modules">← Back to modules</Link>
-      </Card>
+      <>
+        <PageHeader
+          title="Module"
+          subtitle={
+            <Link to="/app/modules" className="lms-muted">
+              ← All modules
+            </Link>
+          }
+        />
+        <ErrorState message={apiErrorMessage(error) || 'Module not found'} onRetry={refetch} />
+      </>
     );
   }
 

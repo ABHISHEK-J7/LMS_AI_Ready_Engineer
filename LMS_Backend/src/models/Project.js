@@ -1,0 +1,30 @@
+import mongoose, { Schema } from 'mongoose';
+import { ProjectStatus } from '#shared';
+import { baseSchemaOptions } from './baseSchema.js';
+
+/**
+ * A student-submitted portfolio project. Requires trainer/admin approval before
+ * it counts/shows on the student's profile. Mirrors the ExternalCertificate
+ * approval workflow (status + reviewedBy/At/note).
+ */
+const projectSchema = new Schema(
+  {
+    student: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
+    repoUrl: { type: String, required: true },
+    images: { type: [String], default: [] }, // screenshot URLs under /api/uploads
+    status: {
+      type: String,
+      enum: Object.values(ProjectStatus),
+      default: ProjectStatus.PENDING,
+      index: true,
+    },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date },
+    note: { type: String, trim: true },
+  },
+  baseSchemaOptions,
+);
+
+export const Project = mongoose.model('Project', projectSchema);

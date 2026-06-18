@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { AttendanceStatus } from '@lms/shared';
+import { AttendanceStatus } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const attendanceSchema = new Schema(

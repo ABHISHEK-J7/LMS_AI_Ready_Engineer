@@ -1,7 +1,10 @@
+import path from 'node:path';
+import multer from 'multer';
 import { z } from 'zod';
-import { ThemeName } from '@lms/shared';
-import { getSettings } from '../models/index.js';
+import { ThemeName } from '#shared';
+import { getSettings, getStoredSebConfigKey } from '../models/index.js';
 import { env } from '../config/env.js';
+import { storeUpload } from '../services/fileStore.js';
 import { aiKeySource, getEvaluator } from '../services/aiGrading.js';
 import { verifyZoom, zoomConfigured, zoomSource } from '../services/meetings.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -13,6 +16,9 @@ export const updateSettingsSchema = z
     minAttendance: z.number().int().min(0).max(100).optional(),
     allowSelfRegistration: z.boolean().optional(),
     activeTheme: z.nativeEnum(ThemeName).optional(),
+    // Safe Exam Browser — global Config Key + config-file URL.
+    sebConfigKey: z.string().max(200).optional(),
+    sebConfigUrl: z.string().max(1000).optional(),
     // Write-only secrets. Empty string clears the value. Never read back.
     aiApiKey: z.string().max(200).optional(),
     zoomAccountId: z.string().max(200).optional(),
@@ -29,6 +35,9 @@ async function settingsView(s) {
     minAttendance: s.minAttendance,
     allowSelfRegistration: s.allowSelfRegistration,
     activeTheme: s.activeTheme,
+    sebConfigUrl: s.sebConfigUrl || '',
+    sebConfigured: Boolean(await getStoredSebConfigKey()), // key itself is select:false / never returned
+
     aiConfigured: (await aiKeySource()) !== 'none',
     aiKeySource: await aiKeySource(),
     aiKeyLocked: Boolean(env.anthropicApiKey), // env wins → UI field is read-only
@@ -56,6 +65,29 @@ export async function updateSettings(req, res) {
   const s = await getSettings();
   // aiApiKey is select:false on the loaded doc; assigning + saving persists it.
   Object.assign(s, req.body);
+  await s.save();
+  const { audit } = await import('../services/audit.js');
+  audit(req, 'settings.update', { targetType: 'settings', meta: { changed: Object.keys(req.body) } }); // keys only, never secret values
+  ok(res, await settingsView(s));
+}
+
+// ── Safe Exam Browser config upload (.seb) → MongoDB/GridFS ───────────────────
+export const uploadSebConfig = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.seb') return cb(new ApiError(400, 'UNSUPPORTED_FILE', 'Upload a Safe Exam Browser .seb config file.'));
+    cb(null, true);
+  },
+}).single('config');
+
+/** Admin: store an uploaded .seb config and point students at it. */
+export async function setSebConfig(req, res) {
+  if (!req.file) throw ApiError.badRequest('Choose a .seb config file to upload.');
+  const s = await getSettings();
+  const { url } = await storeUpload(req.file, 'seb');
+  s.sebConfigUrl = url;
   await s.save();
   ok(res, await settingsView(s));
 }

@@ -1,40 +1,28 @@
 import path from 'node:path';
 import multer from 'multer';
 import { z } from 'zod';
-import { ResourceType, UserRole } from '@lms/shared';
+import { ResourceType, UserRole } from '#shared';
 import { Batch, Module, Resource, User } from '../models/index.js';
-import { ensureUploadsDir, UPLOADS_URL_PREFIX } from '../config/storage.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
+import { storeUpload, deleteByUrl } from '../services/fileStore.js';
 
 const objectId = z.string().length(24);
 export const moduleQuery = z.object({ module: objectId });
 export const resourceIdParam = z.object({ id: objectId });
 
-// ── Multer (disk storage into LMS_Storage/uploads) ────────────────────────────
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, ensureUploadsDir()),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const base = path
-      .basename(file.originalname, ext)
-      .replace(/[^a-zA-Z0-9-_]/g, '_')
-      .slice(0, 40);
-    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    cb(null, `${stamp}-${base}${ext}`);
-  },
-});
+// ── Multer (in-memory → MongoDB/GridFS via fileStore) ─────────────────────────
 // Allowlist learning-material types only — block executables/scripts/HTML to
 // avoid stored-XSS or malware being served from our origin.
 const ALLOWED_EXT = new Set([
   '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt', '.md', '.csv',
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', // .svg excluded — it can carry executable scripts (stored XSS)
   '.mp4', '.webm', '.mov', '.mp3', '.wav', '.zip',
 ]);
 const BLOCKED_MIME = /(text\/html|application\/x-msdownload|application\/x-sh|application\/javascript)/i;
 
 export const uploadResourceFile = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024, files: 1 }, // 100 MB, single file
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -106,7 +94,7 @@ export async function addResource(req, res) {
 
   let finalUrl = url;
   if (req.file) {
-    finalUrl = `${UPLOADS_URL_PREFIX}/${req.file.filename}`;
+    finalUrl = (await storeUpload(req.file, 'resource')).url;
   } else if (!url) {
     throw ApiError.badRequest('Provide a file upload or a url');
   }
@@ -126,6 +114,7 @@ export async function deleteResource(req, res) {
   const resource = await Resource.findById(req.params.id);
   if (!resource) throw ApiError.notFound('Resource not found');
   await loadModuleForEdit(resource.module, req.auth);
+  await deleteByUrl(resource.url); // remove the stored file (if it was an upload)
   await resource.deleteOne();
   ok(res, { id: req.params.id, deleted: true });
 }

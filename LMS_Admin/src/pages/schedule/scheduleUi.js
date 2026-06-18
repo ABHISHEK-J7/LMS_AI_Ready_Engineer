@@ -1,4 +1,4 @@
-import { ClassStatus, MeetingProvider } from '@lms/shared';
+import { ClassStatus, MeetingProvider } from '@/shared';
 
 export const STATUS_TONE = {
   [ClassStatus.SCHEDULED]: 'primary',

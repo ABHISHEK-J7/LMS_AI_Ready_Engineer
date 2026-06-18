@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getAnnouncementsSeenAt, markAnnouncementsSeen, useAnnouncements } from './announcements';
+import { useCertReviews } from './externalCertificates';
+import { useProjectReviews } from './projects';
 
 /**
  * Unread counts for admin sidebar nav items, keyed by route. "Unread" =
@@ -11,6 +13,8 @@ import { getAnnouncementsSeenAt, markAnnouncementsSeen, useAnnouncements } from 
 export function useNavBadges() {
   const location = useLocation();
   const { data: announcements } = useAnnouncements();
+  const { data: certReviews } = useCertReviews(); // admins always review
+  const { data: projectReviews } = useProjectReviews();
   const [annSeen, setAnnSeen] = useState(getAnnouncementsSeenAt());
 
   useEffect(() => {
@@ -24,5 +28,9 @@ export function useNavBadges() {
     (a) => new Date(a.createdAt).getTime() > annSeen,
   ).length;
 
-  return { '/app/announcements': annCount };
+  const approvalsCount =
+    (certReviews ?? []).filter((c) => c.status === 'pending').length +
+    (projectReviews ?? []).filter((p) => p.status === 'pending').length;
+
+  return { '/app/announcements': annCount, '/app/approvals': approvalsCount };
 }

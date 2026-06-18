@@ -1,4 +1,4 @@
-import { AttendanceStatus, ModuleProgressStatus, SubmissionStatus, UserRole, UserStatus } from '@lms/shared';
+import { AttendanceStatus, ModuleProgressStatus, SubmissionStatus, UserRole, UserStatus } from '#shared';
 import {
   Assessment,
   Attendance,

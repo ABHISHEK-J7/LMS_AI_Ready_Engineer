@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { chartSeriesColors } from '@lms/shared';
+import { chartSeriesColors } from '@/shared';
 import { useTheme } from '@/theme/ThemeProvider';
 import { prefersReducedMotion } from '@/lib/anim';
 import './charts.css';

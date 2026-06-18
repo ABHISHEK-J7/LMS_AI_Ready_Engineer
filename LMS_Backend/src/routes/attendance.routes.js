@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import * as attendance from '../controllers/attendance.controller.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -39,6 +39,12 @@ router.get(
   adminOrTrainer,
   validate({ params: attendance.batchIdParam }),
   asyncHandler(attendance.getBatchAttendance),
+);
+router.get(
+  '/batch/:batchId/export.csv',
+  adminOrTrainer,
+  validate({ params: attendance.batchIdParam }),
+  asyncHandler(attendance.exportBatchAttendanceCsv),
 );
 
 export default router;

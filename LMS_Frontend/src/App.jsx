@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FullPageSpinner } from '@/components/ui';
@@ -15,12 +15,16 @@ import { SchedulePage } from '@/pages/schedule/SchedulePage';
 import { AttendancePage } from '@/pages/attendance/AttendancePage';
 import { AssessmentsPage } from '@/pages/assessments/AssessmentsPage';
 import { AssessmentDetail } from '@/pages/assessments/AssessmentDetail';
+// Lazy — pulls in the heavy xlsx parser only when the page is opened.
+const QuestionBankPage = lazy(() => import('@/pages/questionBank/QuestionBankPage').then((m) => ({ default: m.QuestionBankPage })));
+import { ProfilePage } from '@/pages/profile/ProfilePage';
 import { CurriculumPage } from '@/pages/curriculum/CurriculumPage';
 import { CertificatesPage } from '@/pages/certificates/CertificatesPage';
 import { VerifyCertificatePage } from '@/pages/certificates/VerifyCertificatePage';
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage';
 import { DoubtsPage } from '@/pages/doubts/DoubtsPage';
 import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
+import { ApprovalsPage } from '@/pages/approvals/ApprovalsPage';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
 /** Student & Trainer application. Administrators use the separate Admin portal. */
@@ -59,8 +63,11 @@ export default function App() {
         <Route path="announcements" element={<AnnouncementsPage />} />
         <Route path="assessments" element={<AssessmentsPage />} />
         <Route path="assessments/:id" element={<AssessmentDetail />} />
+        <Route path="question-bank" element={<Suspense fallback={<FullPageSpinner />}><QuestionBankPage /></Suspense>} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="certificates" element={<CertificatesPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/app" replace />} />

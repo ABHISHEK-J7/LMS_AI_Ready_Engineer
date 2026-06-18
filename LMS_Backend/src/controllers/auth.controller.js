@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { UserRole, UserStatus } from '@lms/shared';
+import { UserRole, UserStatus } from '#shared';
 import { User, getSettings } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
@@ -37,10 +37,11 @@ function toDTO(user) {
   return user.toJSON();
 }
 
-function issueTokens(userId, role) {
+function issueTokens(user) {
+  const tv = user.tokenVersion ?? 0;
   return {
-    accessToken: signAccessToken({ sub: userId, role }),
-    refreshToken: signRefreshToken({ sub: userId, role }),
+    accessToken: signAccessToken({ sub: user.id, role: user.role, tv }),
+    refreshToken: signRefreshToken({ sub: user.id, role: user.role, tv }),
   };
 }
 
@@ -60,7 +61,7 @@ export async function login(req, res) {
   user.lastLoginAt = new Date();
   await user.save();
 
-  const tokens = issueTokens(user.id, user.role);
+  const tokens = issueTokens(user);
   const body = { user: toDTO(user), tokens };
   ok(res, body);
 }
@@ -99,7 +100,18 @@ export async function refresh(req, res) {
   if (!user || user.status !== UserStatus.ACTIVE) {
     throw ApiError.unauthorized('Account is no longer active');
   }
-  ok(res, { tokens: issueTokens(user.id, user.role) });
+  // Reject refresh tokens issued before the user's tokenVersion was bumped
+  // (logout / password change / suspension revokes all older sessions).
+  if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+    throw ApiError.unauthorized('Session expired — please sign in again');
+  }
+  ok(res, { tokens: issueTokens(user) });
+}
+
+/** Revoke all of this user's refresh tokens (sign-out everywhere). */
+export async function logout(req, res) {
+  await User.updateOne({ _id: req.auth.userId }, { $inc: { tokenVersion: 1 } });
+  ok(res, { ok: true });
 }
 
 export async function me(req, res) {
@@ -153,8 +165,15 @@ export async function requestOtp(req, res) {
   user.otpAttempts = 0;
   await user.save();
 
-  const { devOtp } = await sendOtpEmail(user.email, otp);
-  ok(res, { sent: true, ...(devOtp ? { devOtp } : {}) });
+  try {
+    await sendOtpEmail(user.email, otp);
+  } catch (err) {
+    // Never reveal delivery failures to the client (it would leak that the
+    // email exists). Surface it in logs so an admin can fix SMTP config.
+    // eslint-disable-next-line no-console
+    console.error(`[auth] failed to send OTP email to ${user.email}: ${err.message}`);
+  }
+  ok(res, { sent: true });
 }
 
 /**
@@ -204,6 +223,7 @@ export async function setPasswordWithToken(req, res) {
   user.otpHash = undefined;
   user.otpExpiresAt = undefined;
   user.otpAttempts = 0;
+  user.tokenVersion = (user.tokenVersion ?? 0) + 1; // a password set revokes old sessions
   await user.save();
   ok(res, { ok: true });
 }

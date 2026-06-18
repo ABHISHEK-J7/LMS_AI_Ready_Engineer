@@ -1,0 +1,109 @@
+import path from 'node:path';
+import multer from 'multer';
+import { z } from 'zod';
+import { DoubtStatus, SOCIAL_PLATFORMS } from '#shared';
+import { ClassRating, ClassSchedule, Doubt, User } from '../models/index.js';
+import { ApiError } from '../utils/ApiError.js';
+import { ok } from '../utils/http.js';
+import { collectUserData } from '../services/gdpr.js';
+import { storeUpload, deleteByUrl } from '../services/fileStore.js';
+
+// A link is either a valid URL or an empty string (to clear it).
+const link = z.union([z.string().url('Enter a valid URL').max(500), z.literal('')]).optional();
+const linksShape = Object.fromEntries(SOCIAL_PLATFORMS.map((p) => [p.key, link]));
+
+export const updateProfileSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(120).optional(),
+  phone: z.string().max(40).optional(),
+  bio: z.string().max(500).optional(),
+  links: z.object(linksShape).partial().optional(),
+  customLinks: z
+    .array(z.object({ label: z.string().min(1, 'Add a label').max(40), url: z.string().url('Enter a valid URL').max(500) }))
+    .max(15)
+    .optional(),
+});
+
+// ── Avatar upload (single image → MongoDB/GridFS) ─────────────────────────────
+const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+export const uploadAvatarFile = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 }, // 8 MB
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) {
+      return cb(new ApiError(400, 'UNSUPPORTED_FILE', `Use an image. Not allowed: ${ext || file.mimetype}`));
+    }
+    cb(null, true);
+  },
+}).single('avatar');
+
+/** Update the signed-in user's own profile (any role). */
+export async function updateMe(req, res) {
+  const user = await User.findById(req.auth.userId);
+  if (!user) throw ApiError.notFound('User not found');
+
+  const { name, phone, bio, links, customLinks } = req.body;
+  if (name !== undefined) user.name = name;
+  if (phone !== undefined) user.phone = phone;
+  if (bio !== undefined) user.bio = bio;
+  if (links) {
+    user.links = { ...(user.links?.toObject?.() ?? user.links ?? {}), ...links };
+  }
+  if (customLinks !== undefined) {
+    user.customLinks = customLinks.map((l) => ({ label: l.label.trim(), url: l.url.trim() }));
+  }
+  await user.save();
+  ok(res, user.toJSON());
+}
+
+const round1 = (n) => Math.round(n * 10) / 10;
+
+/** Trainer scoreboard: classes conducted, doubts cleared + avg rating, and the
+ *  average rating students gave their classes. Scoped to the signed-in trainer. */
+export async function trainerStats(req, res) {
+  const me = req.auth.userId;
+
+  const classesConducted = await ClassSchedule.countDocuments({ trainer: me, date: { $lte: new Date() } });
+  const doubtsResolved = await Doubt.countDocuments({ answeredBy: me, status: DoubtStatus.CLOSED });
+
+  const ratedDoubts = await Doubt.find({ answeredBy: me, rating: { $gte: 1 } }).select('rating');
+  const doubtsAvgRating = ratedDoubts.length
+    ? round1(ratedDoubts.reduce((s, d) => s + d.rating, 0) / ratedDoubts.length)
+    : 0;
+
+  const classRatings = await ClassRating.find({ trainer: me }).select('rating');
+  const classAvgRating = classRatings.length
+    ? round1(classRatings.reduce((s, r) => s + r.rating, 0) / classRatings.length)
+    : 0;
+
+  ok(res, {
+    classesConducted,
+    doubtsResolved,
+    doubtsRatedCount: ratedDoubts.length,
+    doubtsAvgRating,
+    classRatingCount: classRatings.length,
+    classAvgRating,
+  });
+}
+
+/** GDPR data export: the signed-in user downloads everything we hold about them. */
+export async function exportMe(req, res) {
+  const data = await collectUserData(req.auth.userId);
+  if (!data) throw ApiError.notFound('User not found');
+  res.setHeader('Content-Disposition', 'attachment; filename="my-data-export.json"');
+  ok(res, data);
+}
+
+/** Replace the signed-in user's avatar image. */
+export async function setAvatar(req, res) {
+  if (!req.file) throw ApiError.badRequest('Choose an image to upload');
+  const user = await User.findById(req.auth.userId);
+  if (!user) throw ApiError.notFound('User not found');
+
+  // Best-effort cleanup of a previously uploaded avatar.
+  await deleteByUrl(user.avatarUrl);
+  const { url } = await storeUpload(req.file, 'avatar');
+  user.avatarUrl = url;
+  await user.save();
+  ok(res, user.toJSON());
+}

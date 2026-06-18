@@ -139,32 +139,43 @@
   background: var(--color-surface);
 }
 
-/* External certs — preview cards */
+/* External certs — compact cards, ~4 per row. Status badge at the top-right,
+   "Open" at the bottom-left. */
 .ext-cert-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-4);
   margin-bottom: var(--space-5);
 }
 .ext-cert {
-  position: relative;
   display: flex;
   flex-direction: column;
+  gap: var(--space-1);
+  min-height: 9.5rem;
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
-  color: inherit;
-  text-decoration: none;
   transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 .ext-cert:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
   transform: translateY(-2px);
-  box-shadow: 0 10px 24px -18px color-mix(in srgb, var(--color-primary) 60%, rgba(16,24,40,.5));
+  box-shadow: var(--shadow-md);
+}
+/* Top row: thumbnail (left) + status badge (right corner). */
+.ext-cert__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 .ext-cert__thumb {
-  height: 90px;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--color-primary) 8%, var(--color-background));
@@ -172,30 +183,39 @@
   overflow: hidden;
 }
 .ext-cert__thumb img { width: 100%; height: 100%; object-fit: cover; }
-.ext-cert__body { padding: var(--space-2) var(--space-3) var(--space-3); }
+.ext-cert__head .badge { flex: none; }
 .ext-cert__title {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
-  line-height: 1.3;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ext-cert__issuer {
+  font-size: var(--font-size-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Bottom row: Open (left corner) + delete (right). */
+.ext-cert__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
 .ext-cert__open {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-top: var(--space-2);
-  font-size: var(--font-size-xs);
+  gap: 5px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--color-primary);
 }
-.ext-cert__del {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
-  backdrop-filter: blur(2px);
-}
+.ext-cert__open:hover { color: var(--color-primary-hover); text-decoration: underline; }
 
 .ext-cert-add {
   display: flex;
@@ -215,10 +235,36 @@
   font: inherit;
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
 .ext-cert-add__toggle button.is-active {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
 }
+
+/* ── Approvals (trainer/admin certificate review) ── */
+.approval-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.approval-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  flex-wrap: wrap;
+}
+.approval-thumb {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-background));
+  color: var(--color-primary);
+}
+.approval-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.approval-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; flex-wrap: wrap; }

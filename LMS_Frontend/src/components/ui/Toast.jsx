@@ -9,9 +9,15 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const idRef = useRef(0);
 
-  const dismiss = useCallback((id) => {
+  const remove = useCallback((id) => {
     setToasts((t) => t.filter((x) => x.id !== id));
   }, []);
+
+  // Two-phase dismiss: mark as leaving (plays the exit animation), then unmount.
+  const dismiss = useCallback((id) => {
+    setToasts((t) => t.map((x) => (x.id === id ? { ...x, leaving: true } : x)));
+    setTimeout(() => remove(id), 150);
+  }, [remove]);
 
   const toast = useCallback(
     ({ type = 'info', message, duration = 4000 }) => {
@@ -46,7 +52,7 @@ export function ToastProvider({ children }) {
 function ToastItem({ toast, onClose }) {
   const Icon = { success: CheckCircle2, error: XCircle, info: Info }[toast.type] ?? Info;
   return (
-    <div className={`toast toast--${toast.type}`}>
+    <div className={`toast toast--${toast.type}${toast.leaving ? ' toast--leaving' : ''}`}>
       <span className="toast__icon"><Icon size={18} strokeWidth={2.2} /></span>
       <span className="toast__msg">{toast.message}</span>
       <button className="toast__close" aria-label="Dismiss" onClick={onClose}><X size={16} /></button>

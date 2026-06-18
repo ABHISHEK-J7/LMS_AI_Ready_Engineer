@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { UserRole } from '@lms/shared';
-import { Badge, Button, Card, CardHeader, FullPageSpinner, Modal } from '@/components/ui';
+import { Award } from 'lucide-react';
+import { UserRole } from '@/shared';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Modal, SkeletonCards, SkeletonTable } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -23,23 +24,22 @@ function certTitle(c) {
 
 function StudentCertificates() {
   const user = useAuth((s) => s.user);
-  const { data: certs, isLoading, isError, error } = useMyCertificates();
+  const { data: certs, isLoading, isError, error, refetch } = useMyCertificates();
   const [view, setView] = useState(null);
-
-  if (isLoading) return <FullPageSpinner />;
 
   return (
     <>
       <PageHeader title="Certificates" subtitle="Earned automatically as you complete modules." />
-      {isError && <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>}
-
-      {certs && certs.length === 0 ? (
-        <Card>
-          <p className="lms-muted">
-            No certificates yet. Complete a module — pass its final assessment and meet the
-            attendance requirement — to earn one automatically.
-          </p>
-        </Card>
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !certs ? (
+        <SkeletonCards count={4} height="7rem" />
+      ) : certs && certs.length === 0 ? (
+        <EmptyState
+          icon={<Award size={26} />}
+          title="No certificates yet"
+          description="Complete a module — pass its final assessment and meet the attendance requirement — to earn one automatically."
+        />
       ) : (
         <div className="module-grid">
           {certs?.map((c) => (
@@ -81,15 +81,21 @@ function StudentCertificates() {
 // ── Admin ────────────────────────────────────────────────────────────────────
 
 function AdminCertificates() {
-  const { data: certs, isLoading, isError, error } = useAllCertificates();
-  if (isLoading) return <FullPageSpinner />;
+  const { data: certs, isLoading, isError, error, refetch } = useAllCertificates();
 
   return (
     <>
       <PageHeader title="Certificates" subtitle="All certificates issued across the institution." />
-      {isError && <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>}
-      {certs && certs.length === 0 ? (
-        <Card><p className="lms-muted">No certificates have been issued yet.</p></Card>
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !certs ? (
+        <SkeletonTable rows={5} cols={5} />
+      ) : certs && certs.length === 0 ? (
+        <EmptyState
+          icon={<Award size={26} />}
+          title="No certificates have been issued yet"
+          description="Certificates issued to students across the institution will appear here."
+        />
       ) : (
         <div className="table-wrap">
           <table className="table">

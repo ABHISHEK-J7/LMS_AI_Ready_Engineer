@@ -1,91 +1,175 @@
+/* ── Gamified calendar "board" — rounded tiles with gaps ── */
 .cal {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--color-surface);
+  background: transparent;
+  border: none;
 }
 .cal__head,
 .cal__grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
 }
+.cal__head { margin-bottom: var(--space-2); }
 .cal__weekday {
-  padding: var(--space-2);
   text-align: center;
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-  background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
+
+/* Each day is a tile that pops in, then springs on hover. */
 .cal__cell {
-  min-height: 96px;
-  padding: var(--space-1);
-  border-right: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
+  position: relative;
+  min-height: 118px;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
+  animation: tile-in 360ms var(--ease-spring) backwards;
+  animation-delay: calc(var(--i, 0) * 7ms);
 }
-.cal__cell:nth-child(7n) {
-  border-right: none;
+@keyframes tile-in {
+  from { opacity: 0; transform: scale(0.9) translateY(8px); }
 }
-.cal__cell--empty {
-  background: var(--color-background);
+@media (hover: hover) and (pointer: fine) {
+  .cal__cell:hover {
+    transform: translateY(-5px) scale(1.035);
+    box-shadow: var(--shadow-lg);
+    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+    z-index: 3;
+  }
 }
+
+/* Out-of-month days — faded, dashed, clearly "off-board". */
+.cal__cell--out {
+  opacity: 0.55;
+  background: transparent;
+  border-style: dashed;
+}
+
+/* Days with sessions "light up". */
+.cal__cell--has {
+  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+}
+
+/* Today — glowing ring + animated pulse. */
 .cal__cell--today {
-  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-primary) 45%, transparent),
+    0 12px 28px -10px color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+
+.cal__cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 1.75rem;
 }
 .cal__daynum {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
-  text-align: right;
-  padding: 0 var(--space-1);
 }
+.cal__cell--today .cal__daynum {
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--color-primary) 60%, transparent);
+}
+/* Expanding pulse ring on today (GPU-friendly: transform + opacity). */
+.cal__cell--today .cal__daynum::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid var(--color-primary);
+  opacity: 0.55;
+  animation: today-pulse 2.4s ease-out infinite;
+}
+@keyframes today-pulse {
+  to { transform: scale(1.9); opacity: 0; }
+}
+
+/* XP-style count badge for busy days. */
+.cal__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 2px 8px -1px color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+.cal__star { color: var(--color-rating-star); }
+
+/* Colourful event pills. --ev = status tone (set inline). */
+.cal__events { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
 .cal__event {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   width: 100%;
   text-align: left;
   border: none;
-  background: var(--color-background);
-  border-radius: var(--radius-sm);
-  padding: 2px var(--space-1);
+  background: color-mix(in srgb, var(--ev) 16%, var(--color-surface));
+  border-radius: var(--radius-full);
+  padding: 3px 9px;
   font-size: var(--font-size-xs);
   color: var(--color-text-primary);
   cursor: pointer;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  transition: background var(--transition-fast), transform var(--transition-fast);
 }
-.cal__event:hover {
-  background: var(--color-accent-light);
+@media (hover: hover) and (pointer: fine) {
+  .cal__event:hover { background: color-mix(in srgb, var(--ev) 30%, var(--color-surface)); }
 }
+.cal__event:active { transform: scale(0.95); }
+.cal__event--off { opacity: 0.5; }
+.cal__event--off .cal__event-title { text-decoration: line-through; }
 .cal__event-time {
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-}
-.cal__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
+  font-weight: var(--font-weight-bold);
+  color: var(--ev);
   flex: none;
 }
+.cal__event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal__more {
+  align-self: flex-start;
+  border: none;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-radius: var(--radius-full);
+  padding: 2px 9px;
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  padding: 0 var(--space-1);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-hover);
+  cursor: pointer;
+  transition: background var(--transition-fast);
 }
+.cal__more:hover { background: color-mix(in srgb, var(--color-primary) 20%, transparent); }
 
 @media (max-width: 720px) {
-  .cal__cell {
-    min-height: 64px;
-  }
-  .cal__event {
-    font-size: 10px;
-  }
+  .cal__head, .cal__grid { gap: 5px; }
+  .cal__cell { min-height: 84px; padding: 5px; border-radius: var(--radius-md); }
+  .cal__daynum { min-width: 1.5rem; height: 1.5rem; font-size: var(--font-size-xs); }
+  .cal__event { padding: 2px 7px; font-size: 10px; }
 }

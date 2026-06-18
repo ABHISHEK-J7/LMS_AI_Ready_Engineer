@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import * as settings from '../controllers/settings.controller.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -15,5 +15,6 @@ router.get('/', asyncHandler(settings.getAllSettings));
 router.patch('/', validate({ body: settings.updateSettingsSchema }), asyncHandler(settings.updateSettings));
 router.post('/test-ai', asyncHandler(settings.testAiConnection));
 router.post('/test-zoom', asyncHandler(settings.testZoomConnection));
+router.post('/seb-config', settings.uploadSebConfig, asyncHandler(settings.setSebConfig));
 
 export default router;

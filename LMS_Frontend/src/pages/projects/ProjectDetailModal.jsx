@@ -1,0 +1,56 @@
+import { CheckCircle2, ExternalLink, Github, XCircle } from 'lucide-react';
+import { Badge, Button, Modal } from '@/components/ui';
+import './projects.css';
+
+const STATUS = {
+  pending: { label: 'Pending review', tone: 'warning' },
+  approved: { label: 'Approved', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'error' },
+};
+
+/**
+ * Project detail "screen": all screenshots, repo link, title, description, status.
+ * When `onApprove`/`onReject` are passed (reviewer context) it shows action buttons.
+ */
+export function ProjectDetailModal({ project, onClose, onApprove, onReject, busy }) {
+  if (!project) return null;
+  const s = STATUS[project.status] ?? STATUS.pending;
+  const reviewer = Boolean(onApprove || onReject);
+
+  return (
+    <Modal open title={project.title} size="lg" onClose={onClose}>
+      <div className="project-detail">
+        <div className="project-detail__meta">
+          <Badge tone={s.tone}>{s.label}</Badge>
+          {project.student?.name && <span className="lms-muted">by {project.student.name}</span>}
+          <a href={project.repoUrl} target="_blank" rel="noreferrer" className="ext-cert__open" style={{ display: 'inline-flex' }}>
+            <Github size={14} /> Repository <ExternalLink size={12} />
+          </a>
+        </div>
+
+        {project.images?.length > 0 && (
+          <div className="project-detail__images">
+            {project.images.map((src, i) => (
+              <a key={i} href={src} target="_blank" rel="noreferrer">
+                <img src={src} alt={`${project.title} screenshot ${i + 1}`} />
+              </a>
+            ))}
+          </div>
+        )}
+
+        <p className="project-detail__desc">{project.description}</p>
+
+        {project.status === 'rejected' && project.note && (
+          <p className="lms-muted">Reviewer note: “{project.note}”</p>
+        )}
+
+        {reviewer && project.status === 'pending' && (
+          <div className="project-detail__actions">
+            <Button loading={busy} onClick={onApprove}><CheckCircle2 size={15} /> Approve</Button>
+            <Button variant="outline" disabled={busy} onClick={onReject}><XCircle size={15} /> Reject</Button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}

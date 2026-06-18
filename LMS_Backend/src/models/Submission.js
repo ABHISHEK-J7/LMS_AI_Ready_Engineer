@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { SubmissionStatus } from '@lms/shared';
+import { SubmissionStatus } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 const answerSchema = new Schema(
@@ -24,11 +24,23 @@ const submissionSchema = new Schema(
     score: Number,
     passed: Boolean,
     feedback: { type: Schema.Types.Mixed },
+    startedAt: Date, // when a timed/proctored attempt began (the timer anchor)
     submittedAt: Date,
+    // Proctoring: set when a student left the exam (tab switch / exited full screen).
+    disqualified: { type: Boolean, default: false },
+    disqualifiedReason: { type: String },
+    // Webcam proctoring snapshots captured during the attempt (URLs under /api/uploads).
+    proctorShots: { type: [String], default: [] },
+    // Proctoring warnings (blocked shortcuts / leaving the exam). Counted for staff review.
+    warnings: { type: Number, default: 0 },
+    warningLog: { type: [{ _id: false, reason: String, at: Date }], default: [] },
   },
   baseSchemaOptions,
 );
 
 submissionSchema.index({ assessment: 1, student: 1 }, { unique: true });
+// Leaderboard + analytics + gate filters query by (assessment, status) / (student, status).
+submissionSchema.index({ assessment: 1, status: 1 });
+submissionSchema.index({ student: 1, status: 1 });
 
 export const Submission = mongoose.model('Submission', submissionSchema);

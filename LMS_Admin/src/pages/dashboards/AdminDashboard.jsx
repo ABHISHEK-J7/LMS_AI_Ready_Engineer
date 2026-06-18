@@ -1,5 +1,6 @@
 import { Award, BookOpen, GraduationCap, TriangleAlert, UserCog, UsersRound } from 'lucide-react';
-import { Badge, Card, CardHeader, FullPageSpinner } from '@/components/ui';
+import { Badge, Card, CardHeader, ErrorState, SkeletonCards } from '@/components/ui';
+import { apiErrorMessage } from '@/lib/api';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { CountUp } from '@/lib/anim';
 import { BarChart } from '@/components/charts/BarChart';
@@ -10,8 +11,7 @@ import { useAdminAnalytics } from '@/lib/analytics';
 
 
 export function AdminDashboard() {
-  const { data, isLoading } = useAdminAnalytics();
-  if (isLoading) return <FullPageSpinner />;
+  const { data, isLoading, isError, error, refetch } = useAdminAnalytics();
 
   const counts = data?.counts ?? {};
   const low = data?.lowAttendance ?? { count: 0, threshold: 75, students: [] };
@@ -33,6 +33,11 @@ export function AdminDashboard() {
         subtitle="Institution-wide overview of users, batches, and academic progress."
       />
 
+      {isError && !data ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !data ? (
+        <SkeletonCards count={5} height="7rem" />
+      ) : (
       <div className="dash-stack">
       {/* KPI tiles */}
       <div className="stat-grid">
@@ -128,6 +133,7 @@ export function AdminDashboard() {
         </Card>
       </div>
       </div>
+      )}
     </>
   );
 }

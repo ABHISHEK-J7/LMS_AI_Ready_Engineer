@@ -1,87 +1,68 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
-import { AttendanceStatus } from '@lms/shared';
-import { Button, Card, CardHeader, FullPageSpinner, Input, Select } from '@/components/ui';
+import { useEffect, useState } from 'react';
+import { Check, Users } from 'lucide-react';
+import { Badge, Button, Card, CardHeader, Input, SkeletonTable, EmptyState, ErrorState } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useClassRoster, useSaveAttendance } from '@/lib/attendance';
+import { ATT_TONE, AUTO_LABEL, autoStatus, classStartMs } from './attendanceUi';
 import { formatDate } from '@/lib/format';
 
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const entryTime = (iso) =>
   iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
 
-const ATTENDED_OPTIONS = [
-  { value: 'present', label: 'Present' },
-  { value: 'absent', label: 'Absent' },
-];
-const PUNCTUAL_OPTIONS = [
-  { value: 'ontime', label: 'On time' },
-  { value: 'late', label: 'Late' },
-];
-
-// Saved enum status <-> the two UI dimensions (attended + punctuality).
-function toUi(status) {
-  if (status === AttendanceStatus.ABSENT || status === AttendanceStatus.EXCUSED)
-    return { attended: 'absent', punctual: 'ontime' };
-  if (status === AttendanceStatus.LATE) return { attended: 'present', punctual: 'late' };
-  return { attended: 'present', punctual: 'ontime' }; // present / default
-}
-function toStatus(attended, punctual) {
-  if (attended === 'absent') return AttendanceStatus.ABSENT;
-  return punctual === 'late' ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
-}
-
-/** Per-session attendance entry: one row per enrolled student. */
+/**
+ * Automated per-session attendance. The trainer only sets a buffer window;
+ * each student's status is derived from their entry time:
+ *   joined by start+buffer → On time · later → Late · never joined → Absent.
+ */
 export function RosterEditor({ classId, onSaved }) {
-  const { data, isLoading, isError, error } = useClassRoster(classId);
+  const { data, isLoading, isError, error, refetch } = useClassRoster(classId);
   const save = useSaveAttendance();
   const [rows, setRows] = useState([]);
-  const original = useRef([]); // previously-saved values, for the quick-set toggle
-  const [bulk, setBulk] = useState(null); // which "All …" is currently applied
+  const [buffer, setBuffer] = useState(10);
   const [saveError, setSaveError] = useState('');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!data) return;
-    // Default unmarked students to Present so a trainer can save fast.
-    const mapped = data.roster.map((r) => ({
-      student: r.student.id,
-      name: r.student.name,
-      email: r.student.email,
-      joinedAt: r.joinedAt ?? null,
-      ...toUi(r.status ?? AttendanceStatus.PRESENT),
-      remarks: r.remarks ?? '',
-    }));
-    setRows(mapped);
-    original.current = mapped;
-    setBulk(null);
+    setRows(
+      data.roster.map((r) => ({
+        student: r.student.id,
+        name: r.student.name,
+        email: r.student.email,
+        joinedAt: r.joinedAt ?? null,
+        remarks: r.remarks ?? '',
+      })),
+    );
+    setBuffer(data.class.bufferMinutes ?? 10);
     setSaved(false);
   }, [data]);
 
-  function setRow(id, patch) {
-    setRows((rs) => rs.map((r) => (r.student === id ? { ...r, ...patch } : r)));
-    setBulk(null); // a manual edit ends the active "All …" toggle
+  function setRemark(id, remarks) {
+    setRows((rs) => rs.map((r) => (r.student === id ? { ...r, remarks } : r)));
   }
 
-  // Quick-set toggle: first click sets everyone to that attendance; clicking the
-  // SAME button again restores each student's previously-saved status.
-  function quickSet(attended) {
-    if (bulk === attended) {
-      setRows(original.current);
-      setBulk(null);
-    } else {
-      setRows((rs) => rs.map((r) => ({ ...r, attended })));
-      setBulk(attended);
-    }
-  }
+  if (isLoading && !data) return <Card><SkeletonTable rows={5} cols={4} /></Card>;
+  if (isError) return <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />;
+
+  const cls = data.class;
+  const cutoffMs = classStartMs(cls.date, cls.startTime) + (Number(buffer) || 0) * 60000;
+  const statusOf = (r) => autoStatus(r.joinedAt, cls.date, cls.startTime, buffer);
+  const counts = rows.reduce((acc, r) => {
+    const s = statusOf(r);
+    acc[s] = (acc[s] ?? 0) + 1;
+    return acc;
+  }, {});
 
   async function submit() {
     setSaveError('');
     try {
       await save.mutateAsync({
         classId,
+        bufferMinutes: Number(buffer) || 0,
         records: rows.map((r) => ({
           student: r.student,
-          status: toStatus(r.attended, r.punctual),
+          status: statusOf(r),
           remarks: r.remarks || undefined,
         })),
       });
@@ -92,35 +73,50 @@ export function RosterEditor({ classId, onSaved }) {
     }
   }
 
-  if (isLoading) return <FullPageSpinner />;
-  if (isError) return <Card><p className="field__error">{apiErrorMessage(error)}</p></Card>;
-
   return (
     <Card>
       <CardHeader
-        title={`Attendance — ${data.class.title}`}
-        subtitle={`${formatDate(data.class.date)} · ${rows.length} students${data.class.attendanceMarked ? ' · already marked' : ''}`}
+        title={`Attendance — ${cls.title}`}
+        subtitle={`${formatDate(cls.date)} · starts ${cls.startTime} · ${rows.length} students${cls.attendanceMarked ? ' · already marked' : ''}`}
       />
 
       {rows.length === 0 ? (
-        <p className="lms-muted">No students enrolled in this batch yet.</p>
+        <EmptyState
+          icon={<Users size={26} />}
+          title="No students enrolled"
+          description="No students enrolled in this batch yet."
+        />
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
-            <span className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)', alignSelf: 'center' }}>
-              Quick set:
-            </span>
-            {ATTENDED_OPTIONS.map((o) => (
-              <Button
-                key={o.value}
-                size="sm"
-                variant={bulk === o.value ? 'primary' : 'outline'}
-                onClick={() => quickSet(o.value)}
-                title={bulk === o.value ? 'Click again to restore saved statuses' : ''}
-              >
-                All {o.label}
-              </Button>
-            ))}
+          {/* Buffer window — the only thing the trainer sets; status is automatic. */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-4)',
+              flexWrap: 'wrap',
+              marginBottom: 'var(--space-4)',
+              padding: 'var(--space-3) var(--space-4)',
+              background: 'var(--color-background)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span className="field__label">Buffer time (minutes)</span>
+              <Input
+                type="number"
+                min="0"
+                max="240"
+                value={buffer}
+                onChange={(e) => setBuffer(e.target.value)}
+                style={{ width: '7rem' }}
+              />
+            </div>
+            <p className="lms-muted" style={{ margin: 0, fontSize: 'var(--font-size-sm)', flex: 1, minWidth: '15rem', lineHeight: 1.6 }}>
+              Joined by <strong>{fmtTime(cutoffMs)}</strong> (start {cls.startTime} + {Number(buffer) || 0} min) counts as{' '}
+              <strong>On time</strong>. Later → <strong>Late</strong>. No entry → <strong>Absent</strong>.
+            </p>
           </div>
 
           <div className="table-wrap">
@@ -129,60 +125,53 @@ export function RosterEditor({ classId, onSaved }) {
                 <tr>
                   <th>Student</th>
                   <th style={{ width: 110 }}>Entry Time</th>
-                  <th style={{ width: 140 }}>Attended</th>
-                  <th style={{ width: 140 }}>Status</th>
+                  <th style={{ width: 130 }}>Status</th>
                   <th>Remarks</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.student}>
-                    <td>
-                      {r.name}
-                      <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{r.email}</div>
-                    </td>
-                    <td>
-                      {entryTime(r.joinedAt) ? (
-                        <span style={{ fontWeight: 'var(--font-weight-semibold)', fontVariantNumeric: 'tabular-nums' }}>
-                          {entryTime(r.joinedAt)}
-                        </span>
-                      ) : (
-                        <span className="lms-muted" title="Has not joined the video yet">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <Select
-                        value={r.attended}
-                        onChange={(e) => setRow(r.student, { attended: e.target.value })}
-                        options={ATTENDED_OPTIONS}
-                      />
-                    </td>
-                    <td>
-                      <Select
-                        value={r.punctual}
-                        onChange={(e) => setRow(r.student, { punctual: e.target.value })}
-                        options={PUNCTUAL_OPTIONS}
-                        disabled={r.attended === 'absent'}
-                      />
-                    </td>
-                    <td>
-                      <Input
-                        placeholder="Optional…"
-                        value={r.remarks}
-                        onChange={(e) => setRow(r.student, { remarks: e.target.value })}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const status = statusOf(r);
+                  return (
+                    <tr key={r.student}>
+                      <td>
+                        {r.name}
+                        <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{r.email}</div>
+                      </td>
+                      <td>
+                        {entryTime(r.joinedAt) ? (
+                          <span style={{ fontWeight: 'var(--font-weight-semibold)', fontVariantNumeric: 'tabular-nums' }}>
+                            {entryTime(r.joinedAt)}
+                          </span>
+                        ) : (
+                          <span className="lms-muted" title="Did not join the video">—</span>
+                        )}
+                      </td>
+                      <td><Badge tone={ATT_TONE[status]}>{AUTO_LABEL[status]}</Badge></td>
+                      <td>
+                        <Input
+                          placeholder="Optional…"
+                          value={r.remarks}
+                          onChange={(e) => setRemark(r.student, e.target.value)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
-            <Button onClick={submit} loading={save.isPending}>
-              Save attendance
-            </Button>
-            {saved && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={15} strokeWidth={3} /> Saved</span>}
+          <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button onClick={submit} loading={save.isPending}>Save attendance</Button>
+            <span className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)' }}>
+              {counts.present ?? 0} on time · {counts.late ?? 0} late · {counts.absent ?? 0} absent
+            </span>
+            {saved && (
+              <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Check size={15} strokeWidth={3} /> Saved
+              </span>
+            )}
             {saveError && <span className="field__error">{saveError}</span>}
           </div>
         </>

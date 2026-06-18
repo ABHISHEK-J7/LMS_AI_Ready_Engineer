@@ -9,6 +9,21 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('xlsx')) return 'xlsx';
+          if (id.includes('gsap')) return 'gsap';
+          if (id.includes('@tanstack')) return 'react-query';
+          if (id.includes('react-router') || id.includes('react-dom') || /node_modules\/(react|scheduler)\//.test(id)) return 'react';
+          return 'vendor';
+        },
+      },
+    },
+  },
   server: {
     port: 5174,
     proxy: {

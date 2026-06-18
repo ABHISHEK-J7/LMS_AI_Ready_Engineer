@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '#shared';
 import { Certificate, User } from '../models/index.js';
 import { issueEligibleCertificates, listStudentCertificates } from '../services/certificates.js';
 import { ApiError } from '../utils/ApiError.js';
+import { assertCanViewStudent } from '../utils/access.js';
 import { ok } from '../utils/http.js';
 
 export const certIdParam = z.object({ certificateId: z.string().min(4).max(64) });
@@ -35,6 +36,7 @@ export async function myCertificates(req, res) {
 
 /** Admin/trainer: a specific student's certificates (also ensures issuance). */
 export async function studentCertificates(req, res) {
+  await assertCanViewStudent(req, req.params.studentId);
   const student = await User.findById(req.params.studentId).select('name email role');
   if (!student || student.role !== UserRole.STUDENT) throw ApiError.notFound('Student not found');
   await issueEligibleCertificates(req.params.studentId);
@@ -46,6 +48,7 @@ export async function studentCertificates(req, res) {
 export async function listAllCertificates(_req, res) {
   const certs = await Certificate.find()
     .sort({ issuedAt: -1 })
+    .limit(2000) // safety ceiling; add offset pagination to the UI when this grows
     .populate('student', 'name email')
     .populate('module', 'name code');
   ok(res, certs.map((c) => c.toJSON()));

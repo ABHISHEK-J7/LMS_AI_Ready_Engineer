@@ -67,7 +67,9 @@ export async function issueEligibleCertificates(studentId) {
   let issued = 0;
 
   for (const entry of progress.modules) {
-    if (!entry.completed) continue;
+    // A module certificate is earned by MASTERY (passing the final + attendance),
+    // not by merely advancing past the module when the syllabus is complete.
+    if (!entry.passed) continue;
     const exists = await Certificate.findOne({
       student: studentId,
       module: entry.module.id,
@@ -77,6 +79,8 @@ export async function issueEligibleCertificates(studentId) {
     try {
       await createCertificate({ student: studentId, module: entry.module.id, code: entry.module.code });
       issued += 1;
+      const { notify } = await import('./notify.js');
+      notify(studentId, { type: 'certificate', title: `Certificate earned: ${entry.module.name}`, body: 'Congratulations! Your module certificate is ready.', link: '/app/certificates' });
     } catch (err) {
       if (!isAlreadyIssued(err)) throw err; // concurrent call beat us to it — fine
     }
@@ -88,6 +92,8 @@ export async function issueEligibleCertificates(studentId) {
       try {
         await createCertificate({ student: studentId, isProgramCertificate: true, code: 'PROGRAM' });
         issued += 1;
+        const { notify } = await import('./notify.js');
+        notify(studentId, { type: 'certificate', title: 'Program certificate earned 🎓', body: 'You completed every module — your program certificate is ready.', link: '/app/certificates' });
       } catch (err) {
         if (!isAlreadyIssued(err)) throw err;
       }

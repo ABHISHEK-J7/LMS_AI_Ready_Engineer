@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL } from '@lms/shared';
+import { ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL } from '#shared';
 import { env } from '../config/env.js';
 
 export function signAccessToken(payload) {

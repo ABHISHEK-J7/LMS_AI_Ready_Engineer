@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { UserRole } from '@lms/shared';
+import { UserRole } from '@/shared';
 import { api, tokenStore, unwrap } from './api';
 
 /** The main app serves students & trainers. Administrators use the separate Admin portal. */
@@ -28,9 +28,15 @@ export const useAuth = create((set) => ({
     return result.user;
   },
 
-  logout() {
+  async logout() {
+    try { await api.post('/auth/logout'); } catch { /* best-effort: revoke refresh tokens server-side */ }
     tokenStore.clear();
     set({ user: null, status: 'unauthenticated' });
+  },
+
+  /** Replace the cached user (e.g. after a profile/avatar update). */
+  setUser(user) {
+    set({ user });
   },
 
   async bootstrap() {

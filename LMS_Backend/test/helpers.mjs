@@ -1,5 +1,5 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 /**
  * Boot the real Express app against an in-memory MongoDB. Each test file gets an

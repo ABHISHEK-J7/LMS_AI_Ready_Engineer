@@ -1,7 +1,6 @@
 import cors from 'cors';
 import express from 'express';
 import mongoSanitize from 'express-mongo-sanitize';
-import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env.js';
@@ -10,6 +9,7 @@ import { serveUpload } from './services/fileStore.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { requestId } from './middleware/requestId.js';
 import { authenticateFile } from './middleware/fileAuth.js';
+import { makeLimiter } from './middleware/rateLimit.js';
 import { asyncHandler } from './utils/http.js';
 import apiRoutes from './routes/index.js';
 
@@ -50,11 +50,9 @@ export function createApp() {
   // local dev / load tests aren't throttled (auth-route limiters do the same).
   app.use(
     '/api',
-    rateLimit({
+    makeLimiter({
       windowMs: 15 * 60 * 1000,
       limit: env.isProd ? 1000 : 1_000_000,
-      standardHeaders: true,
-      legacyHeaders: false,
     }),
   );
 

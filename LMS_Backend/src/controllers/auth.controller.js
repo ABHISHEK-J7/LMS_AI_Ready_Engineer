@@ -1,9 +1,10 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { UserRole, UserStatus } from '#shared';
 import { User, getSettings } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
+import { invalidateAuthUser } from '../services/authCache.js';
 import {
   signAccessToken,
   signFileToken,
@@ -113,6 +114,7 @@ export async function refresh(req, res) {
 /** Revoke all of this user's refresh tokens (sign-out everywhere). */
 export async function logout(req, res) {
   await User.updateOne({ _id: req.auth.userId }, { $inc: { tokenVersion: 1 } });
+  invalidateAuthUser(req.auth.userId);
   ok(res, { ok: true });
 }
 
@@ -227,5 +229,6 @@ export async function setPasswordWithToken(req, res) {
   user.otpAttempts = 0;
   user.tokenVersion = (user.tokenVersion ?? 0) + 1; // a password set revokes old sessions
   await user.save();
+  invalidateAuthUser(user.id);
   ok(res, { ok: true });
 }

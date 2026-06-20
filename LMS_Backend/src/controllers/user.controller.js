@@ -4,6 +4,7 @@ import { Batch, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { audit } from '../services/audit.js';
 import { collectUserData, eraseUserData } from '../services/gdpr.js';
+import { invalidateAuthUser } from '../services/authCache.js';
 import { ok } from '../utils/http.js';
 
 export const listUsersQuery = z.object({
@@ -183,6 +184,7 @@ export async function updateUser(req, res) {
     runValidators: true,
   });
   if (!user) throw ApiError.notFound('User not found');
+  invalidateAuthUser(req.params.id); // status may have changed
   ok(res, user.toJSON());
 }
 
@@ -195,6 +197,7 @@ export async function approveUser(req, res) {
   }
   user.status = UserStatus.ACTIVE;
   await user.save();
+  invalidateAuthUser(user.id);
   audit(req, 'user.approve', { targetType: 'user', targetId: user.id, meta: { email: user.email } });
   ok(res, user.toJSON());
 }
@@ -218,6 +221,7 @@ export async function eraseUser(req, res) {
   if (!user) throw ApiError.notFound('User not found');
   if (user.id === req.auth.userId) throw ApiError.badRequest('You cannot erase your own admin account');
   const summary = await eraseUserData(user);
+  invalidateAuthUser(user.id);
   audit(req, 'user.erase', { targetType: 'user', targetId: user.id, meta: { filesRemoved: summary.filesRemoved } });
   ok(res, { erased: true, ...summary });
 }
@@ -231,6 +235,7 @@ export async function archiveUser(req, res) {
     { new: true },
   );
   if (!user) throw ApiError.notFound('User not found');
+  invalidateAuthUser(user.id);
   audit(req, 'user.archive', { targetType: 'user', targetId: user.id, meta: { email: user.email } });
   ok(res, user.toJSON());
 }

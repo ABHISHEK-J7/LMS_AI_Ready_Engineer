@@ -43,6 +43,22 @@ export const env = {
   // Webcam proctor snapshots are personal data: purge them (files + DB refs)
   // this many days after the attempt. 0 disables the sweep (keep forever).
   proctorRetentionDays: Number(process.env.PROCTOR_RETENTION_DAYS ?? 90),
+  // ── Scale-out infrastructure (all optional; off → single-instance defaults) ──
+  // Redis: shared rate-limit store, cross-instance auth-cache invalidation, and
+  // single-leader election for the exam sweeper. Required to run >1 backend.
+  redisUrl: process.env.REDIS_URL ?? '',
+  // S3 (or S3-compatible: R2/MinIO) object storage for uploads + a CDN in front.
+  // When configured, new uploads go to S3 and are served via short-lived
+  // presigned redirects (offloading media bytes from Node + Mongo). GridFS stays
+  // the fallback for any legacy files.
+  s3: {
+    bucket: process.env.S3_BUCKET ?? '',
+    region: process.env.S3_REGION ?? 'us-east-1',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
+    endpoint: process.env.S3_ENDPOINT ?? '', // for R2/MinIO; empty = AWS
+    publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '', // CloudFront/CDN base (optional)
+  },
   openaiApiKey: process.env.OPENAI_API_KEY ?? '',
   // AI evaluation engine (LMS_AI_Engine) — Claude API.
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',

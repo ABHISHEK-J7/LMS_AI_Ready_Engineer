@@ -2,6 +2,7 @@ import { UserStatus } from '#shared';
 import { User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { verifyAccessToken } from '../utils/jwt.js';
+import { getAuthUser, setAuthUser } from '../services/authCache.js';
 
 /**
  * Require a valid access token; attaches `req.auth`. Beyond signature/expiry,
@@ -25,16 +26,24 @@ export async function authenticate(req, _res, next) {
       throw ApiError.unauthorized('Invalid or expired access token');
     }
 
-    const user = await User.findById(payload.sub).select('tokenVersion status role name');
-    if (!user) throw ApiError.unauthorized('Account no longer exists');
-    if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+    // Cache the auth facts to avoid a DB read on every request (invalidated on
+    // logout/password-change/archive/suspend; 60s TTL otherwise).
+    let info = getAuthUser(payload.sub);
+    if (!info) {
+      const user = await User.findById(payload.sub).select('tokenVersion status role name');
+      if (!user) throw ApiError.unauthorized('Account no longer exists');
+      info = { tokenVersion: user.tokenVersion ?? 0, status: user.status, role: user.role, name: user.name };
+      setAuthUser(payload.sub, info);
+    }
+
+    if ((payload.tv ?? 0) !== (info.tokenVersion ?? 0)) {
       throw ApiError.unauthorized('Session expired — please sign in again');
     }
-    if (user.status === UserStatus.ARCHIVED || user.status === UserStatus.SUSPENDED) {
+    if (info.status === UserStatus.ARCHIVED || info.status === UserStatus.SUSPENDED) {
       throw ApiError.forbidden('Your account is not active. Contact your administrator.');
     }
 
-    req.auth = { userId: user.id, role: user.role, name: user.name };
+    req.auth = { userId: payload.sub, role: info.role, name: info.name };
     next();
   } catch (err) {
     next(err);

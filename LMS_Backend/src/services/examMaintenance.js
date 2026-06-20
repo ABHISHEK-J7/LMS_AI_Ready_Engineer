@@ -1,10 +1,39 @@
+import crypto from 'node:crypto';
 import { SubmissionStatus } from '#shared';
 import { Assessment, Submission } from '../models/index.js';
 import { finalizeIfExpired } from '../controllers/submission.controller.js';
 import { env } from '../config/env.js';
 import { deleteByUrl } from './fileStore.js';
+import { redisEnabled, getRedis } from './redis.js';
 import { logger } from '../utils/logger.js';
 import { getEvaluator, gradeInBackground } from './aiGrading.js';
+
+// Stable id for this process, used for the single-leader sweeper lock.
+const INSTANCE_ID = crypto.randomUUID();
+const LEADER_KEY = 'sweep:leader';
+const LEADER_TTL_MS = 90_000;
+
+/**
+ * Single-leader gate. With Redis (multi-instance), only the lock holder runs the
+ * sweep so work isn't duplicated / double-graded across replicas. Without Redis
+ * (single instance) this always returns true.
+ */
+async function isSweepLeader() {
+  if (!redisEnabled()) return true;
+  try {
+    const r = await getRedis();
+    if (!r) return true;
+    const acquired = await r.set(LEADER_KEY, INSTANCE_ID, 'NX', 'PX', LEADER_TTL_MS);
+    if (acquired === 'OK') return true;
+    if ((await r.get(LEADER_KEY)) === INSTANCE_ID) {
+      await r.pexpire(LEADER_KEY, LEADER_TTL_MS);
+      return true;
+    }
+    return false;
+  } catch {
+    return false; // if Redis is unreachable, don't risk duplicate sweeps
+  }
+}
 
 /**
  * Background maintenance for the exam engine. This is an in-process sweeper (no
@@ -76,10 +105,12 @@ export async function purgeOldProctorShots() {
 /** Start the periodic sweep. Returns the interval handles so they can be cleared. */
 export function startExamMaintenance() {
   const run = async () => {
+    if (!(await isSweepLeader())) return; // another replica owns the sweep
     try { await sweepExpiredAttempts(); } catch (err) { logger.error('[exam-maintenance] sweep failed', { message: err.message }); }
     try { await redriveStuckGrading(); } catch (err) { logger.error('[exam-maintenance] re-drive failed', { message: err.message }); }
   };
   const runRetention = async () => {
+    if (!(await isSweepLeader())) return;
     try { await purgeOldProctorShots(); } catch (err) { logger.error('[exam-maintenance] retention failed', { message: err.message }); }
   };
   run(); // run once at boot to clear anything that expired while we were down

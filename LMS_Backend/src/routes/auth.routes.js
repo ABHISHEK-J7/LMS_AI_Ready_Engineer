@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import * as auth from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.js';
+import { makeLimiter } from '../middleware/rateLimit.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/http.js';
 import { env } from '../config/env.js';
@@ -11,11 +11,10 @@ const router = Router();
 // Brute-force protection on CREDENTIAL endpoints (login/register) only. Counts
 // failed attempts per IP; successful ones don't count. Generous so real users
 // (and dev/testing) are never locked out — effectively unlimited in dev.
-const credentialLimiter = rateLimit({
+// Redis-backed (shared across replicas) when REDIS_URL is set.
+const credentialLimiter = makeLimiter({
   windowMs: 15 * 60 * 1000,
   limit: env.isProd ? 50 : 100000,
-  standardHeaders: true,
-  legacyHeaders: false,
   skipSuccessfulRequests: true,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many sign-in attempts. Try again in a few minutes.' } },
 });
@@ -23,20 +22,16 @@ const credentialLimiter = rateLimit({
 // Token refresh is token-secured (a signed refresh token can't be brute-forced)
 // and fires automatically as users navigate — it must NOT count toward the login
 // limit. A high, separate cap just guards against runaway loops.
-const refreshLimiter = rateLimit({
+const refreshLimiter = makeLimiter({
   windowMs: 15 * 60 * 1000,
   limit: env.isProd ? 600 : 100000,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again shortly.' } },
 });
 
 // Stricter cap for OTP requests — prevents mail-bombing an address.
-const otpLimiter = rateLimit({
+const otpLimiter = makeLimiter({
   windowMs: 15 * 60 * 1000,
   limit: env.isProd ? 8 : 100000,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many code requests. Try again later.' } },
 });
 

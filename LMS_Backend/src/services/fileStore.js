@@ -2,16 +2,38 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import { UPLOADS_URL_PREFIX } from '../config/storage.js';
+import { env } from '../config/env.js';
 
 /**
- * GridFS-backed file storage. All uploads (avatars, learning resources, videos,
- * project shots, proctor snapshots, certificates, SEB configs) live in MongoDB
- * — there is no on-disk upload directory. Files are served back through the
- * `/api/uploads/:filename` route with HTTP Range support so video/audio stream
- * and seek. The public URL scheme (`/api/uploads/<filename>`) is unchanged, so
- * existing stored URLs keep resolving after the migration.
+ * File storage with two interchangeable backends behind one URL scheme
+ * (`/api/uploads/<filename>`):
+ *
+ *  - **GridFS (default):** files live in MongoDB and stream through Node with
+ *    HTTP Range support. Simple, zero extra infra; fine at small scale.
+ *  - **S3/CDN (when S3_BUCKET is set):** uploads stream straight to object
+ *    storage and the serve route 302-redirects to a short-lived presigned (or
+ *    CDN) URL — so media bytes never flow through Node/Mongo. This is the path
+ *    for serving video to thousands of concurrent users. GridFS remains the
+ *    fallback for any pre-existing files.
  */
 const BUCKET = 'uploads';
+
+// ── S3 backend (optional) ─────────────────────────────────────────────────────
+export function s3Enabled() {
+  return Boolean(env.s3.bucket && env.s3.accessKeyId && env.s3.secretAccessKey);
+}
+
+let s3Client = null;
+async function getS3() {
+  if (s3Client) return s3Client;
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  s3Client = new S3Client({
+    region: env.s3.region,
+    ...(env.s3.endpoint ? { endpoint: env.s3.endpoint, forcePathStyle: true } : {}),
+    credentials: { accessKeyId: env.s3.accessKeyId, secretAccessKey: env.s3.secretAccessKey },
+  });
+  return s3Client;
+}
 
 /** GridFSBucket on the live mongoose connection. Constructed per call (cheap) so
  *  it always targets the current connection (important for tests that reconnect). */
@@ -49,12 +71,13 @@ export async function storeUpload(file, prefix = 'file') {
 }
 
 /**
- * A multer storage engine that streams the upload straight into GridFS — the
- * file never sits fully in process memory (avoids OOM on large videos). On
- * success `req.file` gets `{ filename, url, size }`.
+ * Multer storage engine for uploads. Streams to S3 when configured, else GridFS
+ * — never buffering the whole file in memory. On success `req.file` gets
+ * `{ filename, url, size }`. (Name kept for the controllers that import it.)
  * @param {string} prefix file-category prefix for the stored name
  */
 export function gridfsStorage(prefix = 'file') {
+  if (s3Enabled()) return s3Storage(prefix);
   return {
     _handleFile(_req, file, cb) {
       const filename = genName(prefix, file.originalname);
@@ -76,17 +99,46 @@ export function gridfsStorage(prefix = 'file') {
   };
 }
 
+/** S3 multer storage engine — streams the upload to object storage. */
+function s3Storage(prefix = 'file') {
+  return {
+    async _handleFile(_req, file, cb) {
+      const filename = genName(prefix, file.originalname);
+      try {
+        const { Upload } = await import('@aws-sdk/lib-storage');
+        await new Upload({
+          client: await getS3(),
+          params: { Bucket: env.s3.bucket, Key: filename, Body: file.stream, ContentType: file.mimetype || 'application/octet-stream' },
+        }).done();
+        cb(null, { filename, url: `${UPLOADS_URL_PREFIX}/${filename}`, size: 0 });
+      } catch (err) {
+        cb(err);
+      }
+    },
+    _removeFile(_req, file, cb) {
+      deleteByName(file.filename).then(() => cb(null)).catch(cb);
+    },
+  };
+}
+
 /** Look up a stored file's metadata doc by name (or null). */
 export async function findFile(filename) {
   return getBucket().find({ filename }).limit(1).next();
 }
 
-/** Delete every stored version of `filename`. Best-effort; returns count removed. */
+/** Delete every stored version of `filename` (S3 + GridFS). Best-effort. */
 export async function deleteByName(filename) {
-  const bucket = getBucket();
-  const files = await bucket.find({ filename }).toArray();
-  await Promise.all(files.map((f) => bucket.delete(f._id).catch(() => {})));
-  return files.length;
+  if (s3Enabled()) {
+    try {
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      await (await getS3()).send(new DeleteObjectCommand({ Bucket: env.s3.bucket, Key: filename }));
+    } catch { /* may be a GridFS-only legacy file */ }
+  }
+  try {
+    const bucket = getBucket();
+    const files = await bucket.find({ filename }).toArray();
+    await Promise.all(files.map((f) => bucket.delete(f._id).catch(() => {})));
+  } catch { /* non-fatal */ }
 }
 
 /** Delete a stored file given its public `/api/uploads/<name>` URL (best-effort). */
@@ -96,12 +148,38 @@ export async function deleteByUrl(url) {
   }
 }
 
+/** If the file lives in S3, 302-redirect to a short-lived presigned (or CDN)
+ *  URL so the bytes are served by S3/CloudFront, not Node. Returns true if it
+ *  handled the response; false if the object isn't in S3 (→ GridFS fallback). */
+async function serveFromS3(filename, res) {
+  try {
+    const s3 = await getS3();
+    const { HeadObjectCommand, GetObjectCommand } = await import('@aws-sdk/client-s3');
+    await s3.send(new HeadObjectCommand({ Bucket: env.s3.bucket, Key: filename })); // 404s if absent
+    let url;
+    if (env.s3.publicBaseUrl) {
+      url = `${env.s3.publicBaseUrl.replace(/\/$/, '')}/${filename}`; // CDN in front of the bucket
+    } else {
+      const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+      url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: env.s3.bucket, Key: filename }), { expiresIn: 600 });
+    }
+    res.redirect(302, url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Express handler: stream a stored file back, with Range support (206) so video
- * and audio seek/stream. Re-applies the upload hardening headers.
+ * Express handler: serve a stored file. With S3 configured, redirects to a
+ * presigned/CDN URL (bytes bypass Node). Otherwise streams from GridFS with
+ * Range support (206) and the upload hardening headers.
  */
 export async function serveUpload(req, res) {
   const { filename } = req.params;
+
+  if (s3Enabled() && (await serveFromS3(filename, res))) return;
+
   const file = await findFile(filename);
   if (!file) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'File not found' } });
 

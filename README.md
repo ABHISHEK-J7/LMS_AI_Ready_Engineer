@@ -63,10 +63,19 @@ You need a running MongoDB (local `mongodb://localhost:27017/lms_ai_ready` or At
 
 Read before deploying:
 
-- **Run the backend as a SINGLE instance** (for now). The API rate limiter and the
-  exam-maintenance sweeper are in-process; running multiple replicas multiplies the
-  effective rate limits and duplicates the sweeper (risking double-grading). Move the
-  limiter to a shared store (Redis) + elect a single sweeper leader before scaling out.
+- **Scaling beyond one backend instance:** set **`REDIS_URL`** — this switches the rate
+  limiter to a shared Redis store, propagates auth-cache invalidations across replicas
+  (pub/sub), and elects a single sweeper leader (no double-grading). With Redis set you
+  can run N backend replicas behind a load balancer. Without it, run a **single** backend
+  instance (in-memory limiter + sweeper).
+- **Media at scale:** set **`S3_BUCKET`** (+ creds, optional `S3_PUBLIC_BASE_URL` for a
+  CDN) to stream uploads to object storage and serve them via presigned/CDN redirects —
+  media bytes then bypass Node + Mongo (essential for many concurrent video viewers).
+  GridFS remains the default + fallback.
+- **Performance:** logins use native `bcrypt` (threadpool, non-blocking); authenticated
+  requests use a TTL auth cache (invalidated on logout/suspend) to avoid a per-request DB
+  read. A reusable **load-test harness** lives in `LMS_Backend/loadtest/` — point
+  `LOADTEST_BASE` at a staging backend to measure the real ceiling on your infra.
 - **Timezone:** class times and exam windows are interpreted in the **server's local
   timezone**. Set `TZ` explicitly on the backend host/container (e.g. `TZ=Asia/Kolkata`)
   to match your operating region, or class/attendance/exam-window times can read wrong.

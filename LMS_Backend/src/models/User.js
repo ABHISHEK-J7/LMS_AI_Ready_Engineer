@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import mongoose, { Schema } from 'mongoose';
 import { UserRole, UserStatus } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';

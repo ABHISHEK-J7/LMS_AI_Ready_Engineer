@@ -46,12 +46,13 @@ export function createApp() {
   // handler streams with HTTP Range support and re-applies the hardening headers.
   app.get(`${UPLOADS_URL_PREFIX}/:filename`, authenticateFile, asyncHandler(serveUpload));
 
-  // Basic abuse protection on the API surface.
+  // Basic abuse protection on the API surface. Relaxed outside production so
+  // local dev / load tests aren't throttled (auth-route limiters do the same).
   app.use(
     '/api',
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      limit: 1000,
+      limit: env.isProd ? 1000 : 1_000_000,
       standardHeaders: true,
       legacyHeaders: false,
     }),

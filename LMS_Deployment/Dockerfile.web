@@ -1,0 +1,19 @@
+# ── AI Ready Engineer — static web (both SPAs) served by nginx ────────────────
+# Build context = repo root:  docker build -f LMS_Deployment/Dockerfile.web .
+# Serves the student/trainer app on :80 and the admin app on :8080, both proxying
+# /api (incl. /api/uploads) to the backend service. See nginx.conf.
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY LMS_Backend/package.json ./LMS_Backend/package.json
+COPY LMS_Frontend/package.json ./LMS_Frontend/package.json
+COPY LMS_Admin/package.json ./LMS_Admin/package.json
+RUN npm ci
+COPY . .
+RUN npm run build --workspace LMS_Frontend && npm run build --workspace LMS_Admin
+
+FROM nginx:alpine
+COPY --from=build /app/LMS_Frontend/dist /usr/share/nginx/html
+COPY --from=build /app/LMS_Admin/dist /usr/share/nginx/html-admin
+COPY LMS_Deployment/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80 8080

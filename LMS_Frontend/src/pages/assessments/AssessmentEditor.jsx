@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Check, Database, FileQuestion, Inbox, Trash2 } from 'lucide-react';
 import { AssessmentAvailability, ProctoringMode, QuestionType } from '@/shared';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, Skeleton, SkeletonTable, SkeletonText } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, Skeleton, SkeletonTable, SkeletonText, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAssessment, useDeleteQuestion, useSetAvailability, useSubmissions, useUpdateAssessment } from '@/lib/assessments';
 import {
   assessmentLabel,
@@ -22,6 +22,7 @@ import '../modules/modules.css';
 
 export function AssessmentEditor() {
   const { id } = useParams();
+  const confirm = useConfirm();
   const { data: a, isLoading, isError, error, refetch } = useAssessment(id);
   const setAvailability = useSetAvailability();
   const del = useDeleteQuestion();
@@ -116,7 +117,7 @@ export function AssessmentEditor() {
                   size="sm"
                   variant="ghost"
                   title="Remove from this test"
-                  onClick={() => window.confirm('Remove this question from the test?') && del.mutate({ id: a.id, questionId: q.id })}
+                  onClick={async () => { if (await confirm({ title: 'Remove this question from the test?', tone: 'danger', confirmLabel: 'Remove' })) del.mutate({ id: a.id, questionId: q.id }); }}
                 >
                   <Trash2 size={15} />
                 </Button>
@@ -155,8 +156,8 @@ function ProctoringCell({ s }) {
       {shots.length > 0 && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {shots.map((u, i) => (
-            <a key={i} href={u} target="_blank" rel="noreferrer" title="Open snapshot">
-              <img src={u} alt={`Snapshot ${i + 1}`} style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--color-border)' }} />
+            <a key={i} href={fileSrc(u)} target="_blank" rel="noreferrer" title="Open snapshot">
+              <img src={fileSrc(u)} alt={`Snapshot ${i + 1}`} style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--color-border)' }} />
             </a>
           ))}
         </div>
@@ -183,12 +184,26 @@ function ProctoringCard({ a }) {
   async function save() {
     setErr('');
     setMsg('');
+    const availableFrom = combineDateTime(form.examDate, form.windowStart);
+    const deadline = combineDateTime(form.examDate, form.windowEnd);
+    // Proctored (app/seb) tests must define a valid exam window + duration.
+    if (timed) {
+      if (!availableFrom || !deadline) {
+        return setErr('Set the exam date and both window opens/closes times.');
+      }
+      if (new Date(deadline).getTime() <= new Date(availableFrom).getTime()) {
+        return setErr('The window must close after it opens.');
+      }
+      if (!form.durationMinutes || Number(form.durationMinutes) <= 0) {
+        return setErr('Set a duration (minutes) for proctored tests.');
+      }
+    }
     try {
       await update.mutateAsync({
         id: a.id,
         proctoring: form.proctoring,
-        availableFrom: timed ? combineDateTime(form.examDate, form.windowStart) ?? null : null,
-        deadline: timed ? combineDateTime(form.examDate, form.windowEnd) ?? null : null,
+        availableFrom: timed ? availableFrom ?? null : null,
+        deadline: timed ? deadline ?? null : null,
         durationMinutes: timed && form.durationMinutes ? Number(form.durationMinutes) : null,
       });
       setMsg('Saved.');

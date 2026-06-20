@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MessageCircleQuestion, Star } from 'lucide-react';
 import { DoubtStatus, UserRole } from '@/shared';
-import { Badge, Button, Card, EmptyState, Input, Modal, Select, SkeletonCards, Skeleton, Textarea } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Skeleton, Textarea } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -48,7 +48,7 @@ export function DoubtsPage() {
   const isStudent = role === UserRole.STUDENT;
 
   const [statusFilter, setStatusFilter] = useState('');
-  const { data: doubts, isLoading } = useDoubts({ status: statusFilter });
+  const { data: doubts, isLoading, isError, error, refetch } = useDoubts({ status: statusFilter });
   const { data: modules } = useModules();
   const { data: stats } = useMyDoubtStats(!isStudent);
 
@@ -111,7 +111,9 @@ export function DoubtsPage() {
         {isStudent && <Button onClick={() => setCreating(true)}>+ Ask a Doubt</Button>}
       </div>
 
-      {isLoading && !doubts ? (
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !doubts ? (
         <SkeletonCards count={4} height="4.5rem" />
       ) : !doubts || doubts.length === 0 ? (
         isStudent ? (
@@ -223,15 +225,19 @@ function DoubtThread({ id, role, onClose }) {
 
   async function submitClose() {
     if (!rating) return;
-    await close.mutateAsync({ id, rating });
-    setRateOpen(false);
+    try {
+      await close.mutateAsync({ id, rating });
+      setRateOpen(false);
+    } catch { /* toast handled globally */ }
   }
 
   async function send(e) {
     e?.preventDefault();
     if (!body.trim()) return;
-    await reply.mutateAsync({ id, body: body.trim() });
-    setBody('');
+    try {
+      await reply.mutateAsync({ id, body: body.trim() });
+      setBody('');
+    } catch { /* toast handled globally */ }
   }
 
   // Enter sends; Shift+Enter inserts a newline.

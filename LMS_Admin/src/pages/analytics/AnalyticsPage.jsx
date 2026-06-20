@@ -32,17 +32,22 @@ function AdminAnalytics() {
     );
   }
 
-  const { counts, lowAttendance, batchSizes, moduleCompletion } = data;
+  // Defensive defaults: the /analytics/admin payload can come back partial, and
+  // destructuring without defaults would white-screen the page.
+  const counts = data.counts ?? {};
+  const lowAttendance = data.lowAttendance ?? { count: 0, threshold: 75, students: [] };
+  const batchSizes = data.batchSizes ?? [];
+  const moduleCompletion = data.moduleCompletion ?? [];
   return (
     <>
       <PageHeader title="Analytics" subtitle="Institution-wide overview." />
 
       <div className="stat-grid">
-        <Stat label="Students" value={counts.students} accent />
-        <Stat label="Trainers" value={counts.trainers} />
-        <Stat label="Active Batches" value={counts.batches} />
-        <Stat label="Modules" value={counts.modules} />
-        <Stat label="Certificates Issued" value={counts.certificates} />
+        <Stat label="Students" value={counts.students ?? 0} accent />
+        <Stat label="Trainers" value={counts.trainers ?? 0} />
+        <Stat label="Active Batches" value={counts.batches ?? 0} />
+        <Stat label="Modules" value={counts.modules ?? 0} />
+        <Stat label="Certificates Issued" value={counts.certificates ?? 0} />
       </div>
 
       <div className="dash-grid-2" style={{ marginBottom: 'var(--space-6)' }}>
@@ -59,9 +64,9 @@ function AdminAnalytics() {
       <Card>
         <CardHeader
           title="Low Attendance Alerts"
-          subtitle={`${lowAttendance.count} student(s) below the ${lowAttendance.threshold}% minimum`}
+          subtitle={`${lowAttendance.count ?? 0} student(s) below the ${lowAttendance.threshold ?? 75}% minimum`}
         />
-        {lowAttendance.students.length === 0 ? (
+        {(lowAttendance.students ?? []).length === 0 ? (
           <p className="lms-muted" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <CircleCheck size={16} style={{ color: 'var(--color-success)' }} />
             All students are meeting the attendance requirement.
@@ -71,7 +76,7 @@ function AdminAnalytics() {
             <table className="table">
               <thead><tr><th>Student</th><th>Batch</th><th>Attendance</th></tr></thead>
               <tbody>
-                {lowAttendance.students.map((s, i) => (
+                {(lowAttendance.students ?? []).map((s, i) => (
                   <tr key={i}>
                     <td>{s.student}</td>
                     <td>{s.batch}</td>

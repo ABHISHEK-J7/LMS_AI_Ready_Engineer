@@ -142,6 +142,11 @@
   background: var(--color-background);
   color: var(--color-text-primary);
 }
+.topbar__menu:focus-visible,
+.sidebar__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
 .sidebar__overlay {
   position: fixed;
   inset: 0;

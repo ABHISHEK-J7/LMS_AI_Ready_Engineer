@@ -142,6 +142,11 @@
   background: var(--color-background);
   color: var(--color-text-primary);
 }
+.topbar__menu:focus-visible,
+.sidebar__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
 .sidebar__overlay {
   position: fixed;
   inset: 0;
@@ -160,6 +165,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  border-radius: var(--radius-md);
+}
+.user-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 .user-chip__avatar {
   width: 36px;

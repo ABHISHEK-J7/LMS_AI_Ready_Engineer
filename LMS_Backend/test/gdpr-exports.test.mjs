@@ -63,9 +63,12 @@ test('admin erase anonymizes the user and revokes their tokens', async () => {
   assert.equal(await ctx.models.Submission.countDocuments({ student: student._id }), 1);
 });
 
-test('erase is admin-only', async () => {
+test('erase is admin-only, and the erased user is immediately locked out', async () => {
+  // Trainer is role-gated out of the admin-only erase route.
   assert.equal((await ctx.req('POST', `/users/${student._id}/erase`, T)).status, 403);
-  assert.equal((await ctx.req('POST', `/users/${student._id}/erase`, S)).status, 403);
+  // The student was erased in the previous test (tokenVersion bumped + archived),
+  // so their pre-erase access token is now revoked → 401, not merely forbidden.
+  assert.equal((await ctx.req('POST', `/users/${student._id}/erase`, S)).status, 401);
 });
 
 // ── CSV exports ───────────────────────────────────────────────────────────────

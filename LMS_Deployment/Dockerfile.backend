@@ -1,0 +1,26 @@
+# ── AI Ready Engineer — backend API (Express + Mongoose) ──────────────────────
+# Build context = repo root:  docker build -f LMS_Deployment/Dockerfile.backend .
+FROM node:20-alpine AS deps
+WORKDIR /app
+# Workspace manifests for a deterministic, prod-only install of just the backend.
+COPY package.json package-lock.json ./
+COPY LMS_Backend/package.json ./LMS_Backend/package.json
+COPY LMS_Frontend/package.json ./LMS_Frontend/package.json
+COPY LMS_Admin/package.json ./LMS_Admin/package.json
+RUN npm ci --omit=dev --workspace LMS_Backend --include-workspace-root=false
+
+FROM node:20-alpine AS run
+WORKDIR /app
+ENV NODE_ENV=production
+# Run as a non-root user.
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/LMS_Backend/node_modules ./LMS_Backend/node_modules
+COPY LMS_Backend ./LMS_Backend
+USER app
+WORKDIR /app/LMS_Backend
+EXPOSE 5050
+# /api/health returns 503 when the DB is down, so this is a real readiness check.
+HEALTHCHECK --interval=30s --timeout=4s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:5050/api/health >/dev/null 2>&1 || exit 1
+CMD ["node", "src/server.js"]

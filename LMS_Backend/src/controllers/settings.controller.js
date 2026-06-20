@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { ThemeName } from '#shared';
 import { getSettings, getStoredSebConfigKey } from '../models/index.js';
 import { env } from '../config/env.js';
-import { storeUpload } from '../services/fileStore.js';
+import { gridfsStorage } from '../services/fileStore.js';
 import { aiKeySource, getEvaluator } from '../services/aiGrading.js';
 import { verifyZoom, zoomConfigured, zoomSource } from '../services/meetings.js';
+import { livekitConfigured } from '../services/livekit.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -44,6 +45,8 @@ async function settingsView(s) {
     zoomConfigured: await zoomConfigured(),
     zoomSource: await zoomSource(),
     zoomLocked: Boolean(env.zoomAccountId && env.zoomClientId && env.zoomClientSecret),
+    livekitConfigured: livekitConfigured(), // in-app live classes
+
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   };
@@ -73,7 +76,7 @@ export async function updateSettings(req, res) {
 
 // ── Safe Exam Browser config upload (.seb) → MongoDB/GridFS ───────────────────
 export const uploadSebConfig = multer({
-  storage: multer.memoryStorage(),
+  storage: gridfsStorage('seb'),
   limits: { fileSize: 2 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -86,8 +89,7 @@ export const uploadSebConfig = multer({
 export async function setSebConfig(req, res) {
   if (!req.file) throw ApiError.badRequest('Choose a .seb config file to upload.');
   const s = await getSettings();
-  const { url } = await storeUpload(req.file, 'seb');
-  s.sebConfigUrl = url;
+  s.sebConfigUrl = req.file.url;
   await s.save();
   ok(res, await settingsView(s));
 }

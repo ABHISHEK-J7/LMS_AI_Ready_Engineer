@@ -107,7 +107,7 @@ function StaffAttendanceView() {
 }
 
 function EntryView() {
-  const { data: classes, isLoading } = useClasses();
+  const { data: classes, isLoading, isError, error, refetch } = useClasses();
   const [selected, setSelected] = useState(null);
 
   return (
@@ -116,6 +116,8 @@ function EntryView() {
         <CardHeader title="Select a class" subtitle="Choose a session to record attendance for." />
         {isLoading && !classes ? (
           <SkeletonTable rows={5} cols={5} />
+        ) : isError ? (
+          <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
         ) : !classes || classes.length === 0 ? (
           <EmptyState
             icon={<CalendarX size={26} />}
@@ -162,7 +164,7 @@ function ComplianceView() {
   const toast = useToast();
   const { data: batches } = useBatches();
   const [batchId, setBatchId] = useState('');
-  const { data, isLoading } = useBatchAttendance(batchId);
+  const { data, isLoading, isError, error, refetch } = useBatchAttendance(batchId);
 
   return (
     <>
@@ -180,6 +182,10 @@ function ComplianceView() {
 
       {batchId && isLoading && !data && (
         <Card><SkeletonTable rows={5} cols={7} /></Card>
+      )}
+
+      {batchId && isError && !data && (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
       )}
 
       {data && (

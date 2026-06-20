@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AssessmentAvailability, AssessmentType, ProctoringMode, UserRole } from '@/shared';
 import { FileQuestion } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, SkeletonTable } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, SkeletonTable, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -116,9 +116,10 @@ function ExamWindowFields({ form, setForm }) {
 
 function StaffAssessments() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { data: modules } = useModules();
   const [moduleId, setModuleId] = useState('');
-  const { data: assessments, isLoading } = useAssessments(moduleId ? { module: moduleId } : {});
+  const { data: assessments, isLoading, isError, error, refetch } = useAssessments(moduleId ? { module: moduleId } : {});
   const moduleObj = (modules ?? []).find((m) => m.id === moduleId);
   const topics = moduleObj?.topics ?? [];
 
@@ -132,6 +133,20 @@ function StaffAssessments() {
   async function submitCreate(e) {
     e.preventDefault();
     setErr('');
+    // Proctored (app/seb) tests must define a valid exam window + duration.
+    if (form.proctoring !== ProctoringMode.NONE) {
+      const availableFrom = combineDateTime(form.examDate, form.windowStart);
+      const deadline = combineDateTime(form.examDate, form.windowEnd);
+      if (!availableFrom || !deadline) {
+        return setErr('Set the exam date and both window opens/closes times.');
+      }
+      if (new Date(deadline).getTime() <= new Date(availableFrom).getTime()) {
+        return setErr('The window must close after it opens.');
+      }
+      if (!form.durationMinutes || Number(form.durationMinutes) <= 0) {
+        return setErr('Set a duration (minutes per student) for proctored tests.');
+      }
+    }
     try {
       const body = {
         title: form.title,
@@ -185,6 +200,8 @@ function StaffAssessments() {
           title="Select a module"
           description="Choose a module to manage its assessments."
         />
+      ) : isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
       ) : isLoading && !assessments ? (
         <SkeletonTable rows={5} cols={5} />
       ) : assessments && assessments.length === 0 ? (
@@ -225,7 +242,7 @@ function StaffAssessments() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => window.confirm('Delete this assessment?') && del.mutate(a.id)}
+                          onClick={async () => { if (await confirm({ title: 'Delete this assessment?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate(a.id); }}
                         >
                           Delete
                         </Button>

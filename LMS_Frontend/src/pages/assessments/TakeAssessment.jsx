@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Check, CheckCircle2, Lock, ShieldAlert, Trophy, X } from 'lucide-react';
 import { QuestionType } from '@/shared';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Skeleton, SkeletonText, Spinner, Textarea } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Skeleton, SkeletonText, Spinner, Textarea, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { assessmentKeys, useAssessment, useLeaderboard, useMySubmission, useSubmitAssessment } from '@/lib/assessments';
@@ -293,6 +293,7 @@ function Leaderboard({ id }) {
 }
 
 function Quiz({ a }) {
+  const confirm = useConfirm();
   const [answers, setAnswers] = useState({}); // questionId -> { selectedOption | text }
   const [err, setErr] = useState('');
   const submit = useSubmitAssessment();
@@ -309,7 +310,12 @@ function Quiz({ a }) {
   async function onSubmit() {
     setErr('');
     if (answeredCount < a.questions.length) {
-      if (!window.confirm(`You've answered ${answeredCount}/${a.questions.length}. Submit anyway?`)) return;
+      const ok = await confirm({
+        title: 'Submit incomplete attempt?',
+        message: `You've answered ${answeredCount}/${a.questions.length}. Submit anyway?`,
+        confirmLabel: 'Submit',
+      });
+      if (!ok) return;
     }
     const payload = a.questions
       .map((q) => {

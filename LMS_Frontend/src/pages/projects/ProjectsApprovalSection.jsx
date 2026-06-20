@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FolderOpen, Github } from 'lucide-react';
-import { Badge, Card, CardHeader, EmptyState, SkeletonCards } from '@/components/ui';
-import { apiErrorMessage } from '@/lib/api';
+import { Badge, Card, CardHeader, EmptyState, SkeletonCards, useConfirm } from '@/components/ui';
+import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useProjectReviews, useReviewProject } from '@/lib/projects';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { formatDate } from '@/lib/format';
@@ -14,6 +14,7 @@ const STATUS = {
 
 /** Projects panel for the Approvals page — cards open a detail modal to approve/reject. */
 export function ProjectsApprovalSection() {
+  const confirm = useConfirm();
   const { data, isLoading } = useProjectReviews();
   const review = useReviewProject();
   const [viewing, setViewing] = useState(null);
@@ -28,9 +29,17 @@ export function ProjectsApprovalSection() {
     setErr('');
     let note;
     if (decision === 'reject') {
-      const input = window.prompt('Reason for rejection (optional):');
-      if (input === null) return;
-      note = input || undefined;
+      const input = await confirm({
+        prompt: true,
+        title: 'Reject project',
+        message: 'Give the student a reason for rejection.',
+        placeholder: 'Reason for rejection…',
+        confirmLabel: 'Reject',
+        tone: 'danger',
+        required: true,
+      });
+      if (input === null) return; // cancelled
+      note = input;
     }
     setBusy(true);
     try {
@@ -47,7 +56,7 @@ export function ProjectsApprovalSection() {
     <div key={p.id} className="project-card" onClick={() => setViewing(p)}>
       <div className="project-card__cover" style={{ position: 'relative' }}>
         {p.images?.length > 1 && <span className="project-card__count">{p.images.length} images</span>}
-        {p.images?.[0] ? <img src={p.images[0]} alt={p.title} /> : <Github size={28} />}
+        {p.images?.[0] ? <img src={fileSrc(p.images[0])} alt={p.title} /> : <Github size={28} />}
       </div>
       <div className="project-card__body">
         <div className="project-card__title">{p.title}</div>

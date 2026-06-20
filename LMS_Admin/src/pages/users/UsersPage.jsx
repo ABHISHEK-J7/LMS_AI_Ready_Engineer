@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, UploadCloud, Users } from 'lucide-react';
 import { UserRole, UserStatus } from '@/shared';
-import { Badge, Button, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, useToast } from '@/components/ui';
+import { Badge, Button, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { BulkUploadUsers } from '@/components/BulkUploadUsers';
 import { apiErrorMessage, downloadFile } from '@/lib/api';
@@ -29,6 +29,7 @@ const PAGE_SIZE = 20;
 export function UsersPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const [filters, setFilters] = useState({ role: '', status: '', search: '', page: 1 });
   const query = useUsers({ ...filters, pageSize: PAGE_SIZE });
   const data = query.data;
@@ -53,9 +54,22 @@ export function UsersPage() {
     }
   }
 
-  function onErase(u) {
-    if (!window.confirm(`Permanently erase ${u.name}'s personal data and uploaded files? This cannot be undone. Academic records are kept but de-identified.`)) return;
+  async function onErase(u) {
+    const ok = await confirm({
+      title: `Erase ${u.name}'s data?`,
+      message:
+        'This permanently erases their personal data and uploaded files. It cannot be undone. Academic records are kept but de-identified.',
+      confirmLabel: 'Erase',
+      tone: 'danger',
+    });
+    if (!ok) return;
     erase.mutate(u.id, { onError: (err) => toast.error(apiErrorMessage(err)) });
+  }
+
+  async function onArchive(u) {
+    if (await confirm({ title: `Archive ${u.name}?`, message: 'They will lose access until reactivated.' })) {
+      archive.mutate(u.id);
+    }
   }
 
   function setFilter(patch) {
@@ -149,7 +163,7 @@ export function UsersPage() {
                         <Button size="sm" variant="outline" onClick={() => setEditing({ id: u.id, name: u.name, phone: u.phone ?? '', status: u.status })}>Edit</Button>
                         <Button size="sm" variant="outline" title="Export this user's data (GDPR)" onClick={() => onExport(u)}><Download size={14} /></Button>
                         {u.status !== UserStatus.ARCHIVED && (
-                          <Button size="sm" variant="ghost" onClick={() => window.confirm(`Archive ${u.name}?`) && archive.mutate(u.id)}>Archive</Button>
+                          <Button size="sm" variant="ghost" onClick={() => onArchive(u)}>Archive</Button>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => onErase(u)}>Erase</Button>
                       </div>

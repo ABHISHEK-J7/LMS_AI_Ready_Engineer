@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, FolderOpen } from 'lucide-react';
 import { AssessmentAvailability, AssessmentType, ProctoringMode, UserRole } from '@/shared';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, SkeletonTable } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, SkeletonTable, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useAssessments, useCreateAssessment, useDeleteAssessment, useSetAvailability } from '@/lib/assessments';
 import { useModules } from '@/lib/modules';
 import { assessmentLabel, ASSESSMENT_TYPE_LABEL, ASSESSMENT_TYPE_TONE, PROCTORING_OPTIONS, submissionBadge } from './assessmentsUi';
-import { combineDateTime } from './examWindow';
+import { combineDateTime, validateExamWindow } from './examWindow';
 import '../modules/modules.css';
 
 export function AssessmentsPage() {
@@ -127,10 +127,21 @@ function StaffAssessments() {
   const create = useCreateAssessment();
   const setAvailability = useSetAvailability();
   const del = useDeleteAssessment();
+  const confirm = useConfirm();
+
+  async function onDelete(id) {
+    if (await confirm({ title: 'Delete this assessment?', message: 'Questions and submissions for it will be removed.', confirmLabel: 'Delete', tone: 'danger' })) {
+      del.mutate(id);
+    }
+  }
 
   async function submitCreate(e) {
     e.preventDefault();
     setErr('');
+    if (form.proctoring !== ProctoringMode.NONE) {
+      const windowErr = validateExamWindow(form);
+      if (windowErr) return setErr(windowErr);
+    }
     try {
       const body = {
         title: form.title,
@@ -224,7 +235,7 @@ function StaffAssessments() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => window.confirm('Delete this assessment?') && del.mutate(a.id)}
+                          onClick={() => onDelete(a.id)}
                         >
                           Delete
                         </Button>

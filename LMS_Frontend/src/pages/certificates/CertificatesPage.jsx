@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Award, ExternalLink, FileText, Trash2, Upload } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Skeleton, SkeletonCards } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Skeleton, SkeletonCards, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useMyCertificates } from '@/lib/certificates';
 import {
@@ -34,7 +34,7 @@ const CERT_STATUS = {
 
 function StudentCertificates() {
   const user = useAuth((s) => s.user);
-  const { data: certs, isLoading } = useMyCertificates();
+  const { data: certs, isLoading, isError, error, refetch } = useMyCertificates();
   const [view, setView] = useState(null);
 
   return (
@@ -51,7 +51,9 @@ function StudentCertificates() {
             title="AI Ready Engineer Certificates"
             subtitle="Earned automatically as you complete each module in the program."
           />
-          {isLoading && !certs ? (
+          {isError ? (
+            <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+          ) : isLoading && !certs ? (
             <SkeletonCards count={3} height="4rem" />
           ) : certs && certs.length === 0 ? (
             <EmptyState
@@ -110,7 +112,8 @@ function StudentCertificates() {
 const BLANK = { title: '', issuer: '', url: '', file: null, mode: 'link' };
 
 function ExternalCertificates() {
-  const { data: items, isLoading } = useMyExternalCertificates();
+  const confirm = useConfirm();
+  const { data: items, isLoading, isError, error, refetch } = useMyExternalCertificates();
   const add = useAddExternalCertificate();
   const del = useDeleteExternalCertificate();
   const [form, setForm] = useState(BLANK);
@@ -149,7 +152,9 @@ function ExternalCertificates() {
         subtitle="Add certificates you've earned outside the program — paste a link or upload a PDF/image."
       />
 
-      {isLoading && !items ? (
+      {isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : isLoading && !items ? (
         <Skeleton height="7rem" radius="var(--radius-lg)" />
       ) : !items || items.length === 0 ? (
         <EmptyState
@@ -163,7 +168,7 @@ function ExternalCertificates() {
             <div key={c.id} className="ext-cert">
               <div className="ext-cert__head">
                 <div className="ext-cert__thumb">
-                  {isImage(c.url) ? <img src={c.url} alt={c.title} /> : <FileText size={20} />}
+                  {isImage(c.url) ? <img src={fileSrc(c.url)} alt={c.title} /> : <FileText size={20} />}
                 </div>
                 <Badge tone={CERT_STATUS[c.status]?.tone ?? 'neutral'}>
                   {CERT_STATUS[c.status]?.label ?? 'Pending'}
@@ -175,14 +180,14 @@ function ExternalCertificates() {
                 <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>“{c.note}”</div>
               )}
               <div className="ext-cert__foot">
-                <a href={c.url} target="_blank" rel="noreferrer" className="ext-cert__open">
+                <a href={fileSrc(c.url)} target="_blank" rel="noreferrer" className="ext-cert__open">
                   <ExternalLink size={13} /> Open
                 </a>
                 <button
                   type="button"
                   className="icon-btn icon-btn--danger"
                   aria-label={`Delete ${c.title}`}
-                  onClick={() => window.confirm('Remove this certificate?') && del.mutate(c.id)}
+                  onClick={async () => { if (await confirm({ title: 'Remove this certificate?', tone: 'danger', confirmLabel: 'Remove' })) del.mutate(c.id); }}
                 >
                   <Trash2 size={13} />
                 </button>

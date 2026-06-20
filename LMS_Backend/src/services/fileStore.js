@@ -1,4 +1,5 @@
 import path from 'node:path';
+import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import { UPLOADS_URL_PREFIX } from '../config/storage.js';
 
@@ -32,16 +33,47 @@ export function saveBuffer(buffer, { filename, contentType } = {}) {
   });
 }
 
+/** A collision-proof, non-guessable stored filename (crypto, not Math.random). */
+function genName(prefix, originalname) {
+  const ext = path.extname(originalname || '');
+  return `${prefix}-${Date.now()}-${crypto.randomBytes(9).toString('hex')}${ext}`;
+}
+
 /**
  * Store a multer in-memory file under a generated, collision-proof name.
  * @param {{buffer:Buffer, originalname?:string, mimetype?:string}} file
  * @param {string} prefix e.g. 'avatar' | 'resource' | 'project' | 'cert' | 'proctor' | 'seb'
  */
 export async function storeUpload(file, prefix = 'file') {
-  const ext = path.extname(file.originalname || '');
-  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const filename = `${prefix}-${stamp}${ext}`;
-  return saveBuffer(file.buffer, { filename, contentType: file.mimetype });
+  return saveBuffer(file.buffer, { filename: genName(prefix, file.originalname), contentType: file.mimetype });
+}
+
+/**
+ * A multer storage engine that streams the upload straight into GridFS — the
+ * file never sits fully in process memory (avoids OOM on large videos). On
+ * success `req.file` gets `{ filename, url, size }`.
+ * @param {string} prefix file-category prefix for the stored name
+ */
+export function gridfsStorage(prefix = 'file') {
+  return {
+    _handleFile(_req, file, cb) {
+      const filename = genName(prefix, file.originalname);
+      let upload;
+      try {
+        upload = getBucket().openUploadStream(filename, { contentType: file.mimetype || 'application/octet-stream' });
+      } catch (err) {
+        return cb(err);
+      }
+      file.stream.on('error', (err) => { upload.destroy(err); cb(err); });
+      upload.on('error', cb);
+      upload.on('finish', () => cb(null, { filename, url: `${UPLOADS_URL_PREFIX}/${filename}`, size: upload.length }));
+      file.stream.pipe(upload);
+    },
+    _removeFile(_req, file, cb) {
+      // Called by multer to roll back (e.g. when a later limit is exceeded).
+      deleteByName(file.filename).then(() => cb(null)).catch(cb);
+    },
+  };
 }
 
 /** Look up a stored file's metadata doc by name (or null). */

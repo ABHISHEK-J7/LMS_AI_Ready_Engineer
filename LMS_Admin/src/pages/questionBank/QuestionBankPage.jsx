@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { AlertTriangle, CheckCircle2, Download, FileQuestion, FolderOpen, Lock, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
 import { QuestionType, UserRole } from '@/shared';
-import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Select, SkeletonTable } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Select, SkeletonTable, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -32,6 +32,13 @@ export function QuestionBankPage() {
   const [editing, setEditing] = useState(null); // question item or {} for new
   const [importing, setImporting] = useState(false);
   const del = useDeleteBankQuestion();
+  const confirm = useConfirm();
+
+  async function onDelete(id) {
+    if (await confirm({ title: 'Delete this question?', message: 'It will be removed from the bank.', confirmLabel: 'Delete', tone: 'danger' })) {
+      del.mutate(id);
+    }
+  }
 
   if (role === UserRole.STUDENT) {
     return (
@@ -145,7 +152,7 @@ export function QuestionBankPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => window.confirm('Delete this question from the bank?') && del.mutate(q.id)}
+                            onClick={() => onDelete(q.id)}
                           >
                             <Trash2 size={14} />
                           </Button>
@@ -309,15 +316,19 @@ function resolveCorrect(correctRaw, options) {
   if (/^[A-D]$/.test(letter)) return letter.charCodeAt(0) - 65;
   return options.findIndex((o) => o.toLowerCase() === c.toLowerCase());
 }
+/**
+ * Convert a normalized row to a question. Returns `{ question }` on success or
+ * `{ error }` with a human reason so the import UI can list skipped rows.
+ */
 function rowToQuestion(row, type) {
-  if (!row.prompt) return null;
+  if (!row.prompt) return { error: 'Missing question text' };
   const points = Math.max(1, Math.min(100, Math.round(Number(row.points) || 1)));
-  if (type !== QuestionType.MCQ) return { type, prompt: row.prompt, points };
+  if (type !== QuestionType.MCQ) return { question: { type, prompt: row.prompt, points } };
   const options = [row.opt1, row.opt2, row.opt3, row.opt4].filter((o) => o && o.trim() !== '');
-  if (options.length < 2) return null;
+  if (options.length < 2) return { error: 'Needs at least 2 options' };
   const correctOption = resolveCorrect(row.correct, options);
-  if (correctOption < 0) return null;
-  return { type, prompt: row.prompt, options, correctOption, points };
+  if (correctOption < 0) return { error: 'Correct answer does not match any option' };
+  return { question: { type, prompt: row.prompt, options, correctOption, points } };
 }
 
 const MCQ_HEADERS = ['question', 'option 1', 'option 2', 'option 3', 'option 4', 'correct answer', 'points'];
@@ -333,8 +344,10 @@ function BankExcelImport({ moduleId, topics, onClose }) {
   const bulk = useBulkAddBankQuestions();
 
   const isMcq = type === QuestionType.MCQ;
-  const questions = (rows ?? []).map((r) => rowToQuestion(r, type)).filter(Boolean);
-  const invalid = (rows ?? []).length - questions.length;
+  // Convert every row, keeping the valid questions and a per-row list of skips.
+  const parsed = (rows ?? []).map((r, i) => ({ row: i + 1, prompt: r.prompt, ...rowToQuestion(r, type) }));
+  const questions = parsed.filter((p) => p.question).map((p) => p.question);
+  const skippedRows = parsed.filter((p) => p.error);
 
   async function onFile(e) {
     setError('');
@@ -371,7 +384,16 @@ function BankExcelImport({ moduleId, topics, onClose }) {
     setError('');
     try {
       const res = await bulk.mutateAsync({ module: moduleId, topic: topic || null, items: questions });
-      setResult({ added: res?.added ?? questions.length });
+      // Prefer the server's real counts; fall back to what we sent. Combine the
+      // server's skipped items with the rows we dropped while parsing the sheet.
+      const serverSkipped = Array.isArray(res?.skipped) ? res.skipped : [];
+      setResult({
+        added: res?.added ?? questions.length,
+        skipped: [
+          ...skippedRows.map((s) => ({ label: `Row ${s.row}${s.prompt ? ` — ${s.prompt}` : ''}`, reason: s.error })),
+          ...serverSkipped.map((s) => ({ label: s.prompt ?? s.label ?? 'Question', reason: s.reason ?? 'Rejected by server' })),
+        ],
+      });
     } catch (e2) {
       setError(apiErrorMessage(e2));
     }
@@ -383,6 +405,18 @@ function BankExcelImport({ moduleId, topics, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--color-success)' }}>
           <CheckCircle2 size={20} /> <strong>{result.added} question(s) added to the bank.</strong>
         </div>
+        {result.skipped.length > 0 && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-warning)', marginBottom: 4 }}>
+              <AlertTriangle size={16} /> {result.skipped.length} skipped
+            </div>
+            <ul style={{ margin: 0, paddingLeft: '1.1rem', maxHeight: 160, overflow: 'auto', fontSize: 'var(--font-size-sm)' }}>
+              {result.skipped.map((s, i) => (
+                <li key={i} className="lms-muted">{s.label} — {s.reason}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button onClick={onClose}>Done</Button>
         </div>
@@ -427,12 +461,19 @@ function BankExcelImport({ moduleId, topics, onClose }) {
       {rows && (
         <div style={{ fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <CheckCircle2 size={16} style={{ color: 'var(--color-primary)' }} />
-          <span><strong>{questions.length}</strong> ready to add{invalid > 0 ? ` · ${invalid} row(s) skipped` : ''}.</span>
+          <span><strong>{questions.length}</strong> ready to add{skippedRows.length > 0 ? ` · ${skippedRows.length} row(s) will be skipped` : ''}.</span>
         </div>
       )}
-      {rows && invalid > 0 && questions.length === 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)' }}>
-          <AlertTriangle size={15} /> Check the column headers match the template.
+      {rows && skippedRows.length > 0 && (
+        <div style={{ fontSize: 'var(--font-size-sm)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-warning)', marginBottom: 4 }}>
+            <AlertTriangle size={15} /> {skippedRows.length} row(s) will be skipped
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '1.1rem', maxHeight: 140, overflow: 'auto' }}>
+            {skippedRows.map((s) => (
+              <li key={s.row} className="lms-muted">Row {s.row}{s.prompt ? ` — ${s.prompt}` : ''} — {s.error}</li>
+            ))}
+          </ul>
         </div>
       )}
       {error && <div className="field__error">{error}</div>}

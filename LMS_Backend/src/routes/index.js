@@ -25,10 +25,12 @@ import auditRoutes from './audit.routes.js';
 const router = Router();
 
 router.get('/health', (_req, res) => {
-  ok(res, {
-    status: 'ok',
-    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    time: new Date().toISOString(),
+  // Readiness: report 503 (not 200) when the DB is down, so a load balancer /
+  // orchestrator stops routing traffic to an instance that can't serve.
+  const dbUp = mongoose.connection.readyState === 1;
+  res.status(dbUp ? 200 : 503).json({
+    success: dbUp,
+    data: { status: dbUp ? 'ok' : 'degraded', db: dbUp ? 'connected' : 'disconnected', time: new Date().toISOString() },
   });
 });
 

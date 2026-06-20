@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '@/shared';
 import { BookOpen } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -25,6 +25,7 @@ export function ModulesPage() {
   const [formError, setFormError] = useState('');
   const createModule = useCreateModule();
   const archiveModule = useArchiveModule();
+  const confirm = useConfirm();
 
   const subtitle = {
     [UserRole.ADMIN]: 'Create and manage the AI Ready Engineer curriculum.',
@@ -50,7 +51,7 @@ export function ModulesPage() {
 
   async function onArchive(e, id) {
     e.stopPropagation();
-    if (!window.confirm('Archive this module? It will be hidden from active curriculum.')) return;
+    if (!(await confirm({ title: 'Archive this module?', message: 'It will be hidden from active curriculum.' }))) return;
     await archiveModule.mutateAsync(id);
   }
 

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { UserRole } from '@/shared';
+import { useNavigate } from 'react-router-dom';
+import { MeetingProvider, UserRole } from '@/shared';
 import { CalendarClock } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Modal, SkeletonCards, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -21,6 +22,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function SchedulePage() {
+  const confirm = useConfirm();
   const user = useAuth((s) => s.user);
   const role = user?.role;
   const canManage = role === UserRole.ADMIN || role === UserRole.TRAINER;
@@ -44,10 +46,18 @@ export function SchedulePage() {
   const { data: modules } = useModules();
   const { data: trainers } = useTrainers({ enabled: isAdmin });
 
+  const navigate = useNavigate();
   const [modal, setModal] = useState({ open: false, mode: 'create', initial: null });
   const updateClass = useUpdateClass();
   const deleteClass = useDeleteClass();
   const joinClass = useJoinClass();
+
+  // In-app (LiveKit) classes open the immersive room route; external providers
+  // open their meeting link in a new tab.
+  const enterClass = (c) => {
+    if (c.provider === MeetingProvider.INTERNAL) navigate(`/app/class/${c.id}/live`);
+    else window.open(c.meetingLink, '_blank', 'noopener,noreferrer');
+  };
 
   const isStudent = role === UserRole.STUDENT;
   // Classes the student attended but hasn't rated yet. Only those they were
@@ -56,6 +66,10 @@ export function SchedulePage() {
   const eligiblePending = (pendingRatings ?? []).filter(ratingEligible);
   const mustRate = eligiblePending.length > 0;
   const [rateTarget, setRateTarget] = useState(null);
+  // Class selected from the calendar → opens a detail dialog (join / manage).
+  const [detail, setDetail] = useState(null);
+  // A day's full class list, opened from the calendar "+N more" link.
+  const [dayList, setDayList] = useState(null);
 
   // Student Join: if an eligible class is unrated, block and open the rating
   // modal; otherwise record entry time and open the meeting in a new tab.
@@ -65,7 +79,7 @@ export function SchedulePage() {
       return;
     }
     joinClass.mutate(c.id);
-    window.open(c.meetingLink, '_blank', 'noopener,noreferrer');
+    enterClass(c);
   }
 
   const groups = groupByDay(classes ?? []);
@@ -134,7 +148,8 @@ export function SchedulePage() {
         <MonthCalendar
           month={month}
           classes={classes ?? []}
-          onSelect={(c) => ownerCanManage(c) && setModal({ open: true, mode: 'edit', initial: c })}
+          onSelect={(c) => setDetail(c)}
+          onSelectDay={(items) => setDayList(items)}
         />
       ) : groups.length === 0 ? (
         <EmptyState
@@ -176,15 +191,15 @@ export function SchedulePage() {
                   </div>
                 </div>
                 <div className="class-actions">
-                  {c.meetingLink && c.status !== 'cancelled' && !ended ? (
+                  {(c.meetingLink || c.provider === MeetingProvider.INTERNAL) && c.status !== 'cancelled' && !ended ? (
                     isStudent ? (
                       <Button size="sm" onClick={() => handleStudentJoin(c)}>
-                        {mustRate ? 'Rate to join' : 'Join'}
+                        {mustRate ? 'Rate to join' : c.provider === MeetingProvider.INTERNAL ? 'Join live class' : 'Join'}
                       </Button>
                     ) : (
-                      <a href={c.meetingLink} target="_blank" rel="noreferrer">
-                        <Button size="sm">Join</Button>
-                      </a>
+                      <Button size="sm" onClick={() => enterClass(c)}>
+                        {c.provider === MeetingProvider.INTERNAL ? 'Start live class' : 'Join'}
+                      </Button>
                     )
                   ) : ended && c.status !== 'cancelled' ? (
                     <Button size="sm" variant="outline" disabled>Class ended</Button>
@@ -213,9 +228,7 @@ export function SchedulePage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() =>
-                        window.confirm('Delete this class permanently?') && deleteClass.mutate(c.id)
-                      }
+                      onClick={async () => { if (await confirm({ title: 'Delete this class permanently?', tone: 'danger', confirmLabel: 'Delete' })) deleteClass.mutate(c.id); }}
                     >
                       Delete
                     </Button>
@@ -240,6 +253,99 @@ export function SchedulePage() {
           trainers={trainers ?? []}
         />
       )}
+
+      {dayList && (
+        <Modal
+          open
+          title={new Date(dayList[0].date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+          onClose={() => setDayList(null)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            {dayList.map((c) => {
+              const ended = classHasEnded(c) && c.status !== 'cancelled';
+              const displayStatus = ended && (c.status === 'scheduled' || c.status === 'in_progress') ? 'completed' : c.status;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="class-row class-row--clickable"
+                  style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: 'none' }}
+                  onClick={() => { setDayList(null); setDetail(c); }}
+                >
+                  <div className="class-time">
+                    {c.startTime}
+                    <div className="class-time__end">{c.endTime}</div>
+                  </div>
+                  <div className="class-main">
+                    <div className="class-title">{c.title}</div>
+                    <div className="class-meta">
+                      <Badge tone={STATUS_TONE[displayStatus]}>{STATUS_LABEL[displayStatus]}</Badge>
+                      <span>{c.module?.name}</span>
+                      <span>·</span>
+                      <span>{c.batch?.name}</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
+
+      {detail && (() => {
+        const c = detail;
+        const ended = classHasEnded(c) && c.status !== 'cancelled';
+        const displayStatus = ended && (c.status === 'scheduled' || c.status === 'in_progress') ? 'completed' : c.status;
+        const joinable = (c.meetingLink || c.provider === MeetingProvider.INTERNAL) && c.status !== 'cancelled' && !ended;
+        const close = () => setDetail(null);
+        const when = new Date(c.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+        return (
+          <Modal open title={c.title} onClose={close}>
+            <div className="class-meta" style={{ marginBottom: 'var(--space-3)' }}>
+              <Badge tone={STATUS_TONE[displayStatus]}>{STATUS_LABEL[displayStatus]}</Badge>
+              <span>{when}</span>
+              <span>·</span>
+              <span>{c.startTime}–{c.endTime}</span>
+            </div>
+            <div className="class-meta" style={{ marginBottom: 'var(--space-5)' }}>
+              <span>{c.module?.name}</span>
+              <span>·</span>
+              <span>{c.batch?.name}</span>
+              <span>·</span>
+              <span>{c.trainer?.name}</span>
+              <span>·</span>
+              <span>{PROVIDER_LABEL[c.provider]}</span>
+            </div>
+            <div className="class-actions" style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {joinable ? (
+                isStudent ? (
+                  <Button onClick={() => { close(); handleStudentJoin(c); }}>
+                    {mustRate ? 'Rate to join' : c.provider === MeetingProvider.INTERNAL ? 'Join live class' : 'Join'}
+                  </Button>
+                ) : (
+                  <Button onClick={() => { close(); enterClass(c); }}>
+                    {c.provider === MeetingProvider.INTERNAL ? 'Start live class' : 'Join'}
+                  </Button>
+                )
+              ) : ended ? (
+                <Button variant="outline" disabled>Class ended</Button>
+              ) : c.status === 'cancelled' ? (
+                <Badge tone="error">Cancelled</Badge>
+              ) : null}
+              {c.recordingLink && (
+                <a href={c.recordingLink} target="_blank" rel="noreferrer">
+                  <Button variant="outline">Recording</Button>
+                </a>
+              )}
+              {ownerCanManage(c) && (
+                <Button variant="outline" onClick={() => { close(); setModal({ open: true, mode: 'edit', initial: c }); }}>
+                  Edit
+                </Button>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
 
       <ClassRatingModal
         pending={rateTarget}

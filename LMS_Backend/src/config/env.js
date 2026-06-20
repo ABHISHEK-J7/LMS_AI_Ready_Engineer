@@ -51,6 +51,13 @@ export const env = {
   zoomAccountId: process.env.ZOOM_ACCOUNT_ID ?? '',
   zoomClientId: process.env.ZOOM_CLIENT_ID ?? '',
   zoomClientSecret: process.env.ZOOM_CLIENT_SECRET ?? '',
+  // LiveKit — in-app live classes (self-hosted server or LiveKit Cloud). The
+  // backend mints short-lived access tokens; the SPA connects to `url` (wss://).
+  livekit: {
+    url: process.env.LIVEKIT_URL ?? '',
+    apiKey: process.env.LIVEKIT_API_KEY ?? '',
+    apiSecret: process.env.LIVEKIT_API_SECRET ?? '',
+  },
   // Outbound email (password-OTP onboarding). When unset in development, the
   // mailer logs the OTP to the console and the API surfaces it for testing.
   mail: {

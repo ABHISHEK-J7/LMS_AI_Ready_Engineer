@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { FileText, Film, Link2, Plus, PencilLine, Presentation, Trash2 } from 'lucide-react';
 import { ResourceType } from '@/shared';
-import { Button, Input, Select } from '@/components/ui';
-import { apiErrorMessage } from '@/lib/api';
+import { Button, Input, Select, useConfirm } from '@/components/ui';
+import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAddResource, useDeleteResource, useResources } from '@/lib/resources';
 
 // Display metadata per resource type (kept in the order learners see them).
@@ -25,8 +25,15 @@ export function TopicResources({ module, topic, canEdit }) {
   const { data: all, isLoading } = useResources(module.id);
   const add = useAddResource();
   const del = useDeleteResource();
+  const confirm = useConfirm();
   const [form, setForm] = useState(BLANK);
   const [err, setErr] = useState('');
+
+  async function onDelete(r) {
+    if (await confirm({ title: 'Delete this resource?', message: `“${r.title}” will be removed from this topic.`, confirmLabel: 'Delete', tone: 'danger' })) {
+      del.mutate({ id: r.id, module: module.id });
+    }
+  }
 
   const resources = (all ?? []).filter((r) => (r.topic ?? null) === topic.id);
   const isLink = form.type === ResourceType.LINK;
@@ -77,13 +84,13 @@ export function TopicResources({ module, topic, canEdit }) {
                 ) : (
                   items.map((r) => (
                     <div className="res-item" key={r.id}>
-                      <a href={r.url} target="_blank" rel="noreferrer" className="res-item__title">{r.title}</a>
+                      <a href={fileSrc(r.url)} target="_blank" rel="noreferrer" className="res-item__title">{r.title}</a>
                       {canEdit && (
                         <button
                           type="button"
                           className="icon-btn icon-btn--danger"
                           aria-label={`Delete ${r.title}`}
-                          onClick={() => window.confirm('Delete this resource?') && del.mutate({ id: r.id, module: module.id })}
+                          onClick={() => onDelete(r)}
                         >
                           <Trash2 size={13} />
                         </button>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { BookOpen, Check, Layers, Pencil, Trash2 } from 'lucide-react';
-import { Button, Card, CardHeader, Input, Modal, Textarea } from '@/components/ui';
+import { BookOpen, Check, FileSpreadsheet, Layers, ListChecks, Pencil, Trash2 } from 'lucide-react';
+import { Button, Card, CardHeader, Input, Modal, Textarea, useConfirm } from '@/components/ui';
 import {
   useAddTopic,
   useDeleteTopic,
@@ -9,22 +9,34 @@ import {
 } from '@/lib/modules';
 import { useResources } from '@/lib/resources';
 import { TopicResources } from './TopicResources';
+import { SubtopicsTable, SubtopicsHeader } from './SubtopicsTable';
+import { AddSyllabusModal } from './AddSyllabusModal';
 
 /**
- * Syllabus as a board of topic cards. Each card opens that topic's learning
- * resources (videos/docs/presentations/assignments/links) in a modal — so
- * resources are added per topic, not per whole module.
+ * Syllabus as a board of topic cards. Each card opens that topic's concepts
+ * (subtopics + descriptions) and learning resources in a modal. Staff can bulk
+ * import the whole syllabus from an Excel sheet ("Add syllabus").
  */
 export function SyllabusBoard({ module, canEdit }) {
   const [newTitle, setNewTitle] = useState('');
   const [editing, setEditing] = useState(null); // { topicId, title, description }
-  const [openTopic, setOpenTopic] = useState(null);
+  const [openTopicId, setOpenTopicId] = useState(null);
+  const [addSyllabusOpen, setAddSyllabusOpen] = useState(false);
   const addTopic = useAddTopic();
   const updateTopic = useUpdateTopic();
   const deleteTopic = useDeleteTopic();
   const setCompletion = useSetTopicCompletion();
+  const confirm = useConfirm();
   const { data: resources } = useResources(module.id);
 
+  async function onDeleteTopic(topicId) {
+    if (await confirm({ title: 'Delete this topic?', message: 'Its concepts and resource links will be removed.', confirmLabel: 'Delete', tone: 'danger' })) {
+      deleteTopic.mutate({ id: module.id, topicId });
+    }
+  }
+
+  // Derive the open topic from the live module so it stays fresh after edits.
+  const openTopic = module.topics.find((t) => t.id === openTopicId) ?? null;
   const countFor = (topicId) => (resources ?? []).filter((r) => (r.topic ?? null) === topicId).length;
 
   async function add(e) {
@@ -45,47 +57,64 @@ export function SyllabusBoard({ module, canEdit }) {
     setEditing(null);
   }
 
+  const saveSubtopics = (subtopics) =>
+    updateTopic.mutateAsync({ id: module.id, topicId: openTopicId, subtopics });
+
   return (
     <Card>
       <div className="panel-head">
         <CardHeader
           title="Syllabus"
-          subtitle="Click a topic to add its videos, documents, presentations, assignments & links"
+          subtitle="Click a topic to add its concepts, videos, documents, presentations & links"
         />
         {canEdit && (
-          <form className="add-inline add-inline--right" onSubmit={add}>
-            <Input placeholder="New topic…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-            <Button type="submit" loading={addTopic.isPending}>Add topic</Button>
-          </form>
+          <Button onClick={() => setAddSyllabusOpen(true)} style={{ marginLeft: 'auto' }}>
+            <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Add syllabus
+          </Button>
         )}
       </div>
 
+      {canEdit && (
+        <form className="add-inline" onSubmit={add} style={{ marginBottom: 'var(--space-5)', justifyContent: 'flex-start', flex: '0 0 auto' }}>
+          <Input placeholder="New topic…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+          <Button type="submit" variant="outline" loading={addTopic.isPending}>Add topic</Button>
+        </form>
+      )}
+
       {module.topics.length === 0 ? (
-        <p className="lms-muted">No topics yet. Add your first syllabus topic to start attaching resources.</p>
+        <p className="lms-muted">No topics yet. Add a topic, or import the whole syllabus from Excel with “Add syllabus”.</p>
       ) : (
         <div className="topic-board">
           {module.topics.map((t) => {
             const count = countFor(t.id);
+            const subs = t.subtopics?.length ?? 0;
             return (
               <div
                 className={`topic-card${t.completed ? ' topic-card--done' : ''}`}
                 key={t.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setOpenTopic(t)}
-                onKeyDown={(e) => { if (e.key === 'Enter') setOpenTopic(t); }}
+                onClick={() => setOpenTopicId(t.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setOpenTopicId(t.id); }}
               >
-                <div className="topic-card__top">
+                {/* Row 1 — book icon + topic name (wraps to max 2 lines) */}
+                <div className="topic-card__head">
                   <span className="topic-card__icon"><BookOpen size={16} strokeWidth={2} /></span>
+                  <div className="topic-card__title">{t.title}</div>
+                </div>
+                {/* Row 2 — concepts count (+ taught badge) */}
+                <div className="topic-card__row">
+                  <span className="topic-card__count">
+                    <ListChecks size={13} /> {subs} concept{subs === 1 ? '' : 's'}
+                  </span>
                   {t.completed && (
                     <span className="topic-card__done"><Check size={12} strokeWidth={3} /> Taught</span>
                   )}
                 </div>
-                <div className="topic-card__title">{t.title}</div>
-                {t.description && <div className="topic-card__desc">{t.description}</div>}
-                <div className="topic-card__foot">
+                {/* Row 3 — materials count + actions */}
+                <div className="topic-card__row topic-card__row--last">
                   <span className="topic-card__count">
-                    <Layers size={13} /> {count} resource{count === 1 ? '' : 's'}
+                    <Layers size={13} /> {count} material{count === 1 ? '' : 's'}
                   </span>
                   {canEdit && (
                     <span className="topic-card__actions" onClick={(e) => e.stopPropagation()}>
@@ -109,7 +138,7 @@ export function SyllabusBoard({ module, canEdit }) {
                         type="button"
                         className="icon-btn icon-btn--danger"
                         title="Delete topic"
-                        onClick={() => window.confirm('Delete this topic?') && deleteTopic.mutate({ id: module.id, topicId: t.id })}
+                        onClick={() => onDeleteTopic(t.id)}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -122,13 +151,34 @@ export function SyllabusBoard({ module, canEdit }) {
         </div>
       )}
 
-      {/* Per-topic resources */}
+      {/* Per-topic concepts + resources */}
       <Modal
         open={Boolean(openTopic)}
-        title={openTopic ? `${openTopic.title} — Learning resources` : ''}
-        onClose={() => setOpenTopic(null)}
+        title={openTopic ? openTopic.title : ''}
+        size="xl"
+        onClose={() => setOpenTopicId(null)}
       >
-        {openTopic && <TopicResources module={module} topic={openTopic} canEdit={canEdit} />}
+        {openTopic && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+            <section>
+              <SubtopicsHeader count={openTopic.subtopics?.length ?? 0} />
+              <SubtopicsTable
+                subtopics={openTopic.subtopics ?? []}
+                canEdit={canEdit}
+                onSave={saveSubtopics}
+                saving={updateTopic.isPending}
+              />
+            </section>
+            <section>
+              <TopicResources module={module} topic={openTopic} canEdit={canEdit} />
+            </section>
+          </div>
+        )}
+      </Modal>
+
+      {/* Bulk syllabus import (Excel) */}
+      <Modal open={addSyllabusOpen} title="Add syllabus from Excel" size="lg" onClose={() => setAddSyllabusOpen(false)}>
+        <AddSyllabusModal module={module} onClose={() => setAddSyllabusOpen(false)} />
       </Modal>
 
       {/* Edit topic */}

@@ -9,6 +9,7 @@ import { UPLOADS_URL_PREFIX } from './config/storage.js';
 import { serveUpload } from './services/fileStore.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { requestId } from './middleware/requestId.js';
+import { authenticateFile } from './middleware/fileAuth.js';
 import { asyncHandler } from './utils/http.js';
 import apiRoutes from './routes/index.js';
 
@@ -39,10 +40,11 @@ export function createApp() {
   if (!env.isProd) app.use(morgan('dev'));
 
   // Serve uploaded files straight from MongoDB/GridFS (before the rate limiter so
-  // downloads don't count against the API budget). The handler streams with HTTP
-  // Range support (video/audio seeking) and re-applies the hardening headers
-  // (nosniff + a media-friendly CSP). See services/fileStore.js.
-  app.get(`${UPLOADS_URL_PREFIX}/:filename`, asyncHandler(serveUpload));
+  // downloads don't count against the API budget). Authorized via a file-scoped
+  // token (`?t=` for media elements, or a Bearer access token for axios), so
+  // personal data (proctor snapshots, certificates) is never world-readable. The
+  // handler streams with HTTP Range support and re-applies the hardening headers.
+  app.get(`${UPLOADS_URL_PREFIX}/:filename`, authenticateFile, asyncHandler(serveUpload));
 
   // Basic abuse protection on the API surface.
   app.use(

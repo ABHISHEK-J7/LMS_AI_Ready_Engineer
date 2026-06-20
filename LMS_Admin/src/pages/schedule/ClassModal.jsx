@@ -216,14 +216,24 @@ export function ClassModal({ open, mode, initial, onClose, isAdmin, batches = []
         )}
 
         <Select label="Meeting provider" value={form.provider} onChange={(e) => set('provider', e.target.value)} options={PROVIDER_OPTIONS} />
-        {!isEdit && form.provider === 'zoom' && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
-            <input type="checkbox" checked={form.autoCreateMeeting} onChange={(e) => set('autoCreateMeeting', e.target.checked)} />
-            Auto-create Zoom meeting link <span className="lms-muted">(requires Zoom configured in Settings)</span>
-          </label>
-        )}
-        {!(form.provider === 'zoom' && form.autoCreateMeeting && !isEdit) && (
-          <Input label="Meeting link" value={form.meetingLink} onChange={(e) => set('meetingLink', e.target.value)} placeholder="https://…" />
+        {form.provider === 'internal' ? (
+          <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>
+            🎥 Students and the trainer join the live class right inside the app — no external link needed.
+            It is started and joined from the learner app, so it can't be launched from here. (Requires LiveKit
+            configured in Settings.)
+          </p>
+        ) : (
+          <>
+            {!isEdit && form.provider === 'zoom' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                <input type="checkbox" checked={form.autoCreateMeeting} onChange={(e) => set('autoCreateMeeting', e.target.checked)} />
+                Auto-create Zoom meeting link <span className="lms-muted">(requires Zoom configured in Settings)</span>
+              </label>
+            )}
+            {!(form.provider === 'zoom' && form.autoCreateMeeting && !isEdit) && (
+              <Input label="Meeting link" value={form.meetingLink} onChange={(e) => set('meetingLink', e.target.value)} placeholder="https://…" />
+            )}
+          </>
         )}
 
         {isEdit && (

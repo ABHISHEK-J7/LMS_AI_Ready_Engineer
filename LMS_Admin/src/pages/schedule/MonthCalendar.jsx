@@ -16,7 +16,7 @@ function keyFor(d) {
 }
 
 /** Gamified month board of class sessions. `month` is a Date within the month. */
-export function MonthCalendar({ month, classes = [], onSelect }) {
+export function MonthCalendar({ month, classes = [], onSelect, onShowMore }) {
   const year = month.getFullYear();
   const m = month.getMonth();
   const first = new Date(year, m, 1);
@@ -86,7 +86,7 @@ export function MonthCalendar({ month, classes = [], onSelect }) {
                   </button>
                 ))}
                 {items.length > 3 && (
-                  <button type="button" className="cal__more" onClick={() => onSelect?.(items[3])}>
+                  <button type="button" className="cal__more" onClick={() => onShowMore?.(date, items)}>
                     +{items.length - 3} more
                   </button>
                 )}

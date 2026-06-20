@@ -4,6 +4,7 @@ import { GraduationCap, LogOut, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
+import { fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { PageTransition, useSidebarMotion } from '@/lib/anim';
 import { useNavBadges } from '@/lib/navBadges';
@@ -11,13 +12,14 @@ import { NAV_BY_ROLE, ROLE_LABEL } from './navConfig';
 import './layout.css';
 
 function initials(name) {
-  return name
+  const result = (name ?? '')
     .split(' ')
     .map((p) => p[0])
     .filter(Boolean)
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  return result || '?';
 }
 
 export function AppLayout() {
@@ -33,7 +35,13 @@ export function AppLayout() {
   if (!user) return null;
 
   const nav = NAV_BY_ROLE[user.role];
-  const current = nav.find((n) => n.to === location.pathname) ?? nav[0];
+  // Longest-prefix match so detail routes (/app/users/:id, etc.) resolve to their
+  // section title instead of falling back to the first ("Dashboard") entry.
+  const current =
+    nav
+      .filter((n) => location.pathname === n.to || location.pathname.startsWith(`${n.to}/`))
+      .sort((a, b) => a.to.length - b.to.length)
+      .pop() ?? nav[0];
 
   return (
     <div className="layout">
@@ -94,7 +102,7 @@ export function AppLayout() {
             <div className="user-chip">
               <div className="user-chip__avatar">
                 {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.name} className="user-chip__avatar-img" />
+                  <img src={fileSrc(user.avatarUrl)} alt={user.name} className="user-chip__avatar-img" />
                 ) : (
                   initials(user.name)
                 )}

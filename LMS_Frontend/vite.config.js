@@ -18,9 +18,11 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('xlsx')) return 'xlsx';
+          // LiveKit (live classes) — only loaded when a user enters the room.
+          if (id.includes('livekit')) return 'livekit';
           if (id.includes('gsap')) return 'gsap';
           if (id.includes('@tanstack')) return 'react-query';
-          if (id.includes('react-router') || id.includes('react-dom') || /node_modules\/(react|scheduler)\//.test(id)) return 'react';
+          if (id.includes('react-router') || id.includes('@remix-run') || id.includes('react-dom') || /node_modules\/(react|scheduler)\//.test(id)) return 'react';
           return 'vendor';
         },
       },

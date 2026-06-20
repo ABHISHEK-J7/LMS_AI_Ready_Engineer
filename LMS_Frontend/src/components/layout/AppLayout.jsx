@@ -6,6 +6,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
 import { useAuth } from '@/lib/auth';
 import { PageTransition, useSidebarMotion } from '@/lib/anim';
+import { fileSrc } from '@/lib/api';
 import { useNavBadges } from '@/lib/navBadges';
 import { NAV_BY_ROLE, ROLE_LABEL } from './navConfig';
 import './layout.css';
@@ -94,7 +95,7 @@ export function AppLayout() {
             <Link to="/app/profile" className="user-chip" title="View your profile" aria-label="View your profile">
               <div className="user-chip__avatar">
                 {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.name} className="user-chip__avatar-img" />
+                  <img src={fileSrc(user.avatarUrl)} alt={user.name} className="user-chip__avatar-img" />
                 ) : (
                   initials(user.name)
                 )}

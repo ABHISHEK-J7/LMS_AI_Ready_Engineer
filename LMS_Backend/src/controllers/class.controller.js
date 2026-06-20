@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ClassStatus, MeetingProvider, UserRole } from '#shared';
 import { Batch, ClassJoin, ClassRating, ClassSchedule, Module, User } from '../models/index.js';
 import { createZoomMeeting } from '../services/meetings.js';
+import { createClassToken, livekitConfigured } from '../services/livekit.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -178,6 +179,54 @@ export async function joinClass(req, res) {
   );
   const join = await ClassJoin.findOne({ classSession: cls._id, student: req.auth.userId });
   ok(res, { joinedAt: join?.joinedAt ?? null, meetingLink: cls.meetingLink });
+}
+
+/**
+ * Issue a LiveKit access token for an in-app live class. Trainers/admins join as
+ * hosts (can moderate); enrolled students join as participants. Media never
+ * touches this API — the SPA connects directly to the LiveKit server.
+ */
+export async function getLiveToken(req, res) {
+  if (!livekitConfigured()) {
+    throw ApiError.badRequest('In-app live classes are not configured (set LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).');
+  }
+  const cls = await ClassSchedule.findById(req.params.id)
+    .populate('trainer', 'name')
+    .populate('module', 'name');
+  if (!cls) throw ApiError.notFound('Class not found');
+
+  const { role, userId } = req.auth;
+  let host = false;
+  if (role === UserRole.ADMIN) {
+    host = true;
+  } else if (role === UserRole.TRAINER) {
+    if (cls.trainer?._id?.toString() !== userId) throw ApiError.forbidden('You do not teach this class');
+    host = true;
+  } else {
+    const batch = await Batch.findById(cls.batch).select('students');
+    if (!batch?.students.some((s) => s.toString() === userId)) {
+      throw ApiError.forbidden('You are not enrolled in this class');
+    }
+  }
+
+  const user = await User.findById(userId).select('name');
+  const { token, url, room } = await createClassToken({
+    classId: cls._id.toString(),
+    identity: userId,
+    name: user?.name || 'Participant',
+    role,
+    host,
+  });
+
+  ok(res, {
+    token,
+    url,
+    room,
+    host,
+    classTitle: cls.title,
+    moduleName: cls.module?.name ?? '',
+    trainerName: cls.trainer?.name ?? '',
+  });
 }
 
 // ── Class ratings (student rates the trainer after attending) ─────────────────

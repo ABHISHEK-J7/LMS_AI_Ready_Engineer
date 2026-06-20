@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { UserRole } from '@/shared';
-import { Badge, Button, Card, Input, Modal, SkeletonCards, EmptyState, ErrorState } from '@/components/ui';
+import { Badge, Button, Card, Input, Modal, SkeletonCards, EmptyState, ErrorState, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -23,6 +23,7 @@ function batchStatus(b) {
 }
 
 export function BatchesPage() {
+  const confirm = useConfirm();
   const role = useAuth((s) => s.user?.role);
   const isAdmin = role === UserRole.ADMIN;
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export function BatchesPage() {
 
   async function onArchive(e, id) {
     e.stopPropagation();
-    if (!window.confirm('Archive this batch?')) return;
+    if (!(await confirm({ title: 'Archive this batch?', confirmLabel: 'Archive' }))) return;
     await archiveBatch.mutateAsync(id);
   }
 

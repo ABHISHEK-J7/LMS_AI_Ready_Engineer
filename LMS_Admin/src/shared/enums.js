@@ -26,6 +26,7 @@ export const AttendanceStatus = {
 
 /** Where a class is hosted. */
 export const MeetingProvider = {
+  INTERNAL: 'internal',
   ZOOM: 'zoom',
   GOOGLE_MEET: 'google_meet',
   MS_TEAMS: 'ms_teams',

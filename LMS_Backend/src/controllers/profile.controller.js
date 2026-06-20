@@ -6,7 +6,7 @@ import { ClassRating, ClassSchedule, Doubt, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { collectUserData } from '../services/gdpr.js';
-import { storeUpload, deleteByUrl } from '../services/fileStore.js';
+import { gridfsStorage, deleteByUrl } from '../services/fileStore.js';
 
 // A link is either a valid URL or an empty string (to clear it).
 const link = z.union([z.string().url('Enter a valid URL').max(500), z.literal('')]).optional();
@@ -26,7 +26,7 @@ export const updateProfileSchema = z.object({
 // ── Avatar upload (single image → MongoDB/GridFS) ─────────────────────────────
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 export const uploadAvatarFile = multer({
-  storage: multer.memoryStorage(),
+  storage: gridfsStorage('avatar'),
   limits: { fileSize: 8 * 1024 * 1024, files: 1 }, // 8 MB
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -102,8 +102,7 @@ export async function setAvatar(req, res) {
 
   // Best-effort cleanup of a previously uploaded avatar.
   await deleteByUrl(user.avatarUrl);
-  const { url } = await storeUpload(req.file, 'avatar');
-  user.avatarUrl = url;
+  user.avatarUrl = req.file.url;
   await user.save();
   ok(res, user.toJSON());
 }

@@ -1,5 +1,6 @@
 import { CheckCircle2, ExternalLink, Github, XCircle } from 'lucide-react';
 import { Badge, Button, Modal } from '@/components/ui';
+import { fileSrc } from '@/lib/api';
 import './projects.css';
 
 const STATUS = {
@@ -31,8 +32,8 @@ export function ProjectDetailModal({ project, onClose, onApprove, onReject, busy
         {project.images?.length > 0 && (
           <div className="project-detail__images">
             {project.images.map((src, i) => (
-              <a key={i} href={src} target="_blank" rel="noreferrer">
-                <img src={src} alt={`${project.title} screenshot ${i + 1}`} />
+              <a key={i} href={fileSrc(src)} target="_blank" rel="noreferrer">
+                <img src={fileSrc(src)} alt={`${project.title} screenshot ${i + 1}`} />
               </a>
             ))}
           </div>

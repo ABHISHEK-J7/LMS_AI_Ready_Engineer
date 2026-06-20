@@ -106,6 +106,15 @@ export function useUpdateTopic() {
   });
 }
 
+/** Bulk-import a syllabus (topics + subtopics) from a parsed spreadsheet. */
+export function useImportSyllabus() {
+  const invalidate = useModuleInvalidation();
+  return useMutation({
+    mutationFn: ({ id, topics }) => unwrap(api.post(`/modules/${id}/syllabus/import`, { topics })),
+    onSuccess: (res) => invalidate(res?.module),
+  });
+}
+
 export function useDeleteTopic() {
   const invalidate = useModuleInvalidation();
   return useMutation({

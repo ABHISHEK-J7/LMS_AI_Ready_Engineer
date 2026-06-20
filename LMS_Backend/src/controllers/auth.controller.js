@@ -6,6 +6,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import {
   signAccessToken,
+  signFileToken,
   signRefreshToken,
   signResetToken,
   verifyRefreshToken,
@@ -42,6 +43,7 @@ function issueTokens(user) {
   return {
     accessToken: signAccessToken({ sub: user.id, role: user.role, tv }),
     refreshToken: signRefreshToken({ sub: user.id, role: user.role, tv }),
+    fileToken: signFileToken({ sub: user.id, tv }),
   };
 }
 

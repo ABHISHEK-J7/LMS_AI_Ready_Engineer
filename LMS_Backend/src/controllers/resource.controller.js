@@ -5,7 +5,7 @@ import { ResourceType, UserRole } from '#shared';
 import { Batch, Module, Resource, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
-import { storeUpload, deleteByUrl } from '../services/fileStore.js';
+import { gridfsStorage, deleteByUrl } from '../services/fileStore.js';
 
 const objectId = z.string().length(24);
 export const moduleQuery = z.object({ module: objectId });
@@ -22,7 +22,7 @@ const ALLOWED_EXT = new Set([
 const BLOCKED_MIME = /(text\/html|application\/x-msdownload|application\/x-sh|application\/javascript)/i;
 
 export const uploadResourceFile = multer({
-  storage: multer.memoryStorage(),
+  storage: gridfsStorage('resource'),
   limits: { fileSize: 100 * 1024 * 1024, files: 1 }, // 100 MB, single file
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -94,7 +94,7 @@ export async function addResource(req, res) {
 
   let finalUrl = url;
   if (req.file) {
-    finalUrl = (await storeUpload(req.file, 'resource')).url;
+    finalUrl = req.file.url;
   } else if (!url) {
     throw ApiError.badRequest('Provide a file upload or a url');
   }

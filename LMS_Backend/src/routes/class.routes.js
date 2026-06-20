@@ -24,6 +24,14 @@ router.post(
   asyncHandler(classes.joinClass),
 );
 
+// In-app live class: mint a LiveKit access token. Any signed-in role — the
+// controller authorizes (trainer-owns / student-enrolled / admin = host).
+router.post(
+  '/:id/live-token',
+  validate({ params: classes.classIdParam }),
+  asyncHandler(classes.getLiveToken),
+);
+
 // Student rates the class/trainer after attending (≥¾ — enforced client-side
 // via entry time; server requires they joined and haven't already rated).
 router.post(

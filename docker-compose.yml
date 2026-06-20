@@ -1,0 +1,43 @@
+# Production composition for the AI Ready Engineer LMS.
+#   docker compose up -d --build
+#
+# Prereqs:
+#   - LMS_Backend/.env filled in (MONGO_URI to your Atlas cluster, JWT secrets,
+#     and any optional SMTP / AI / Zoom / LiveKit / TZ values). See .env.example.
+#   - Run the backend as a SINGLE instance (in-process rate limiter + sweeper).
+#
+# The student/trainer app is served on http://<host>:80 and the admin app on
+# http://<host>:8080; both proxy /api (incl. /api/uploads) to the backend.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: LMS_Deployment/Dockerfile.backend
+    env_file: ./LMS_Backend/.env
+    environment:
+      NODE_ENV: production
+      # Set your operating timezone so class/exam times read correctly.
+      TZ: ${TZ:-Asia/Kolkata}
+    expose:
+      - "5050"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: LMS_Deployment/Dockerfile.web
+    ports:
+      - "80:80"      # student/trainer app
+      - "8080:8080"  # admin app
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # If you are NOT using MongoDB Atlas, uncomment a local mongo and point
+  # MONGO_URI at mongodb://mongo:27017/lms_ai_ready.
+  # mongo:
+  #   image: mongo:7
+  #   volumes: [ "mongo-data:/data/db" ]
+  #   restart: unless-stopped
+# volumes:
+#   mongo-data:

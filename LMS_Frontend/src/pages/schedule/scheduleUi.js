@@ -20,6 +20,7 @@ export const STATUS_OPTIONS = Object.values(ClassStatus).map((v) => ({
 }));
 
 export const PROVIDER_LABEL = {
+  [MeetingProvider.INTERNAL]: 'In-app live class',
   [MeetingProvider.ZOOM]: 'Zoom',
   [MeetingProvider.GOOGLE_MEET]: 'Google Meet',
   [MeetingProvider.MS_TEAMS]: 'Microsoft Teams',

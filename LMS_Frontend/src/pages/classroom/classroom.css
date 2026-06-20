@@ -1,0 +1,149 @@
+/* In-app live classroom — brands LiveKit's prebuilt UI to the AI Ready theme
+   and styles the surrounding chrome (header, pre-join, end screens). */
+
+.lk-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--color-primary) 22%, #0b1220) 0%, #0b1220 60%);
+  color: #e8edf4;
+  /* Theme LiveKit's prebuilt components (data-lk-theme="default" reads these). */
+  --lk-accent-bg: var(--color-primary);
+  --lk-accent-fg: #ffffff;
+  --lk-accent2: var(--color-primary-hover, var(--color-primary));
+  --lk-border-radius: var(--radius-md, 10px);
+  --lk-control-bg: rgba(255, 255, 255, 0.07);
+  --lk-control-hover-bg: rgba(255, 255, 255, 0.14);
+  --lk-control-active-bg: var(--color-primary);
+  --lk-control-active-hover-bg: var(--color-primary-hover, var(--color-primary));
+  --lk-danger: var(--color-error, #e5484d);
+  --lk-bg: #0b1220;
+  --lk-bg2: #121a2b;
+  --lk-fg: #e8edf4;
+}
+
+/* ── Centered status / card screens (loading, error, left, prejoin) ──────────── */
+.lk-center {
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+.lk-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  color: #aebdd1;
+  font-size: var(--font-size-sm);
+}
+.lk-card {
+  width: min(420px, 92vw);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg, 16px);
+  padding: var(--space-7) var(--space-6);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.8);
+}
+.lk-card h2 { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #fff; }
+.lk-card p { font-size: var(--font-size-sm); color: #aebdd1; }
+.lk-card__icon {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color: var(--color-primary);
+}
+.lk-card__icon--error { background: color-mix(in srgb, var(--color-error, #e5484d) 22%, transparent); color: var(--color-error, #e5484d); }
+.lk-card__actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); flex-wrap: wrap; justify-content: center; }
+
+/* ── Pre-join ─────────────────────────────────────────────────────────────────── */
+.lk-prejoin {
+  width: min(560px, 94vw);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg, 18px);
+  padding: var(--space-5);
+  box-shadow: 0 40px 90px -45px rgba(0, 0, 0, 0.85);
+}
+.lk-prejoin__head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.lk-prejoin__title { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #fff; line-height: 1.1; }
+.lk-prejoin__sub { font-size: var(--font-size-sm); color: #aebdd1; margin-top: 2px; }
+/* The LiveKit PreJoin renders a camera preview + device pickers; round its frame. */
+.lk-prejoin .lk-prejoin {
+  /* (inner LK class collision guard — no-op if absent) */
+}
+.lk-prejoin [data-lk-theme],
+.lk-prejoin .lk-video-container,
+.lk-prejoin video {
+  border-radius: var(--radius-md, 12px);
+}
+
+/* ── In-room header ──────────────────────────────────────────────────────────── */
+.lk-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background: rgba(8, 13, 24, 0.7);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lk-topbar__brand { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.lk-topbar__logo {
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  border-radius: var(--radius-md, 10px);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary, var(--color-primary)));
+  color: #fff;
+  flex: none;
+}
+.lk-topbar__titles { min-width: 0; }
+.lk-topbar__title { font-weight: var(--font-weight-bold); color: #fff; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lk-topbar__sub { font-size: var(--font-size-xs); color: #9fb0c6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lk-topbar__right { display: flex; align-items: center; gap: var(--space-3); flex: none; }
+
+.lk-live {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); letter-spacing: 0.04em;
+  color: #fff; background: var(--color-error, #e5484d);
+  padding: 3px 9px; border-radius: 999px;
+}
+.lk-live svg { animation: lk-pulse 1.6s var(--ease-in-out, ease-in-out) infinite; }
+@keyframes lk-pulse { 50% { opacity: 0.35; } }
+.lk-host-pill {
+  font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold);
+  color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  padding: 3px 9px; border-radius: 999px;
+}
+.lk-leave {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
+  color: #fff; cursor: pointer;
+  background: var(--color-error, #e5484d);
+  border: none; border-radius: var(--radius-md, 10px);
+  padding: var(--space-2) var(--space-3);
+  transition: transform var(--transition-fast, 130ms), filter var(--transition-fast, 130ms);
+}
+.lk-leave:hover { filter: brightness(1.08); }
+.lk-leave:active { transform: scale(0.96); }
+.lk-leave:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error, #e5484d) 45%, transparent); }
+
+/* ── Stage (holds the prebuilt VideoConference) ──────────────────────────────── */
+.lk-stage { flex: 1; min-height: 0; position: relative; }
+.lk-stage .lk-video-conference { height: 100%; }
+
+@media (max-width: 560px) {
+  .lk-topbar { padding: var(--space-2) var(--space-3); }
+  .lk-topbar__sub { display: none; }
+}

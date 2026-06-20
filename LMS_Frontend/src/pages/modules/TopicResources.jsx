@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { FileText, Film, Link2, Lock, Plus, PencilLine, Presentation, Trash2 } from 'lucide-react';
 import { ResourceType, UserRole } from '@/shared';
-import { Button, Input, Select, SkeletonText } from '@/components/ui';
-import { apiErrorMessage } from '@/lib/api';
+import { Button, Input, Select, SkeletonText, useConfirm } from '@/components/ui';
+import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useAddResource, useDeleteResource, useResources } from '@/lib/resources';
 
@@ -23,6 +23,7 @@ const BLANK = { type: ResourceType.VIDEO, title: '', source: 'file', url: '', fi
  * Resources are scoped to the topic via `resource.topic`.
  */
 export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
+  const confirm = useConfirm();
   const { data: all, isLoading } = useResources(module.id);
   const role = useAuth((s) => s.user?.role);
   const isStudent = role === UserRole.STUDENT;
@@ -119,13 +120,13 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
                           <td key={t.value}>
                             {r && (
                               <span className="res-matrix__cell">
-                                <a href={r.url} target="_blank" rel="noreferrer" className="res-matrix__link">{r.title}</a>
+                                <a href={fileSrc(r.url)} target="_blank" rel="noreferrer" className="res-matrix__link">{r.title}</a>
                                 {canEdit && (
                                   <button
                                     type="button"
                                     className="icon-btn icon-btn--danger res-matrix__del"
                                     aria-label={`Delete ${r.title}`}
-                                    onClick={() => window.confirm('Delete this resource?') && del.mutate({ id: r.id, module: module.id })}
+                                    onClick={async () => { if (await confirm({ title: 'Delete this resource?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate({ id: r.id, module: module.id }); }}
                                   >
                                     <Trash2 size={12} />
                                   </button>
@@ -158,13 +159,13 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
                 ) : (
                   items.map((r) => (
                     <div className="res-item" key={r.id}>
-                      <a href={r.url} target="_blank" rel="noreferrer" className="res-item__title">{r.title}</a>
+                      <a href={fileSrc(r.url)} target="_blank" rel="noreferrer" className="res-item__title">{r.title}</a>
                       {canEdit && (
                         <button
                           type="button"
                           className="icon-btn icon-btn--danger"
                           aria-label={`Delete ${r.title}`}
-                          onClick={() => window.confirm('Delete this resource?') && del.mutate({ id: r.id, module: module.id })}
+                          onClick={async () => { if (await confirm({ title: 'Delete this resource?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate({ id: r.id, module: module.id }); }}
                         >
                           <Trash2 size={13} />
                         </button>

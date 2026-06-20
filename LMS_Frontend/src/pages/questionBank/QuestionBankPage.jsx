@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { AlertTriangle, CheckCircle2, Download, FileQuestion, Lock, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
 import { QuestionType, UserRole } from '@/shared';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -21,6 +21,7 @@ const GENERAL = '__general__'; // sentinel for "no specific topic"
 
 export function QuestionBankPage() {
   const role = useAuth((s) => s.user?.role);
+  const confirm = useConfirm();
   const { data: modules } = useModules();
   const [moduleId, setModuleId] = useState('');
   const [topicFilter, setTopicFilter] = useState(''); // '' = all, GENERAL, or topicId
@@ -140,7 +141,7 @@ export function QuestionBankPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => window.confirm('Delete this question from the bank?') && del.mutate(q.id)}
+                            onClick={async () => { if (await confirm({ title: 'Delete this question from the bank?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate(q.id); }}
                           >
                             <Trash2 size={14} />
                           </Button>

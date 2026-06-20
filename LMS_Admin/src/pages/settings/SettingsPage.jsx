@@ -129,6 +129,7 @@ export function SettingsPage() {
 
       <AiGradingCard settings={data} />
       <ZoomCard settings={data} />
+      <LiveKitCard settings={data} />
       <SafeExamBrowserCard settings={data} />
     </>
   );
@@ -269,6 +270,27 @@ function ZoomCard({ settings }) {
         {msg && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>{msg}</span>}
         {err && <span className="field__error">{err}</span>}
       </div>
+    </Card>
+  );
+}
+
+function LiveKitCard({ settings }) {
+  const configured = settings.livekitConfigured;
+  return (
+    <Card style={{ maxWidth: '40rem', marginTop: 'var(--space-6)' }}>
+      <CardHeader title="LiveKit (in-app live classes)" subtitle="Powers live classes that run inside the learner app, with no external meeting link." />
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        Status:{' '}
+        {configured
+          ? <Badge tone="success">Configured</Badge>
+          : <Badge tone="warning">Not configured — in-app live classes are unavailable</Badge>}
+      </div>
+      <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>
+        Credentials are set via server environment variables
+        (<code>LIVEKIT_URL</code>, <code>LIVEKIT_API_KEY</code>, <code>LIVEKIT_API_SECRET</code>),
+        not from this UI. Once configured, schedule a class with the “In-app live class” provider —
+        the trainer and students start and join it from inside the learner app.
+      </p>
     </Card>
   );
 }

@@ -36,9 +36,19 @@ export const reorderSchema = z.object({
 
 export const assignTrainerSchema = z.object({ trainerId: objectId });
 
+// Dates arrive as 'YYYY-MM-DD' strings (or '' / null to clear).
+const dateInput = z.union([z.string().max(40), z.null()]).optional();
+const subtopicInput = z.object({
+  title: z.string().max(200).optional(),
+  description: z.string().max(2000).optional(),
+  fromDate: dateInput,
+  toDate: dateInput,
+});
+
 export const topicSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
+  subtopics: z.array(subtopicInput).max(100).optional(),
 });
 
 export const updateTopicSchema = z.object({
@@ -46,6 +56,22 @@ export const updateTopicSchema = z.object({
   description: z.string().optional(),
   order: z.number().int().min(0).optional(),
   completed: z.boolean().optional(),
+  subtopics: z.array(subtopicInput).max(100).optional(),
+});
+
+/** Bulk syllabus import (from an uploaded Excel/CSV). Topics matched by title
+ *  (case-insensitive) are updated; new titles are appended. */
+export const importSyllabusSchema = z.object({
+  topics: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200),
+        description: z.string().max(2000).optional(),
+        subtopics: z.array(subtopicInput).max(100).optional(),
+      }),
+    )
+    .min(1, 'No topics to import')
+    .max(200, 'Import at most 200 topics at a time'),
 });
 
 export const objectivesSchema = z.object({
@@ -179,7 +205,8 @@ export async function removeTrainer(req, res) {
 export async function addTopic(req, res) {
   const module = await loadModuleForEdit(req);
   const order = module.topics.length;
-  module.topics.push({ ...req.body, order, completed: false });
+  const { subtopics, ...rest } = req.body;
+  module.topics.push({ ...rest, order, completed: false, subtopics: cleanSubs(subtopics) });
   await module.save();
   ok(res, module.toJSON(), 201);
 }
@@ -188,7 +215,9 @@ export async function updateTopic(req, res) {
   const module = await loadModuleForEdit(req);
   const topic = module.topics.id(req.params.topicId);
   if (!topic) throw ApiError.notFound('Topic not found');
-  Object.assign(topic, req.body);
+  const { subtopics, ...rest } = req.body;
+  Object.assign(topic, rest);
+  if (subtopics !== undefined) topic.subtopics = cleanSubs(subtopics);
   await module.save();
   ok(res, module.toJSON());
 }
@@ -220,4 +249,52 @@ export async function updateObjectives(req, res) {
   module.learningObjectives = req.body.learningObjectives;
   await module.save();
   ok(res, module.toJSON());
+}
+
+const toDate = (v) => {
+  if (!v) return undefined;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+};
+const cleanSubs = (subs = []) =>
+  subs
+    .map((s) => ({
+      title: (s.title ?? '').trim(),
+      description: (s.description ?? '').trim(),
+      fromDate: toDate(s.fromDate),
+      toDate: toDate(s.toDate),
+    }))
+    .filter((s) => s.title || s.description);
+
+/**
+ * Bulk-import a syllabus (topics + their subtopics) from a parsed spreadsheet.
+ * Topics whose title already exists (case-insensitive) get their subtopics
+ * replaced; brand-new titles are appended. Existing taught/resource state is
+ * preserved for matched topics.
+ */
+export async function importSyllabus(req, res) {
+  const module = await loadModuleForEdit(req);
+  let added = 0;
+  let updated = 0;
+  for (const t of req.body.topics) {
+    const title = t.title.trim();
+    const subs = cleanSubs(t.subtopics);
+    const existing = module.topics.find((x) => x.title.trim().toLowerCase() === title.toLowerCase());
+    if (existing) {
+      if (t.description !== undefined) existing.description = t.description;
+      existing.subtopics = subs;
+      updated += 1;
+    } else {
+      module.topics.push({
+        title,
+        description: t.description ?? '',
+        order: module.topics.length,
+        completed: false,
+        subtopics: subs,
+      });
+      added += 1;
+    }
+  }
+  await module.save();
+  ok(res, { module: module.toJSON(), added, updated });
 }

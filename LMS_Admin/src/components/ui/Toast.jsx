@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { setToastHandler } from '@/lib/toastBus';
 import './toast.css';
 
 const ToastContext = createContext(null);
@@ -36,6 +37,14 @@ export function ToastProvider({ children }) {
     error: (message, o) => toast({ ...o, type: 'error', message }),
     info: (message, o) => toast({ ...o, type: 'info', message }),
   };
+
+  // Bridge so the React Query client (non-React code) can raise error toasts.
+  const errorRef = useRef(value.error);
+  errorRef.current = value.error;
+  useEffect(() => {
+    setToastHandler((m) => errorRef.current(m));
+    return () => setToastHandler(null);
+  }, []);
 
   return (
     <ToastContext.Provider value={value}>

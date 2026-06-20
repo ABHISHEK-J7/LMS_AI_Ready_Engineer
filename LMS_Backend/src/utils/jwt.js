@@ -18,6 +18,21 @@ export function verifyRefreshToken(token) {
   return jwt.verify(token, env.jwt.refreshSecret);
 }
 
+// File-access token (typ:'file'). Embedded in media URLs as `?t=...` so that
+// browser <img>/<video>/<a> requests — which can't send the Authorization
+// header — can still authenticate. Longer-lived than the access token (so
+// embedded media survives a session) but scoped to file reads only, and carries
+// `tv` so logout/suspension revokes it too.
+export function signFileToken({ sub, tv }) {
+  return jwt.sign({ sub, tv, typ: 'file' }, env.jwt.accessSecret, { expiresIn: '12h' });
+}
+
+export function verifyFileToken(token) {
+  const payload = jwt.verify(token, env.jwt.accessSecret);
+  if (payload.typ !== 'file') throw new Error('Not a file token');
+  return payload;
+}
+
 // Short-lived token issued after a successful OTP check, authorizing exactly one
 // password set. Scoped with a `typ` claim so it can't be used as an access token.
 export function signResetToken(userId) {

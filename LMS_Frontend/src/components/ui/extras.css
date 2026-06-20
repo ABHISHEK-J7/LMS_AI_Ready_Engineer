@@ -58,6 +58,9 @@
 .modal--md { max-width: 32rem; }
 .modal--lg { max-width: 62rem; }
 .modal--xl { max-width: 80rem; }
+@media (max-width: 1024px) {
+  .modal--xl { max-width: min(62rem, 100%); }
+}
 .modal__header {
   display: flex;
   align-items: center;

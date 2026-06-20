@@ -113,7 +113,7 @@ export function RosterEditor({ classId, onSaved }) {
                 style={{ width: '7rem' }}
               />
             </div>
-            <p className="lms-muted" style={{ margin: 0, fontSize: 'var(--font-size-sm)', flex: 1, minWidth: '15rem', lineHeight: 1.6 }}>
+            <p className="lms-muted" style={{ margin: 0, fontSize: 'var(--font-size-sm)', flex: 1, minWidth: 0, lineHeight: 1.6 }}>
               Joined by <strong>{fmtTime(cutoffMs)}</strong> (start {cls.startTime} + {Number(buffer) || 0} min) counts as{' '}
               <strong>On time</strong>. Later → <strong>Late</strong>. No entry → <strong>Absent</strong>.
             </p>
@@ -124,8 +124,8 @@ export function RosterEditor({ classId, onSaved }) {
               <thead>
                 <tr>
                   <th>Student</th>
-                  <th style={{ width: 110 }}>Entry Time</th>
-                  <th style={{ width: 130 }}>Status</th>
+                  <th>Entry Time</th>
+                  <th>Status</th>
                   <th>Remarks</th>
                 </tr>
               </thead>

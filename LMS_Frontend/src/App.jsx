@@ -25,6 +25,8 @@ import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage';
 import { DoubtsPage } from '@/pages/doubts/DoubtsPage';
 import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
 import { ApprovalsPage } from '@/pages/approvals/ApprovalsPage';
+// Lazy — pulls in the LiveKit client only when a user actually enters a class.
+const ClassRoomPage = lazy(() => import('@/pages/classroom/ClassRoomPage').then((m) => ({ default: m.ClassRoomPage })));
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
 /** Student & Trainer application. Administrators use the separate Admin portal. */
@@ -42,6 +44,18 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify/:certificateId" element={<VerifyCertificatePage />} />
+
+      {/* Immersive, full-screen live classroom (no sidebar/topbar chrome). */}
+      <Route
+        path="/app/class/:id/live"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<FullPageSpinner />}>
+              <ClassRoomPage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/app"

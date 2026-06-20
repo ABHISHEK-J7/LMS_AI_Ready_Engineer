@@ -5,7 +5,7 @@ import { Assessment, Batch, Module, Submission, User } from '../models/index.js'
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { toCsv, sendCsv } from '../utils/csv.js';
-import { storeUpload } from '../services/fileStore.js';
+import { gridfsStorage } from '../services/fileStore.js';
 import { attemptEndsAt, finalGateForStudent, isAvailableNow } from './assessment.controller.js';
 import { assertSeb } from '../services/seb.js';
 import { notify } from '../services/notify.js';
@@ -184,7 +184,7 @@ export async function recordWarning(req, res) {
 // ── Webcam proctoring snapshots ───────────────────────────────────────────────
 const MAX_SHOTS = 12;
 export const uploadProctorShot = multer({
-  storage: multer.memoryStorage(),
+  storage: gridfsStorage('proctor'),
   limits: { fileSize: 3 * 1024 * 1024, files: 1 }, // 3 MB
   fileFilter: (_req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
 }).single('shot');
@@ -199,8 +199,7 @@ export async function proctorShot(req, res) {
     return ok(res, { stored: false }); // no active attempt — silently ignore
   }
   if ((sub.proctorShots?.length ?? 0) >= MAX_SHOTS) return ok(res, { stored: false });
-  const { url } = await storeUpload(req.file, 'proctor');
-  sub.proctorShots.push(url);
+  sub.proctorShots.push(req.file.url);
   await sub.save();
   ok(res, { stored: true, count: sub.proctorShots.length });
 }

@@ -69,7 +69,7 @@ export async function getClassRoster(req, res) {
   const joins = await ClassJoin.find({ classSession: cls._id });
   const joinByStudent = new Map(joins.map((j) => [j.student.toString(), j.joinedAt]));
 
-  const roster = (batch?.students ?? []).map((s) => {
+  const roster = (batch?.students ?? []).filter(Boolean).map((s) => {
     const a = byStudent.get(s._id.toString());
     return {
       student: { id: s._id.toString(), name: s.name, email: s.email },
@@ -177,7 +177,9 @@ async function batchAttendanceReport(req) {
     byStudent.get(key).push(a);
   }
 
-  const students = batch.students.map((s) => {
+  // Guard against orphaned references: a deleted/erased user leaves a null entry
+  // in the populated `students` array, so skip those rather than crash.
+  const students = batch.students.filter(Boolean).map((s) => {
     const summary = computeSummary(byStudent.get(s._id.toString()) ?? []);
     return {
       student: { id: s._id.toString(), name: s.name, email: s.email },

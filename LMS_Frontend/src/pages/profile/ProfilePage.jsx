@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { CalendarCheck, Camera, Download, FolderOpen, Github, MessageCircleQuestion, Plus, Star, Trash2 } from 'lucide-react';
 import { PROJECT_MAX_IMAGES, ProjectStatus, SOCIAL_PLATFORMS, UserRole } from '@/shared';
-import { Badge, Button, Card, CardHeader, EmptyState, FullPageSpinner, Input, Modal, Skeleton, Textarea, useToast } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, FullPageSpinner, Input, Modal, Skeleton, Textarea, useConfirm, useToast } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
-import { apiErrorMessage, downloadFile } from '@/lib/api';
+import { apiErrorMessage, downloadFile, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useTrainerStats, useUpdateProfile, useUploadAvatar } from '@/lib/profile';
 import { useAddProject, useDeleteProject, useMyProjects } from '@/lib/projects';
@@ -116,7 +116,7 @@ function DetailsCard({ user }) {
       <CardHeader title="Profile" subtitle="How you appear across the platform." />
       <div className="profile-avatar" style={{ margin: 'var(--space-3) 0 var(--space-5)' }}>
         <div className="profile-avatar__img">
-          {user.avatarUrl ? <img src={user.avatarUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /> : initials(user.name)}
+          {user.avatarUrl ? <img src={fileSrc(user.avatarUrl)} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /> : initials(user.name)}
         </div>
         <div>
           <input ref={fileRef} type="file" accept="image/*" onChange={onAvatar} style={{ display: 'none' }} />
@@ -196,7 +196,7 @@ function LinksCard({ user }) {
             <label className="field__label">Your links</label>
             {custom.map((l, i) => (
               <div key={i} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                <input className="input" value={l.label} onChange={(e) => setCustomAt(i, { label: e.target.value })} placeholder="Label (e.g. Kaggle)" style={{ flex: '0 0 11rem' }} />
+                <input className="input" value={l.label} onChange={(e) => setCustomAt(i, { label: e.target.value })} placeholder="Label (e.g. Kaggle)" style={{ flex: '1 1 7rem', minWidth: 0 }} />
                 <input className="input" value={l.url} onChange={(e) => setCustomAt(i, { url: e.target.value })} placeholder="https://…" style={{ flex: 1, minWidth: 0 }} />
                 <button type="button" className="icon-btn icon-btn--danger" onClick={() => removeCustom(i)} aria-label="Remove link"><Trash2 size={14} /></button>
               </div>
@@ -217,6 +217,7 @@ function LinksCard({ user }) {
 // ── Projects ─────────────────────────────────────────────────────────────────
 
 function ProjectsCard() {
+  const confirm = useConfirm();
   const { data: projects, isLoading } = useMyProjects();
   const del = useDeleteProject();
   const [adding, setAdding] = useState(false);
@@ -254,7 +255,7 @@ function ProjectsCard() {
             <div key={p.id} className="project-card" onClick={() => setViewing(p)}>
               <div className="project-card__cover" style={{ position: 'relative' }}>
                 {p.images?.length > 1 && <span className="project-card__count">{p.images.length} images</span>}
-                {p.images?.[0] ? <img src={p.images[0]} alt={p.title} /> : <Github size={28} />}
+                {p.images?.[0] ? <img src={fileSrc(p.images[0])} alt={p.title} /> : <Github size={28} />}
               </div>
               <div className="project-card__body">
                 <div className="project-card__title">{p.title}</div>
@@ -264,7 +265,7 @@ function ProjectsCard() {
                     type="button"
                     className="icon-btn icon-btn--danger"
                     aria-label="Delete project"
-                    onClick={(e) => { e.stopPropagation(); if (window.confirm('Delete this project?')) del.mutate(p.id); }}
+                    onClick={async (e) => { e.stopPropagation(); if (await confirm({ title: 'Delete this project?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate(p.id); }}
                   >
                     <Trash2 size={14} />
                   </button>

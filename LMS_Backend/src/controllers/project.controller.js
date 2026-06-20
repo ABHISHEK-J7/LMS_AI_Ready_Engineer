@@ -5,7 +5,7 @@ import { PROJECT_MAX_IMAGES, ProjectStatus, UserRole } from '#shared';
 import { Batch, Project } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
-import { storeUpload, deleteByUrl } from '../services/fileStore.js';
+import { gridfsStorage, deleteByUrl } from '../services/fileStore.js';
 
 const objectId = z.string().length(24);
 export const projectIdParam = z.object({ id: objectId });
@@ -17,7 +17,7 @@ export const reviewSchema = z.object({
 // ── Multer (up to PROJECT_MAX_IMAGES screenshots → MongoDB/GridFS) ────────────
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 export const uploadProjectImages = multer({
-  storage: multer.memoryStorage(),
+  storage: gridfsStorage('project'),
   limits: { fileSize: 10 * 1024 * 1024, files: PROJECT_MAX_IMAGES }, // 10 MB each
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -50,9 +50,8 @@ export async function create(req, res) {
   if (!parsed.success) throw ApiError.badRequest('Validation failed', parsed.error.flatten());
   if (!req.files?.length) throw ApiError.badRequest('Add at least one project screenshot');
 
-  // Persist each screenshot to GridFS, then record their URLs.
-  const stored = await Promise.all(req.files.map((f) => storeUpload(f, 'project')));
-  const images = stored.map((s) => s.url);
+  // Files were streamed to GridFS by the multer engine; record their URLs.
+  const images = req.files.map((f) => f.url);
   const project = await Project.create({
     student: req.auth.userId,
     title: parsed.data.title,

@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const ACCESS_KEY = 'lms.accessToken';
 const REFRESH_KEY = 'lms.refreshToken';
+const FILE_KEY = 'lms.fileToken';
 
 export const tokenStore = {
   get access() {
@@ -10,15 +11,32 @@ export const tokenStore = {
   get refresh() {
     return localStorage.getItem(REFRESH_KEY);
   },
+  get file() {
+    return localStorage.getItem(FILE_KEY);
+  },
   set(tokens) {
     localStorage.setItem(ACCESS_KEY, tokens.accessToken);
     localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+    if (tokens.fileToken) localStorage.setItem(FILE_KEY, tokens.fileToken);
   },
   clear() {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(FILE_KEY);
   },
 };
+
+/**
+ * Resolve a stored-file URL (`/api/uploads/...`) into a `<img>/<video>/<a>`-safe
+ * src by appending the file-access token (browsers can't send the Authorization
+ * header on media requests). External links are returned untouched.
+ */
+export function fileSrc(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (!url.startsWith('/api/uploads/') && !url.startsWith('/uploads/')) return url;
+  const t = tokenStore.file;
+  return t ? `${url}${url.includes('?') ? '&' : '?'}t=${encodeURIComponent(t)}` : url;
+}
 
 export const api = axios.create({
   baseURL: '/api',

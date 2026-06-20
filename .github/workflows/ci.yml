@@ -22,6 +22,9 @@ jobs:
       - name: Backend tests
         run: npm test --workspace LMS_Backend
 
+      - name: Frontend tests
+        run: npm test --workspace LMS_Frontend
+
       - name: Build student/trainer app
         run: npm run build --workspace LMS_Frontend
 

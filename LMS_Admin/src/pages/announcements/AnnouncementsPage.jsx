@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { UserRole } from '@/shared';
 import { Megaphone } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea, useToast } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -24,6 +24,7 @@ export function AnnouncementsPage() {
   const create = useCreateAnnouncement();
   const del = useDeleteAnnouncement();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(BLANK);
@@ -52,7 +53,7 @@ export function AnnouncementsPage() {
   }
 
   async function remove(id) {
-    if (!window.confirm('Delete this announcement?')) return;
+    if (!(await confirm({ title: 'Delete announcement?', message: 'This cannot be undone.', confirmLabel: 'Delete', tone: 'danger' }))) return;
     try {
       await del.mutateAsync(id);
       toast.success('Announcement deleted.');

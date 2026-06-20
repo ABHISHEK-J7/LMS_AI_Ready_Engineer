@@ -85,5 +85,12 @@ router.patch(
   validate({ params: modules.moduleIdParam, body: modules.objectivesSchema }),
   asyncHandler(modules.updateObjectives),
 );
+// Bulk syllabus import from an uploaded spreadsheet (topics + subtopics).
+router.post(
+  '/:id/syllabus/import',
+  adminOrTrainer,
+  validate({ params: modules.moduleIdParam, body: modules.importSyllabusSchema }),
+  asyncHandler(modules.importSyllabus),
+);
 
 export default router;

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { CheckCircle2, ExternalLink, FileText, Inbox, XCircle } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, SkeletonCards, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
-import { apiErrorMessage } from '@/lib/api';
+import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useCertReviews, useReviewCert } from '@/lib/externalCertificates';
 import { ProjectsApprovalSection } from '@/pages/projects/ProjectsApprovalSection';
 import { formatDate } from '@/lib/format';
@@ -17,6 +17,7 @@ const STATUS = {
 
 /** Trainer/admin: verify and approve/reject student-uploaded external certificates. */
 export function ApprovalsPage() {
+  const confirm = useConfirm();
   const { data: certs, isLoading, isError, error, refetch } = useCertReviews();
   const review = useReviewCert();
   const [busyId, setBusyId] = useState(null);
@@ -30,9 +31,17 @@ export function ApprovalsPage() {
     setErr('');
     let note;
     if (decision === 'reject') {
-      const input = window.prompt('Reason for rejection (optional):');
+      const input = await confirm({
+        prompt: true,
+        title: 'Reject certificate',
+        message: 'Give the student a reason for rejection.',
+        placeholder: 'Reason for rejection…',
+        confirmLabel: 'Reject',
+        tone: 'danger',
+        required: true,
+      });
       if (input === null) return; // cancelled
-      note = input || undefined;
+      note = input;
     }
     setBusyId(cert.id);
     try {
@@ -47,14 +56,14 @@ export function ApprovalsPage() {
   const row = (c, actionable) => (
     <div key={c.id} className="approval-row">
       <div className="approval-thumb">
-        {isImage(c.url) ? <img src={c.url} alt="" /> : <FileText size={22} />}
+        {isImage(c.url) ? <img src={fileSrc(c.url)} alt="" /> : <FileText size={22} />}
       </div>
-      <div style={{ flex: 1, minWidth: '12rem' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>{c.title}</div>
         <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
           {c.student?.name}{c.issuer ? ` · ${c.issuer}` : ''} · submitted {formatDate(c.createdAt)}
         </div>
-        <a href={c.url} target="_blank" rel="noreferrer" className="ext-cert__open" style={{ display: 'inline-flex' }}>
+        <a href={fileSrc(c.url)} target="_blank" rel="noreferrer" className="ext-cert__open" style={{ display: 'inline-flex' }}>
           <ExternalLink size={12} /> View certificate
         </a>
         {!actionable && c.note && (

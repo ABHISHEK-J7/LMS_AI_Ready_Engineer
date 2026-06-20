@@ -10,6 +10,10 @@ import { env } from '../config/env.js';
 import { Module, User, getSettings } from '../models/index.js';
 
 async function seed() {
+  // Never create a default-credential admin in production.
+  if (env.isProd && (process.env.SEED_ADMIN_PASSWORD ?? '') === '') {
+    throw new Error('Refusing to seed in production without an explicit SEED_ADMIN_PASSWORD env var.');
+  }
   await connectDatabase();
 
   // 1. Settings singleton

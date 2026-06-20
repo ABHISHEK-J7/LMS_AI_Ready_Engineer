@@ -5,7 +5,7 @@ import { ExternalCertStatus, UserRole } from '#shared';
 import { Batch, ExternalCertificate, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
-import { storeUpload, deleteByUrl } from '../services/fileStore.js';
+import { gridfsStorage, deleteByUrl } from '../services/fileStore.js';
 
 const objectId = z.string().length(24);
 export const externalCertIdParam = z.object({ id: objectId });
@@ -17,7 +17,7 @@ export const reviewSchema = z.object({
 // ── Multer (single file → MongoDB/GridFS) ─────────────────────────────────────
 const ALLOWED_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp']);
 export const uploadCertFile = multer({
-  storage: multer.memoryStorage(),
+  storage: gridfsStorage('cert'),
   limits: { fileSize: 25 * 1024 * 1024, files: 1 }, // 25 MB
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -48,7 +48,7 @@ export async function create(req, res) {
 
   let finalUrl = url;
   if (req.file) {
-    finalUrl = (await storeUpload(req.file, 'cert')).url;
+    finalUrl = req.file.url;
   } else if (!url) {
     throw ApiError.badRequest('Provide a link or upload a file');
   }

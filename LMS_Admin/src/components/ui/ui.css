@@ -189,7 +189,7 @@
   color: var(--color-warning);
 }
 .badge--error {
-  background: #fde8e8;
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-surface));
   color: var(--color-error);
 }
 .badge--neutral {

@@ -46,12 +46,15 @@ export function errorHandler(
     captureError(err, { requestId: req?.id, method: req?.method, path: req?.originalUrl });
   }
 
+  // In production, never leak raw internal exception messages (Mongo/driver/JS
+  // errors) to the client — return a generic message; the real one is logged.
+  const hideInternals = env.isProd && apiError.statusCode >= 500;
   const body = {
     success: false,
     error: {
       code: apiError.code,
-      message: apiError.message,
-      details: env.isProd && apiError.statusCode >= 500 ? undefined : apiError.details,
+      message: hideInternals ? 'Something went wrong. Please try again.' : apiError.message,
+      details: hideInternals ? undefined : apiError.details,
       // Surface the correlation id so a user can quote it in a bug report.
       requestId: req?.id,
     },

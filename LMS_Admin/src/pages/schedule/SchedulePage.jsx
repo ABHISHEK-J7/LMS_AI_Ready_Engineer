@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { UserRole } from '@/shared';
 import { CalendarX } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Modal, SkeletonCards, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -43,13 +43,28 @@ export function SchedulePage() {
   const { data: trainers } = useTrainers({ enabled: isAdmin });
 
   const [modal, setModal] = useState({ open: false, mode: 'create', initial: null });
+  const [dayView, setDayView] = useState(null); // { date, items } for the "+N more" day list
   const updateClass = useUpdateClass();
   const deleteClass = useDeleteClass();
+  const confirm = useConfirm();
 
   const groups = groupByDay(classes ?? []);
 
   function ownerCanManage(c) {
     return isAdmin || c.trainer?.id === user?.id;
+  }
+
+  function editClass(c) {
+    if (ownerCanManage(c)) {
+      setDayView(null);
+      setModal({ open: true, mode: 'edit', initial: c });
+    }
+  }
+
+  async function onDelete(c) {
+    if (await confirm({ title: 'Delete this class?', message: 'This permanently removes the scheduled class.', confirmLabel: 'Delete', tone: 'danger' })) {
+      deleteClass.mutate(c.id);
+    }
   }
 
   return (
@@ -99,7 +114,8 @@ export function SchedulePage() {
         <MonthCalendar
           month={month}
           classes={classes ?? []}
-          onSelect={(c) => ownerCanManage(c) && setModal({ open: true, mode: 'edit', initial: c })}
+          onSelect={editClass}
+          onShowMore={(date, items) => setDayView({ date, items })}
         />
       ) : groups.length === 0 ? (
         <EmptyState
@@ -169,9 +185,7 @@ export function SchedulePage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() =>
-                        window.confirm('Delete this class permanently?') && deleteClass.mutate(c.id)
-                      }
+                      onClick={() => onDelete(c)}
                     >
                       Delete
                     </Button>
@@ -182,6 +196,41 @@ export function SchedulePage() {
           </div>
         ))
       )}
+
+      <Modal
+        open={Boolean(dayView)}
+        title={dayView ? dayView.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : ''}
+        onClose={() => setDayView(null)}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          {(dayView?.items ?? []).map((c) => {
+            const manageable = ownerCanManage(c);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className="class-row class-row--mini"
+                onClick={manageable ? () => editClass(c) : undefined}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%', textAlign: 'left', cursor: manageable ? 'pointer' : 'default', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)' }}
+              >
+                <div className="class-time" style={{ minWidth: '4rem' }}>
+                  {c.startTime}
+                  <div className="class-time__end">{c.endTime}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="class-title">{c.title}</div>
+                  <div className="class-meta">
+                    <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+                    <span>{c.batch?.name}</span>
+                    <span>·</span>
+                    <span>{c.trainer?.name}</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
 
       {canManage && (
         <ClassModal

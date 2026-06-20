@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Check, Database, Download, HelpCircle, ScrollText, Trash2 } from 'lucide-react';
 import { AssessmentAvailability, ProctoringMode, QuestionType } from '@/shared';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, SkeletonText, useToast } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, SkeletonText, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
-import { apiErrorMessage, downloadFile } from '@/lib/api';
+import { apiErrorMessage, downloadFile, fileSrc } from '@/lib/api';
 import {
   useAssessment,
   useDeleteQuestion,
@@ -21,7 +21,7 @@ import {
   PROCTORING_TONE,
   QUESTION_TYPE_LABEL,
 } from './assessmentsUi';
-import { combineDateTime, splitDateTime } from './examWindow';
+import { combineDateTime, splitDateTime, validateExamWindow } from './examWindow';
 import { BankPicker } from './BankPicker';
 import { formatDate } from '@/lib/format';
 import '../modules/modules.css';
@@ -31,7 +31,14 @@ export function AssessmentEditor() {
   const { data: a, isLoading, isError, error, refetch } = useAssessment(id);
   const setAvailability = useSetAvailability();
   const del = useDeleteQuestion();
+  const confirm = useConfirm();
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  async function onRemoveQuestion(questionId) {
+    if (await confirm({ title: 'Remove this question?', message: 'It stays in the question bank — only this test loses it.', confirmLabel: 'Remove', tone: 'danger' })) {
+      del.mutate({ id, questionId });
+    }
+  }
 
   if (isLoading && !a) {
     return (
@@ -130,7 +137,7 @@ export function AssessmentEditor() {
                 size="sm"
                 variant="ghost"
                 title="Remove from this test"
-                onClick={() => window.confirm('Remove this question from the test?') && del.mutate({ id: a.id, questionId: q.id })}
+                onClick={() => onRemoveQuestion(q.id)}
               >
                 <Trash2 size={15} />
               </Button>
@@ -168,8 +175,8 @@ function ProctoringCell({ s }) {
       {shots.length > 0 && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {shots.map((u, i) => (
-            <a key={i} href={u} target="_blank" rel="noreferrer" title="Open snapshot">
-              <img src={u} alt={`Snapshot ${i + 1}`} style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--color-border)' }} />
+            <a key={i} href={fileSrc(u)} target="_blank" rel="noreferrer" title="Open snapshot">
+              <img src={fileSrc(u)} alt={`Snapshot ${i + 1}`} style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--color-border)' }} />
             </a>
           ))}
         </div>
@@ -196,6 +203,10 @@ function ProctoringCard({ a }) {
   async function save() {
     setErr('');
     setMsg('');
+    if (timed) {
+      const windowErr = validateExamWindow(form);
+      if (windowErr) return setErr(windowErr);
+    }
     try {
       await update.mutateAsync({
         id: a.id,

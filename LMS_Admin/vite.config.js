@@ -18,7 +18,7 @@ export default defineConfig({
           if (id.includes('xlsx')) return 'xlsx';
           if (id.includes('gsap')) return 'gsap';
           if (id.includes('@tanstack')) return 'react-query';
-          if (id.includes('react-router') || id.includes('react-dom') || /node_modules\/(react|scheduler)\//.test(id)) return 'react';
+          if (id.includes('react-router') || id.includes('@remix-run') || id.includes('react-dom') || /node_modules\/(react|scheduler)\//.test(id)) return 'react';
           return 'vendor';
         },
       },

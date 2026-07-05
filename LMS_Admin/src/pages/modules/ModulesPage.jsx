@@ -6,7 +6,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, Skel
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useArchiveModule, useCreateModule, useModules } from '@/lib/modules';
+import { useArchiveModule, useCreateModule, useModules, useUpdateModule } from '@/lib/modules';
 import { LEVEL_OPTIONS, levelTone, titleCase, topicProgress } from './moduleUi';
 import './modules.css';
 
@@ -25,6 +25,7 @@ export function ModulesPage() {
   const [formError, setFormError] = useState('');
   const createModule = useCreateModule();
   const archiveModule = useArchiveModule();
+  const updateModule = useUpdateModule();
   const confirm = useConfirm();
 
   const subtitle = {
@@ -53,6 +54,11 @@ export function ModulesPage() {
     e.stopPropagation();
     if (!(await confirm({ title: 'Archive this module?', message: 'It will be hidden from active curriculum.' }))) return;
     await archiveModule.mutateAsync(id);
+  }
+
+  async function onUnarchive(e, id) {
+    e.stopPropagation();
+    await updateModule.mutateAsync({ id, archived: false });
   }
 
   return (
@@ -124,7 +130,11 @@ export function ModulesPage() {
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`/app/modules/${m.id}`); }}>
                       Manage
                     </Button>
-                    {!m.archived && (
+                    {m.archived ? (
+                      <Button size="sm" variant="ghost" onClick={(e) => onUnarchive(e, m.id)}>
+                        Unarchive
+                      </Button>
+                    ) : (
                       <Button size="sm" variant="ghost" onClick={(e) => onArchive(e, m.id)}>
                         Archive
                       </Button>

@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { BookOpen, Check, FileSpreadsheet, Layers, ListChecks, Pencil, Trash2 } from 'lucide-react';
+import { BookOpen, FileSpreadsheet, Layers, ListChecks, Pencil, Trash2 } from 'lucide-react';
 import { Button, Card, CardHeader, Input, Modal, Textarea, useConfirm } from '@/components/ui';
 import {
   useAddTopic,
   useDeleteTopic,
-  useSetTopicCompletion,
   useUpdateTopic,
 } from '@/lib/modules';
 import { useResources } from '@/lib/resources';
@@ -25,7 +24,6 @@ export function SyllabusBoard({ module, canEdit }) {
   const addTopic = useAddTopic();
   const updateTopic = useUpdateTopic();
   const deleteTopic = useDeleteTopic();
-  const setCompletion = useSetTopicCompletion();
   const confirm = useConfirm();
   const { data: resources } = useResources(module.id);
 
@@ -90,7 +88,7 @@ export function SyllabusBoard({ module, canEdit }) {
             const subs = t.subtopics?.length ?? 0;
             return (
               <div
-                className={`topic-card${t.completed ? ' topic-card--done' : ''}`}
+                className="topic-card"
                 key={t.id}
                 role="button"
                 tabIndex={0}
@@ -102,14 +100,11 @@ export function SyllabusBoard({ module, canEdit }) {
                   <span className="topic-card__icon"><BookOpen size={16} strokeWidth={2} /></span>
                   <div className="topic-card__title">{t.title}</div>
                 </div>
-                {/* Row 2 — concepts count (+ taught badge) */}
+                {/* Row 2 — concepts count */}
                 <div className="topic-card__row">
                   <span className="topic-card__count">
                     <ListChecks size={13} /> {subs} concept{subs === 1 ? '' : 's'}
                   </span>
-                  {t.completed && (
-                    <span className="topic-card__done"><Check size={12} strokeWidth={3} /> Taught</span>
-                  )}
                 </div>
                 {/* Row 3 — materials count + actions */}
                 <div className="topic-card__row topic-card__row--last">
@@ -118,14 +113,6 @@ export function SyllabusBoard({ module, canEdit }) {
                   </span>
                   {canEdit && (
                     <span className="topic-card__actions" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className={`icon-btn${t.completed ? ' icon-btn--on' : ''}`}
-                        title={t.completed ? 'Mark not taught' : 'Mark taught'}
-                        onClick={() => setCompletion.mutate({ id: module.id, topicId: t.id, completed: !t.completed })}
-                      >
-                        <Check size={14} />
-                      </button>
                       <button
                         type="button"
                         className="icon-btn"

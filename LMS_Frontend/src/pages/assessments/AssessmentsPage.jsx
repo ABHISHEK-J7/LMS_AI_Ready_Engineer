@@ -89,7 +89,7 @@ function StudentAssessments() {
 
 // ── Trainer / Admin ─────────────────────────────────────────────────────────────
 
-const BLANK = { title: '', type: AssessmentType.PRACTICE, practiceIndex: 1, prepIndex: 1, topic: '', passingScore: '', proctoring: ProctoringMode.NONE, examDate: '', windowStart: '', windowEnd: '', durationMinutes: '' };
+const BLANK = { title: '', type: AssessmentType.PRACTICE, topic: '', passingScore: '', proctoring: ProctoringMode.NONE, examDate: '', windowStart: '', windowEnd: '', durationMinutes: '' };
 
 /** Date + window start/end + duration for proctored (app/seb) tests. */
 function ExamWindowFields({ form, setForm }) {
@@ -152,10 +152,7 @@ function StaffAssessments() {
         title: form.title,
         module: moduleId,
         type: form.type,
-        ...(form.type === AssessmentType.PRACTICE
-          ? { practiceIndex: Number(form.practiceIndex), ...(form.topic ? { topic: form.topic } : {}) }
-          : {}),
-        ...(form.type === AssessmentType.PREPARATION ? { prepIndex: Number(form.prepIndex) } : {}),
+        ...(form.type === AssessmentType.PRACTICE && form.topic ? { topic: form.topic } : {}),
         ...(form.passingScore ? { passingScore: Number(form.passingScore) } : {}),
         proctoring: form.proctoring,
       };
@@ -280,27 +277,11 @@ function StaffAssessments() {
             ]}
           />
           {form.type === AssessmentType.PRACTICE && (
-            <>
-              <Select
-                label="Practice test number"
-                value={String(form.practiceIndex)}
-                onChange={(e) => setForm({ ...form, practiceIndex: e.target.value })}
-                options={[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `Practice Test ${n}` }))}
-              />
-              <Select
-                label="Topic (optional — leave blank for whole module)"
-                value={form.topic}
-                onChange={(e) => setForm({ ...form, topic: e.target.value })}
-                options={[{ value: '', label: 'Whole module' }, ...topics.map((t) => ({ value: t.id, label: t.title }))]}
-              />
-            </>
-          )}
-          {form.type === AssessmentType.PREPARATION && (
             <Select
-              label="Preparation test number"
-              value={String(form.prepIndex)}
-              onChange={(e) => setForm({ ...form, prepIndex: e.target.value })}
-              options={[1, 2].map((n) => ({ value: String(n), label: `Preparation Test ${n}` }))}
+              label="Topic (optional — leave blank for whole module)"
+              value={form.topic}
+              onChange={(e) => setForm({ ...form, topic: e.target.value })}
+              options={[{ value: '', label: 'Whole module' }, ...topics.map((t) => ({ value: t.id, label: t.title }))]}
             />
           )}
           <Select

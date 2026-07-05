@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { CalendarCheck, Camera, Download, FolderOpen, Github, MessageCircleQuestion, Plus, Star, Trash2 } from 'lucide-react';
+import { CalendarCheck, Camera, FileText, FolderOpen, Github, MessageCircleQuestion, Plus, Star, Trash2 } from 'lucide-react';
 import { PROJECT_MAX_IMAGES, ProjectStatus, SOCIAL_PLATFORMS, UserRole } from '@/shared';
 import { Badge, Button, Card, CardHeader, EmptyState, FullPageSpinner, Input, Modal, Skeleton, Textarea, useConfirm, useToast } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { useTrainerStats, useUpdateProfile, useUploadAvatar } from '@/lib/profile';
 import { useAddProject, useDeleteProject, useMyProjects } from '@/lib/projects';
 import { ProjectDetailModal } from '@/pages/projects/ProjectDetailModal';
+import { ResumeModal } from './ResumeModal';
 import '@/pages/projects/projects.css';
 import '@/pages/modules/modules.css';
 
@@ -28,32 +29,22 @@ export function ProfilePage() {
       {!isStudent && <TrainerStatsCard />}
       <LinksCard user={user} />
       {isStudent && <ProjectsCard />}
-      <PrivacyCard />
+      {isStudent && <ResumeCard user={user} />}
     </>
   );
 }
 
-// ── Privacy & data (GDPR self-service export) ───────────────────────────────────
+// ── Resume generator ────────────────────────────────────────────────────────────
 
-function PrivacyCard() {
-  const toast = useToast();
-  const [exporting, setExporting] = useState(false);
-  const onExport = async () => {
-    setExporting(true);
-    try {
-      await downloadFile('/profile/export', 'my-data-export.json');
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
-    } finally {
-      setExporting(false);
-    }
-  };
+function ResumeCard({ user }) {
+  const [open, setOpen] = useState(false);
   return (
     <Card style={{ marginBottom: 'var(--space-6)' }}>
-      <CardHeader title="Privacy & data" subtitle="Download a portable copy of all the data we hold about you." />
-      <Button variant="outline" size="sm" loading={exporting} onClick={onExport} style={{ marginTop: 'var(--space-3)' }}>
-        <Download size={15} /> Download my data
+      <CardHeader title="Resume" subtitle="Auto-generate a clean resume from your profile, links, projects & certifications." />
+      <Button size="sm" onClick={() => setOpen(true)} style={{ marginTop: 'var(--space-3)' }}>
+        <FileText size={15} /> Generate my resume
       </Button>
+      <ResumeModal open={open} user={user} onClose={() => setOpen(false)} />
     </Card>
   );
 }

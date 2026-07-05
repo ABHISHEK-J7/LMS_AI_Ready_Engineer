@@ -26,11 +26,11 @@ export const listAssessmentsQuery = z.object({
 
 export const createAssessmentSchema = z
   .object({
+    // The trainer names the test freely; `type` is just the category
+    // (practice / preparation / final). Any number of each is allowed.
     title: z.string().min(2),
     module: objectId,
     type: z.nativeEnum(AssessmentType),
-    practiceIndex: z.number().int().min(1).max(5).optional(),
-    prepIndex: z.number().int().min(1).max(2).optional(),
     topic: objectId.optional().nullable(),
     passingScore: z.number().int().min(0).max(100).optional(),
     availableFrom: z.coerce.date().optional(),
@@ -41,12 +41,6 @@ export const createAssessmentSchema = z
     questionIds: z.array(objectId).optional(),
   })
   .superRefine((d, ctx) => {
-    if (d.type === AssessmentType.PRACTICE && d.practiceIndex === undefined) {
-      ctx.addIssue({ code: 'custom', message: 'practiceIndex (1–5) is required for practice tests', path: ['practiceIndex'] });
-    }
-    if (d.type === AssessmentType.PREPARATION && d.prepIndex === undefined) {
-      ctx.addIssue({ code: 'custom', message: 'prepIndex (1–2) is required for preparation tests', path: ['prepIndex'] });
-    }
     // Only practice tests may be topic-scoped; prep/final cover the whole module.
     if (d.topic && d.type !== AssessmentType.PRACTICE) {
       ctx.addIssue({ code: 'custom', message: 'Only practice tests can target a specific topic', path: ['topic'] });
@@ -150,7 +144,7 @@ async function finalGateForStudent(moduleId, studentId) {
 
   return {
     gated: pending.length > 0,
-    reason: pending.length ? 'Attempt both preparation tests before taking the final.' : null,
+    reason: pending.length ? `Attempt all ${preps.length} preparation test(s) before taking the final.` : null,
     pending,
   };
 }
@@ -189,7 +183,7 @@ export async function listAssessments(req, res) {
   }
 
   const assessments = await Assessment.find(filter)
-    .sort({ module: 1, type: 1, prepIndex: 1, practiceIndex: 1 })
+    .sort({ module: 1, type: 1, createdAt: 1 })
     .populate('module', 'name code');
 
   if (role === UserRole.STUDENT) {
@@ -204,7 +198,7 @@ export async function listAssessments(req, res) {
         const view = toStudentView(a);
         const sub = byAssessment.get(a._id.toString());
         view.availableNow = isAvailableNow(a);
-        // Finals are additionally gated until both preparation tests are attempted.
+        // Finals are additionally gated until every preparation test is attempted.
         if (a.type === AssessmentType.FINAL && view.availableNow) {
           const gate = await finalGateForStudent(a.module._id, userId);
           if (gate.gated) {
@@ -324,17 +318,9 @@ export async function createAssessment(req, res) {
     if (!assigned) throw ApiError.forbidden('You are not assigned to this module');
   }
 
-  // Enforce one assessment per (module, practiceIndex), per (module, prepIndex),
-  // and a single final per module.
-  if (data.type === AssessmentType.PRACTICE) {
-    if (await Assessment.findOne({ module: data.module, type: AssessmentType.PRACTICE, practiceIndex: data.practiceIndex })) {
-      throw ApiError.conflict(`Practice Test ${data.practiceIndex} already exists for this module`);
-    }
-  } else if (data.type === AssessmentType.PREPARATION) {
-    if (await Assessment.findOne({ module: data.module, type: AssessmentType.PREPARATION, prepIndex: data.prepIndex })) {
-      throw ApiError.conflict(`Preparation Test ${data.prepIndex} already exists for this module`);
-    }
-  } else if (await Assessment.findOne({ module: data.module, type: AssessmentType.FINAL })) {
+  // Any number of practice / preparation tests may exist per module (each named
+  // by the trainer). A module still has exactly one final.
+  if (data.type === AssessmentType.FINAL && (await Assessment.findOne({ module: data.module, type: AssessmentType.FINAL }))) {
     throw ApiError.conflict('A final assessment already exists for this module');
   }
 
@@ -359,8 +345,6 @@ export async function createAssessment(req, res) {
     title: data.title,
     module: data.module,
     type: data.type,
-    practiceIndex: data.type === AssessmentType.PRACTICE ? data.practiceIndex : undefined,
-    prepIndex: data.type === AssessmentType.PREPARATION ? data.prepIndex : undefined,
     topic: data.type === AssessmentType.PRACTICE ? (data.topic ?? null) : null,
     topicTitle: data.type === AssessmentType.PRACTICE ? topicTitle : '',
     passingScore: data.passingScore ?? settings.passingScore,

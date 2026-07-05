@@ -6,7 +6,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, SkeletonCard
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useArchiveBatch, useBatches, useCreateBatch } from '@/lib/batches';
+import { useArchiveBatch, useBatches, useCreateBatch, useUpdateBatch } from '@/lib/batches';
 import { formatDateRange } from '@/lib/format';
 import '../modules/modules.css';
 
@@ -35,6 +35,7 @@ export function BatchesPage() {
   const [formError, setFormError] = useState('');
   const createBatch = useCreateBatch();
   const archiveBatch = useArchiveBatch();
+  const updateBatch = useUpdateBatch();
   const confirm = useConfirm();
 
   const subtitle = {
@@ -60,6 +61,11 @@ export function BatchesPage() {
     e.stopPropagation();
     if (!(await confirm({ title: 'Archive this batch?', message: 'It will be hidden from active batches.' }))) return;
     await archiveBatch.mutateAsync(id);
+  }
+
+  async function onUnarchive(e, id) {
+    e.stopPropagation();
+    await updateBatch.mutateAsync({ id, archived: false });
   }
 
   return (
@@ -111,14 +117,20 @@ export function BatchesPage() {
                   <Badge tone="neutral">{b.trainers?.length ?? 0} trainers</Badge>
                   <Badge tone="neutral">{b.modules?.length ?? 0} modules</Badge>
                 </div>
-                {isAdmin && !b.archived && (
+                {isAdmin && (
                   <div className="list-actions">
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`/app/batches/${b.id}`); }}>
                       Manage
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={(e) => onArchive(e, b.id)}>
-                      Archive
-                    </Button>
+                    {b.archived ? (
+                      <Button size="sm" variant="ghost" onClick={(e) => onUnarchive(e, b.id)}>
+                        Unarchive
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={(e) => onArchive(e, b.id)}>
+                        Archive
+                      </Button>
+                    )}
                   </div>
                 )}
               </Card>

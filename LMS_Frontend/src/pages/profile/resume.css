@@ -1,0 +1,54 @@
+/* Auto-generated resume — a clean light "document" independent of app theme. */
+.resume {
+  background: #ffffff;
+  color: #1a2231;
+  border-radius: var(--radius-md);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  line-height: 1.55;
+  font-size: 0.95rem;
+  box-shadow: inset 0 0 0 1px #e6e9ef;
+}
+.resume__head { border-bottom: 2px solid var(--color-primary, #008738); padding-bottom: var(--space-4); margin-bottom: var(--space-5); }
+.resume__name { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.02em; color: #0f1626; }
+.resume__contact { margin-top: 4px; color: #4a5568; font-size: 0.9rem; display: flex; gap: 6px; flex-wrap: wrap; }
+.resume__links { margin-top: var(--space-2); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.resume__links a { color: var(--color-primary, #008738); font-size: 0.82rem; text-decoration: none; }
+.resume__links a:hover { text-decoration: underline; }
+
+.resume__section { margin-bottom: var(--space-5); }
+.resume__section h2 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-primary, #008738);
+  border-bottom: 1px solid #e6e9ef;
+  padding-bottom: 4px;
+  margin-bottom: var(--space-3);
+}
+.resume__bio { color: #2d3748; }
+.resume__list { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.resume__list li { color: #2d3748; }
+.resume__list a { color: var(--color-primary, #008738); text-decoration: none; }
+.resume__list a:hover { text-decoration: underline; }
+.resume__meta { color: #718096; font-size: 0.86rem; }
+
+.resume__project { margin-bottom: var(--space-3); }
+.resume__project-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.resume__project-head strong { color: #0f1626; font-size: 1rem; }
+.resume__project-head a { color: var(--color-primary, #008738); font-size: 0.82rem; text-decoration: none; }
+.resume__project-desc { color: #4a5568; margin-top: 2px; font-size: 0.9rem; }
+.resume__empty { color: #718096; text-align: center; padding: var(--space-6) 0; }
+
+/* Print / Save-as-PDF: isolate the resume sheet. */
+@media print {
+  body * { visibility: hidden !important; }
+  .resume-print-area, .resume-print-area * { visibility: visible !important; }
+  .resume-print-area {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+  }
+  .resume { box-shadow: none; border-radius: 0; }
+}

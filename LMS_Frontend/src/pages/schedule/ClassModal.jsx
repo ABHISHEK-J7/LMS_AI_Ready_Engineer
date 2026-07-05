@@ -10,26 +10,38 @@ const WEEKDAYS = [
   { v: 4, label: 'Thu' }, { v: 5, label: 'Fri' }, { v: 6, label: 'Sat' }, { v: 0, label: 'Sun' },
 ];
 
-const BLANK = {
-  title: '',
-  module: '',
-  batch: '',
-  trainer: '',
-  date: '',
-  startTime: '19:00',
-  endTime: '21:00',
-  provider: 'other',
-  meetingLink: '',
-  autoCreateMeeting: false,
-  repeat: false,
-  daysOfWeek: [],
-  repeatUntil: '',
-};
+const pad = (n) => String(n).padStart(2, '0');
+const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+/** Fresh sensible defaults for a NEW class: today's date, start = now rounded
+ *  up to the next 5 minutes (local time), end = one hour after start. */
+function blankForm() {
+  const now = new Date();
+  const start = new Date(now);
+  start.setSeconds(0, 0);
+  start.setMinutes(Math.ceil(now.getMinutes() / 5) * 5); // round up to next 5 min
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // +1 hour
+  return {
+    title: '',
+    module: '',
+    batch: '',
+    trainer: '',
+    date: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+    startTime: hhmm(start),
+    endTime: hhmm(end),
+    provider: 'other',
+    meetingLink: '',
+    autoCreateMeeting: false,
+    repeat: false,
+    daysOfWeek: [],
+    repeatUntil: '',
+  };
+}
 
 /** Create or edit a class session. mode: 'create' | 'edit'. */
 export function ClassModal({ open, mode, initial, onClose, isAdmin, batches = [], modules = [], trainers = [] }) {
   const isEdit = mode === 'edit';
-  const [form, setForm] = useState(BLANK);
+  const [form, setForm] = useState(blankForm);
   const [err, setErr] = useState('');
   const create = useCreateClass();
   const createRecurring = useCreateRecurringClasses();
@@ -52,7 +64,7 @@ export function ClassModal({ open, mode, initial, onClose, isAdmin, batches = []
         status: initial.status,
       });
     } else {
-      setForm(BLANK);
+      setForm(blankForm());
     }
   }, [open, isEdit, initial]);
 

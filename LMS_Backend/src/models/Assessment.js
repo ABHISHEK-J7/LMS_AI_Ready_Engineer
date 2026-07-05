@@ -26,8 +26,6 @@ const assessmentSchema = new Schema(
     title: { type: String, required: true, trim: true },
     module: { type: Schema.Types.ObjectId, ref: 'Module', required: true, index: true },
     type: { type: String, enum: Object.values(AssessmentType), required: true },
-    practiceIndex: { type: Number, min: 1, max: 5 },
-    prepIndex: { type: Number, min: 1, max: 2 },
     // Optional topic scoping (practice tests can target one module topic);
     // preparation/final cover the whole module so topic stays null.
     topic: { type: Schema.Types.ObjectId, default: null },

@@ -24,6 +24,23 @@ function TrainerAnalytics() {
   }
 
   const { counts, batches, assessments } = data;
+
+  // Roll per-assessment stats up to MODULE level (submission-weighted).
+  const byModule = new Map();
+  for (const a of assessments) {
+    const key = a.module || '—';
+    if (!byModule.has(key)) byModule.set(key, { module: key, tests: 0, submissions: 0, passed: 0, scoreSum: 0 });
+    const m = byModule.get(key);
+    m.tests += 1;
+    m.submissions += a.submissions;
+    m.passed += Math.round((a.passRate / 100) * a.submissions);
+    m.scoreSum += a.avgScore * a.submissions;
+  }
+  const modulePerf = [...byModule.values()].map((m) => ({
+    ...m,
+    passRate: m.submissions ? Math.round((m.passed / m.submissions) * 100) : 0,
+    avgScore: m.submissions ? Math.round(m.scoreSum / m.submissions) : 0,
+  }));
   return (
     <>
       <PageHeader title="Analytics" subtitle="Performance across your batches and modules." />
@@ -45,7 +62,7 @@ function TrainerAnalytics() {
       </Card>
 
       <Card>
-        <CardHeader title="Assessment Performance" subtitle="Submissions, pass rate & average score" />
+        <CardHeader title="Assessment Performance by Module" subtitle="Pass rate & average score aggregated per module" />
         {assessments.length === 0 ? (
           <EmptyState
             icon={<BarChart3 size={26} />}
@@ -53,28 +70,37 @@ function TrainerAnalytics() {
             description="No assessments in your modules yet."
           />
         ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr><th>Assessment</th><th>Module</th><th>Submissions</th><th>Pass rate</th><th>Avg score</th></tr>
-              </thead>
-              <tbody>
-                {assessments.map((a, i) => (
-                  <tr key={i}>
-                    <td>{a.title}</td>
-                    <td>{a.module}</td>
-                    <td>{a.submissions}</td>
-                    <td>
-                      <Badge tone={a.submissions === 0 ? 'neutral' : a.passRate >= 70 ? 'success' : 'warning'}>
-                        {a.submissions ? `${a.passRate}%` : '—'}
-                      </Badge>
-                    </td>
-                    <td>{a.submissions ? `${a.avgScore}%` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <BarChart
+              data={modulePerf.map((m) => ({ label: m.module, value: m.passRate }))}
+              max={100}
+              suffix="%"
+              multicolor
+              emptyText="No graded submissions yet."
+            />
+            <div className="table-wrap" style={{ marginTop: 'var(--space-4)' }}>
+              <table className="table">
+                <thead>
+                  <tr><th>Module</th><th>Tests</th><th>Submissions</th><th>Pass rate</th><th>Avg score</th></tr>
+                </thead>
+                <tbody>
+                  {modulePerf.map((m, i) => (
+                    <tr key={i}>
+                      <td>{m.module}</td>
+                      <td>{m.tests}</td>
+                      <td>{m.submissions}</td>
+                      <td>
+                        <Badge tone={m.submissions === 0 ? 'neutral' : m.passRate >= 70 ? 'success' : 'warning'}>
+                          {m.submissions ? `${m.passRate}%` : '—'}
+                        </Badge>
+                      </td>
+                      <td>{m.submissions ? `${m.avgScore}%` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Card>
     </>

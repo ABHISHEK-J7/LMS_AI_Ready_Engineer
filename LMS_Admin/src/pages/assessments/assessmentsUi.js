@@ -18,10 +18,9 @@ export const PROCTORING_TONE = {
 };
 
 export function assessmentLabel(a) {
-  if (a.type === AssessmentType.FINAL) return 'Final Assessment';
-  if (a.type === AssessmentType.PREPARATION) return `Preparation Test ${a.prepIndex ?? ''}`.trim();
-  const base = `Practice Test ${a.practiceIndex ?? ''}`.trim();
-  return a.topicTitle ? `${base} · ${a.topicTitle}` : base;
+  // The trainer's own test name; the category (practice/prep/final) is shown
+  // separately as a badge.
+  return a.topicTitle ? `${a.title} · ${a.topicTitle}` : a.title;
 }
 
 export const ASSESSMENT_TYPE_LABEL = {

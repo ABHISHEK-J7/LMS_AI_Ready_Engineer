@@ -13,7 +13,6 @@ import { ModulesPage } from '@/pages/modules/ModulesPage';
 import { ModuleDetailPage } from '@/pages/modules/ModuleDetailPage';
 import { BatchesPage } from '@/pages/batches/BatchesPage';
 import { BatchDetailPage } from '@/pages/batches/BatchDetailPage';
-import { SchedulePage } from '@/pages/schedule/SchedulePage';
 import { AttendancePage } from '@/pages/attendance/AttendancePage';
 import { AssessmentsPage } from '@/pages/assessments/AssessmentsPage';
 import { AssessmentEditor } from '@/pages/assessments/AssessmentEditor';
@@ -55,7 +54,6 @@ export default function App() {
         <Route path="modules/:id" element={<ModuleDetailPage />} />
         <Route path="batches" element={<BatchesPage />} />
         <Route path="batches/:id" element={<BatchDetailPage />} />
-        <Route path="schedule" element={<SchedulePage />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="announcements" element={<AnnouncementsPage />} />
         <Route path="assessments" element={<AssessmentsPage />} />

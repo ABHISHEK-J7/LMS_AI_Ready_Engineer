@@ -24,7 +24,7 @@ createRoot(document.getElementById('root')).render(
     <ThemeProvider>
       <ToastProvider>
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <ConfirmProvider>
               <App />
             </ConfirmProvider>

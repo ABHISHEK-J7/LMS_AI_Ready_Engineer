@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // The admin app is hosted under /admin, so assets + router are prefixed there.
+  base: '/admin/',
   plugins: [react()],
   resolve: {
     alias: {

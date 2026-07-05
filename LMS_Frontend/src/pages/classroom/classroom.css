@@ -64,6 +64,24 @@
 .lk-card__icon--error { background: color-mix(in srgb, var(--color-error, #e5484d) 22%, transparent); color: var(--color-error, #e5484d); }
 .lk-card__actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); flex-wrap: wrap; justify-content: center; }
 
+/* Buttons on the dark classroom screens: outline/ghost/secondary variants use
+   dark text + dark border by default, which vanishes on the dark background.
+   Force readable light text + a visible border. (Primary stays green.) */
+.lk-shell .btn--outline,
+.lk-shell .btn--ghost,
+.lk-shell .btn--secondary {
+  color: #eaf0f7;
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+}
+.lk-shell .btn--outline:hover,
+.lk-shell .btn--ghost:hover,
+.lk-shell .btn--secondary:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.13);
+}
+
 /* ── Pre-join ─────────────────────────────────────────────────────────────────── */
 .lk-prejoin {
   width: min(560px, 94vw);

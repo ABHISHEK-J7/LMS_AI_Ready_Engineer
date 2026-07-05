@@ -5,6 +5,11 @@ const FOCUSABLE = 'input,select,textarea,button,a[href],[tabindex]:not([tabindex
 
 export function Modal({ open, title, onClose, children, footer, headerAction, size = 'md' }) {
   const modalRef = useRef(null);
+  // Keep the latest onClose in a ref so the focus effect does NOT depend on it.
+  // (Callers pass an inline arrow, so a dependency here would re-run the effect
+  // on every keystroke and steal focus from the field being typed in.)
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -12,14 +17,14 @@ export function Modal({ open, title, onClose, children, footer, headerAction, si
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden'; // lock background scroll
 
-    // Move focus into the dialog.
+    // Move focus into the dialog once, on open — prefer the first form field.
     const el = modalRef.current;
-    const firstFocusable = el?.querySelector(FOCUSABLE);
-    (firstFocusable ?? el)?.focus?.();
+    const firstField = el?.querySelector('input,select,textarea');
+    (firstField ?? el)?.focus?.();
 
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (e.key === 'Tab' && el) {
@@ -42,7 +47,7 @@ export function Modal({ open, title, onClose, children, footer, headerAction, si
       document.body.style.overflow = prevOverflow;
       prevFocus?.focus?.(); // restore focus to the trigger
     };
-  }, [open, onClose]);
+  }, [open]); // only on open/close transitions — never on re-render
 
   if (!open) return null;
 

@@ -156,6 +156,8 @@ export function AssessmentEditor() {
         ))}
       </Card>
 
+      {!isTemplate && <CompletionCard a={a} />}
+
       {!isTemplate && <SubmissionsCard id={a.id} />}
 
       <Modal open={pickerOpen} title="Add questions from the bank" size="lg" onClose={() => setPickerOpen(false)}>
@@ -398,6 +400,82 @@ function AllowedStudentsCard({ a }) {
       <div style={{ marginTop: 'var(--space-3)' }}>
         <Button onClick={onSave} loading={save.isPending}>Save who can take this</Button>
       </div>
+    </Card>
+  );
+}
+
+/** Who's completed it: every assigned student's status (incl. those who haven't started). */
+function CompletionCard({ a }) {
+  const { data: subs, isLoading } = useSubmissions(a.id);
+  const roster = a.batch?.students ?? [];
+  const allow = (a.allowedStudents ?? []).map(String);
+  // Assigned = the allow-list if set, otherwise the whole batch.
+  const assigned = allow.length ? roster.filter((s) => allow.includes(String(s.id))) : roster;
+  const byStudent = new Map((subs ?? []).map((s) => [String(s.student?.id ?? s.student), s]));
+
+  const DONE = ['submitted', 'evaluating', 'graded'];
+  const rows = assigned.map((s) => {
+    const sub = byStudent.get(String(s.id));
+    let status = 'not_started';
+    if (sub) {
+      if (sub.disqualified) status = 'disqualified';
+      else if (DONE.includes(sub.status)) status = 'done';
+      else if (sub.status === 'in_progress') status = 'in_progress';
+    }
+    return { s, sub, status };
+  });
+  const count = (k) => rows.filter((r) => r.status === k).length;
+  const done = count('done') + count('disqualified');
+  const total = assigned.length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  const STATUS = {
+    done: { tone: 'success', label: 'Submitted' },
+    disqualified: { tone: 'error', label: 'Disqualified' },
+    in_progress: { tone: 'warning', label: 'In progress' },
+    not_started: { tone: 'neutral', label: 'Not started' },
+  };
+
+  return (
+    <Card style={{ marginBottom: 'var(--space-6)' }}>
+      <CardHeader
+        title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Users size={18} style={{ color: 'var(--color-primary)' }} /> Who's completed it</span>}
+        subtitle={total ? `${done} of ${total} student${total === 1 ? '' : 's'} submitted` : 'No students assigned yet'}
+      />
+      {total > 0 && (
+        <>
+          <div className="module-card__progress-track" style={{ margin: 'var(--space-2) 0 var(--space-3)' }}>
+            <div className="module-card__progress-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="module-card__meta" style={{ marginBottom: 'var(--space-3)' }}>
+            <Badge tone="success">{count('done')} submitted</Badge>
+            {count('disqualified') > 0 && <Badge tone="error">{count('disqualified')} disqualified</Badge>}
+            <Badge tone="warning">{count('in_progress')} in progress</Badge>
+            <Badge tone="neutral">{count('not_started')} not started</Badge>
+          </div>
+        </>
+      )}
+
+      {isLoading && !subs ? (
+        <SkeletonTable rows={4} cols={3} />
+      ) : total === 0 ? (
+        <EmptyState icon={<Users size={24} />} title="No students assigned" description="Assign students on the schedule/allow-list above." />
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Student</th><th>Status</th><th>Score</th></tr></thead>
+            <tbody>
+              {rows.map(({ s, sub, status }) => (
+                <tr key={s.id}>
+                  <td>{s.name}<div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{s.email}</div></td>
+                  <td><Badge tone={STATUS[status].tone}>{status === 'done' && sub?.status === 'graded' ? 'Graded' : STATUS[status].label}</Badge></td>
+                  <td>{sub && sub.status === 'graded' && !sub.disqualified ? `${sub.score}%` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }

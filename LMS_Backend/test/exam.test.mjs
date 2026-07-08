@@ -3,69 +3,88 @@ import assert from 'node:assert/strict';
 import { startTestServer, iso } from './helpers.mjs';
 
 let ctx;
+let ADMIN;
 let T;
 let S;
 let mod;
+let batchId;
+let bankMcq;
 before(async () => {
   ctx = await startTestServer();
+  await ctx.mkUser('Admin', 'admin@x.local', 'admin');
   const trainer = await ctx.mkUser('T', 't@x.local', 'trainer');
   const student = await ctx.mkUser('S', 's@x.local', 'student');
   mod = await ctx.models.Module.create({ name: 'M', code: 'EXAM', order: 1, assignedTrainers: [trainer._id], topics: [{ title: 'a', order: 0 }] });
   const batch = await ctx.models.Batch.create({ name: 'B', code: 'EXAMB', startDate: new Date('2026-01-01'), endDate: new Date('2027-01-01'), students: [student._id], trainers: [trainer._id], modules: [mod._id] });
+  batchId = batch._id.toString();
   student.batch = batch._id; await student.save();
+  ADMIN = await ctx.login('admin@x.local');
   T = await ctx.login('t@x.local');
   S = await ctx.login('s@x.local');
+  const b = await ctx.req('POST', '/question-bank', ADMIN, { module: mod._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
+  bankMcq = b.data.id;
 });
 after(async () => { await ctx.stop(); });
 
-async function buildTimed(title, prepIndex, type = 'preparation') {
-  const { req } = ctx;
-  const bank = await req('POST', '/question-bank', T, { module: mod._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
-  const a = await req('POST', '/assessments', T, { module: mod._id.toString(), title, type, ...(type === 'preparation' ? { prepIndex } : {}), proctoring: 'app', availableFrom: iso(-5), deadline: iso(240), durationMinutes: 60 });
-  await req('POST', `/assessments/${a.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
-  await req('POST', `/assessments/${a.data.id}/unlock`, T);
-  return a.data;
+/** Admin authors a ready-made template. */
+async function makeTemplate({ type = 'final', proctoring = 'app', module = mod._id.toString(), questionIds = [bankMcq], durationMinutes = 60 } = {}) {
+  const t = await ctx.req('POST', '/assessments', ADMIN, { module, title: `${type} template`, type, proctoring, durationMinutes });
+  assert.equal(t.status, 201, 'admin can author a template');
+  assert.equal(t.data.isTemplate, true);
+  if (questionIds.length) await ctx.req('POST', `/assessments/${t.data.id}/questions/from-bank`, ADMIN, { questionIds });
+  return t.data.id;
+}
+/** Trainer assigns a template to the batch. */
+async function assign(templateId, extra = {}) {
+  return ctx.req('POST', `/assessments/${templateId}/assign`, T, { batch: batchId, availableFrom: iso(-5), deadline: iso(240), ...extra });
 }
 
-test('proctored test: questions hidden until start, then revealed without the correct answer', async () => {
-  const { req } = ctx;
-  const prep = await buildTimed('Prep one', 1);
-  const pre = await req('GET', `/assessments/${prep.id}`, S);
-  assert.equal(pre.data.mustStart, true);
-  assert.equal(pre.data.questions.length, 0);
-  const started = await req('POST', `/assessments/${prep.id}/start`, S);
+test('trainers cannot create ready-made tests (admin only)', async () => {
+  const r = await ctx.req('POST', '/assessments', T, { module: mod._id.toString(), title: 'X', type: 'practice', proctoring: 'none' });
+  assert.equal(r.status, 403);
+});
+
+test('a template is invisible to students; assigning it creates a live test they can take', async () => {
+  const tmpl = await makeTemplate({ type: 'final', proctoring: 'app' });
+  // The template itself never appears to a student.
+  const pre = await ctx.req('GET', '/assessments', S);
+  assert.ok(!pre.data.some((x) => x.id === tmpl), 'template must not be listed to students');
+
+  const asg = await assign(tmpl);
+  assert.equal(asg.status, 201);
+  assert.equal(asg.data.isTemplate, false);
+  assert.equal(asg.data.sourceTemplate, tmpl);
+  const instId = asg.data.id;
+
+  const list = await ctx.req('GET', '/assessments', S);
+  assert.ok(list.data.some((x) => x.id === instId), 'assigned test is visible to the batch student');
+
+  // Proctored reveal: hidden until start, then shown WITHOUT the answer key.
+  const detail = await ctx.req('GET', `/assessments/${instId}`, S);
+  assert.equal(detail.data.mustStart, true);
+  assert.equal(detail.data.questions.length, 0);
+  const started = await ctx.req('POST', `/assessments/${instId}/start`, S);
   assert.equal(started.status, 201);
   assert.equal(started.data.questions.length, 1);
   assert.equal(started.data.questions[0].correctOption, undefined);
 });
 
-test('a scenario question never leaks its correctOption or referenceAnswer to the student', async () => {
-  const { req } = ctx;
-  // Author a Scenario Based question WITH a private grading rubric.
-  const bank = await req('POST', '/question-bank', T, {
-    module: mod._id.toString(),
-    type: 'scenario',
-    prompt: 'A user reports the model is hallucinating. How do you respond?',
-    referenceAnswer: 'SECRET RUBRIC: mention grounding, retrieval, and evaluation.',
+test('a scenario question never leaks its correctOption or referenceAnswer', async () => {
+  const bank = await ctx.req('POST', '/question-bank', ADMIN, {
+    module: mod._id.toString(), type: 'scenario',
+    prompt: 'A user reports hallucinations. How do you respond?',
+    referenceAnswer: 'SECRET RUBRIC: grounding, retrieval, evaluation.',
   });
-  assert.equal(bank.data.referenceAnswer, 'SECRET RUBRIC: mention grounding, retrieval, and evaluation.');
-
-  const a = await req('POST', '/assessments', T, {
-    module: mod._id.toString(), title: 'Scenario prep', type: 'preparation',
-    proctoring: 'app', availableFrom: iso(-5), deadline: iso(240), durationMinutes: 60,
-  });
-  await req('POST', `/assessments/${a.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
-  await req('POST', `/assessments/${a.data.id}/unlock`, T);
-
-  const started = await req('POST', `/assessments/${a.data.id}/start`, S);
-  assert.equal(started.status, 201);
+  const tmpl = await makeTemplate({ type: 'final', proctoring: 'app', questionIds: [bank.data.id] });
+  const asg = await assign(tmpl);
+  const started = await ctx.req('POST', `/assessments/${asg.data.id}/start`, S);
   const q = started.data.questions[0];
   assert.equal(q.type, 'scenario');
-  assert.equal(q.correctOption, undefined, 'correctOption must be stripped');
-  assert.equal(q.referenceAnswer, undefined, 'private grading rubric must NEVER reach the student');
+  assert.equal(q.correctOption, undefined);
+  assert.equal(q.referenceAnswer, undefined, 'private rubric must never reach the student');
 });
 
-test('batch + allow-list scoping: only assigned students in the batch see the assessment', async () => {
+test('assign with a student allow-list scopes visibility; clearing it opens the whole batch', async () => {
   const { req, models } = ctx;
   const trainerId = mod.assignedTrainers[0];
   const a1 = await ctx.mkUser('A1', 'a1@x.local', 'student');
@@ -77,37 +96,40 @@ test('batch + allow-list scoping: only assigned students in the batch see the as
   const A1 = await ctx.login('a1@x.local');
   const B1 = await ctx.login('b1@x.local');
 
-  const bank = await req('POST', '/question-bank', T, { module: m2._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
-  const created = await req('POST', '/assessments', T, { module: m2._id.toString(), batch: batch2._id.toString(), title: 'Scoped practice', type: 'practice', proctoring: 'none' });
-  await req('POST', `/assessments/${created.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
-  // Restrict to A1 only.
-  await req('PATCH', `/assessments/${created.data.id}/allowed-students`, T, { studentIds: [a1._id.toString()] });
-  await req('POST', `/assessments/${created.data.id}/unlock`, T);
+  const bank = await req('POST', '/question-bank', ADMIN, { module: m2._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
+  const tmpl = await makeTemplate({ type: 'practice', proctoring: 'none', module: m2._id.toString(), questionIds: [bank.data.id] });
+  const asg = await req('POST', `/assessments/${tmpl}/assign`, T, { batch: batch2._id.toString(), studentIds: [a1._id.toString()] });
+  assert.equal(asg.status, 201);
+  const instId = asg.data.id;
 
-  const listA = await req('GET', '/assessments', A1);
-  const listB = await req('GET', '/assessments', B1);
-  assert.ok(listA.data.some((x) => x.id === created.data.id), 'allowed student A1 sees it');
-  assert.ok(!listB.data.some((x) => x.id === created.data.id), 'non-allowed student B1 does NOT see it');
-  assert.equal((await req('GET', `/assessments/${created.data.id}`, B1)).status, 403, 'B1 is blocked from opening it');
-  assert.equal((await req('GET', `/assessments/${created.data.id}`, A1)).status, 200, 'A1 can open it');
+  assert.ok((await req('GET', '/assessments', A1)).data.some((x) => x.id === instId), 'A1 (allowed) sees it');
+  assert.ok(!(await req('GET', '/assessments', B1)).data.some((x) => x.id === instId), 'B1 (not allowed) does not');
+  assert.equal((await req('GET', `/assessments/${instId}`, B1)).status, 403);
 
-  // Clearing the allow-list opens it to the whole batch → B1 now sees it.
-  await req('PATCH', `/assessments/${created.data.id}/allowed-students`, T, { studentIds: [] });
-  const listB2 = await req('GET', '/assessments', B1);
-  assert.ok(listB2.data.some((x) => x.id === created.data.id), 'empty allow-list = whole batch can see it');
+  await req('PATCH', `/assessments/${instId}/allowed-students`, T, { studentIds: [] });
+  assert.ok((await req('GET', '/assessments', B1)).data.some((x) => x.id === instId), 'cleared list = whole batch sees it');
 });
 
-test('final is gated until BOTH preparation tests are attempted', async () => {
+test('a practice template is capped at 10 questions', async () => {
   const { req } = ctx;
-  // module already has Prep one (index 1) from the test above; add prep 2 + final.
-  const p2 = await buildTimed('Prep two', 2);
-  const bankF = await req('POST', '/question-bank', T, { module: mod._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
-  const fin = await req('POST', '/assessments', T, { module: mod._id.toString(), title: 'Final', type: 'final', proctoring: 'none' });
-  await req('POST', `/assessments/${fin.data.id}/questions/from-bank`, T, { questionIds: [bankF.data.id] });
-  await req('POST', `/assessments/${fin.data.id}/unlock`, T);
+  const ids = [];
+  for (let i = 0; i < 11; i += 1) {
+    const b = await req('POST', '/question-bank', ADMIN, { module: mod._id.toString(), type: 'mcq', prompt: `P${i}`, options: ['A', 'B'], correctOption: 0 });
+    ids.push(b.data.id);
+  }
+  const t = await req('POST', '/assessments', ADMIN, { module: mod._id.toString(), title: 'Practice', type: 'practice', proctoring: 'none' });
+  const ten = await req('POST', `/assessments/${t.data.id}/questions/from-bank`, ADMIN, { questionIds: ids.slice(0, 10) });
+  assert.equal(ten.status, 201);
+  assert.equal(ten.data.questions.length, 10);
+  // The 11th is dropped, not added — the test stays at 10.
+  const eleventh = await req('POST', `/assessments/${t.data.id}/questions/from-bank`, ADMIN, { questionIds: [ids[10]] });
+  assert.equal(eleventh.data.questions.length, 10, 'stays capped at 10');
+  assert.equal(eleventh.data.added, 0);
+  assert.equal(eleventh.data.capped, true);
+});
 
-  // Disqualify on prep 2 → must NOT count as attempted.
-  await req('POST', `/assessments/${p2.id}/start`, S);
-  await req('POST', `/assessments/${p2.id}/disqualify`, S, { reason: 'left' });
-  assert.equal((await req('GET', `/assessments/${fin.data.id}`, S)).status, 403, 'disqualified prep should not satisfy the gate');
+test('trainers cannot edit a template’s questions', async () => {
+  const tmpl = await makeTemplate({ type: 'final', proctoring: 'none' });
+  const r = await ctx.req('POST', `/assessments/${tmpl}/questions/from-bank`, T, { questionIds: [bankMcq] });
+  assert.equal(r.status, 403);
 });

@@ -74,6 +74,15 @@ export function useSetAllowedStudents() {
   });
 }
 
+/** Trainer assigns a ready-made template to a batch (clones it into a live test). */
+export function useAssignTemplate() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => unwrap(api.post(`/assessments/${id}/assign`, body)),
+    onSuccess: invalidate,
+  });
+}
+
 // ── Submissions ───────────────────────────────────────────────────────────────
 
 export function useMySubmission(id) {

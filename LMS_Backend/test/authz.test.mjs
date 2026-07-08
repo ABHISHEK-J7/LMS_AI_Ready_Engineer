@@ -15,19 +15,24 @@ test('role guard: a student cannot list users (admin-only)', async () => {
 
 test('IDOR: a student cannot submit an assessment outside their batch', async () => {
   const { req, mkUser, login, models } = ctx;
+  await mkUser('Adm', 'adm-idor@x.local', 'admin');
   const trainer = await mkUser('T', 't2@x.local', 'trainer');
   const sA = await mkUser('A', 'a@x.local', 'student');
-  await mkUser('B', 'b@x.local', 'student');
+  const sB = await mkUser('B', 'b@x.local', 'student');
   const modB = await models.Module.create({ name: 'MB', code: 'IDORB', order: 1, assignedTrainers: [trainer._id] });
   const batchA = await models.Batch.create({ name: 'BA', code: 'IDORA', startDate: new Date('2026-01-01'), endDate: new Date('2027-01-01'), students: [sA._id], trainers: [trainer._id], modules: [] });
+  const batchB = await models.Batch.create({ name: 'BB', code: 'IDORBB', startDate: new Date('2026-01-01'), endDate: new Date('2027-01-01'), students: [sB._id], trainers: [trainer._id], modules: [modB._id] });
   sA.batch = batchA._id; await sA.save();
+  sB.batch = batchB._id; await sB.save();
+  const ADMIN = await login('adm-idor@x.local');
   const T = await login('t2@x.local');
-  const bank = await req('POST', '/question-bank', T, { module: modB._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
-  const prep = await req('POST', '/assessments', T, { module: modB._id.toString(), title: 'Prep B', type: 'preparation', prepIndex: 1, proctoring: 'none' });
-  await req('POST', `/assessments/${prep.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
-  await req('POST', `/assessments/${prep.data.id}/unlock`, T);
+  // Admin authors the template; trainer assigns it to batch B (which student A is NOT in).
+  const bank = await req('POST', '/question-bank', ADMIN, { module: modB._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
+  const tmpl = await req('POST', '/assessments', ADMIN, { module: modB._id.toString(), title: 'Test B', type: 'final', proctoring: 'none' });
+  await req('POST', `/assessments/${tmpl.data.id}/questions/from-bank`, ADMIN, { questionIds: [bank.data.id] });
+  const asg = await req('POST', `/assessments/${tmpl.data.id}/assign`, T, { batch: batchB._id.toString() });
   const SA = await login('a@x.local');
-  assert.equal((await req('POST', `/assessments/${prep.data.id}/submit`, SA, { answers: [] })).status, 403);
+  assert.equal((await req('POST', `/assessments/${asg.data.id}/submit`, SA, { answers: [] })).status, 403);
 });
 
 test('trainer-scoping: a trainer cannot read a student outside their batches', async () => {

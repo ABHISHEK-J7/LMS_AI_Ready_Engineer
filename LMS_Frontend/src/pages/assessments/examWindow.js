@@ -10,6 +10,21 @@ export function combineDateTime(date, time) {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
+/** Validate a proctored exam window (date + open/close + duration). Returns '' when OK. */
+export function validateExamWindow({ examDate, windowStart, windowEnd, durationMinutes }) {
+  if (!examDate || !windowStart || !windowEnd) {
+    return 'Set the test date and both window open/close times for a proctored exam.';
+  }
+  if (!durationMinutes || Number(durationMinutes) <= 0) {
+    return 'This test has no duration set.';
+  }
+  const start = combineDateTime(examDate, windowStart);
+  const end = combineDateTime(examDate, windowEnd);
+  if (!start || !end) return 'The exam date or window times are invalid.';
+  if (new Date(end) <= new Date(start)) return 'The window must close after it opens.';
+  return '';
+}
+
 /** Split an ISO instant into local { date, time } for date/time inputs. */
 export function splitDateTime(iso) {
   if (!iso) return { date: '', time: '' };

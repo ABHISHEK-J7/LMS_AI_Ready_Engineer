@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { Check, Database, Download, HelpCircle, ScrollText, Trash2, UploadCloud, Users } from 'lucide-react';
-import { AssessmentAvailability, ProctoringMode, QuestionType } from '@/shared';
+import { AssessmentAvailability, AssessmentType, ProctoringMode, QuestionType } from '@/shared';
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, SkeletonText, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage, downloadFile, fileSrc } from '@/lib/api';
@@ -66,6 +66,8 @@ export function AssessmentEditor() {
   }
 
   const unlocked = a.availability === AssessmentAvailability.UNLOCKED;
+  const isTemplate = a.isTemplate;
+  const canAddMore = !(a.type === AssessmentType.PRACTICE && a.questions.length >= 10);
 
   return (
     <>
@@ -76,45 +78,51 @@ export function AssessmentEditor() {
 
       <div className="module-card__meta" style={{ marginBottom: 'var(--space-6)' }}>
         <Badge tone="neutral">{a.module?.name}</Badge>
+        {isTemplate && <Badge tone="primary">Ready-made test</Badge>}
         {a.batch && <Badge tone="primary">Batch: {a.batch.name}</Badge>}
         <Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge>
-        {a.topicTitle && <Badge tone="primary">{a.topicTitle}</Badge>}
+        {a.durationMinutes ? <Badge tone="neutral">{a.durationMinutes} min</Badge> : null}
         <Badge tone="neutral">Pass ≥ {a.passingScore}%</Badge>
         <Badge tone={PROCTORING_TONE[a.proctoring] ?? 'neutral'}>{PROCTORING_LABEL[a.proctoring] ?? 'No proctoring'}</Badge>
-        <Badge tone={unlocked ? 'success' : 'neutral'}>{unlocked ? 'Unlocked' : 'Locked'}</Badge>
-        <Button
-          size="sm"
-          variant={unlocked ? 'outline' : 'primary'}
-          loading={setAvailability.isPending}
-          disabled={!unlocked && a.questions.length === 0}
-          title={!unlocked && a.questions.length === 0 ? 'Add questions before unlocking' : ''}
-          onClick={() => setAvailability.mutate({ id: a.id, unlock: !unlocked })}
-        >
-          {unlocked ? 'Lock assessment' : 'Unlock for students'}
-        </Button>
+        {!isTemplate && (
+          <>
+            <Badge tone={unlocked ? 'success' : 'neutral'}>{unlocked ? 'Live' : 'Locked'}</Badge>
+            <Button
+              size="sm"
+              variant={unlocked ? 'outline' : 'primary'}
+              loading={setAvailability.isPending}
+              disabled={!unlocked && a.questions.length === 0}
+              onClick={() => setAvailability.mutate({ id: a.id, unlock: !unlocked })}
+            >
+              {unlocked ? 'Lock' : 'Make live'}
+            </Button>
+          </>
+        )}
       </div>
 
-      <ProctoringCard a={a} />
+      <ProctoringCard a={a} isTemplate={isTemplate} />
 
-      <AllowedStudentsCard a={a} />
+      {!isTemplate && <AllowedStudentsCard a={a} />}
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <div className="panel-head">
           <CardHeader
-            title={`Questions (${a.questions.length})`}
-            subtitle="Hand-picked from this module's question bank. MCQs are auto-graded."
+            title={`Questions (${a.questions.length}${a.type === AssessmentType.PRACTICE ? ' / 10' : ''})`}
+            subtitle={isTemplate ? 'Picked from this module’s question bank. MCQs are auto-graded.' : 'Fixed by the admin who created this ready-made test.'}
           />
-          <Button onClick={() => setPickerOpen(true)}>
-            <Database size={15} style={{ marginRight: 6 }} /> Add from question bank
-          </Button>
+          {isTemplate && (
+            <Button onClick={() => setPickerOpen(true)} disabled={!canAddMore} title={!canAddMore ? 'A practice test is limited to 10 questions' : ''}>
+              <Database size={15} style={{ marginRight: 6 }} /> Add from question bank
+            </Button>
+          )}
         </div>
 
         {a.questions.length === 0 && (
           <EmptyState
             icon={<HelpCircle size={26} />}
             title="No questions yet"
-            description="Add some from the question bank to build this test."
-            action={<Button onClick={() => setPickerOpen(true)}><Database size={15} style={{ marginRight: 6 }} /> Add from question bank</Button>}
+            description={isTemplate ? 'Add some from the question bank to build this test.' : 'This test has no questions.'}
+            action={isTemplate ? <Button onClick={() => setPickerOpen(true)}><Database size={15} style={{ marginRight: 6 }} /> Add from question bank</Button> : undefined}
           />
         )}
         {a.questions.map((q, i) => (
@@ -137,21 +145,18 @@ export function AssessmentEditor() {
                 </ul>
               )}
             </div>
-            <div className="list-actions">
-              <Button
-                size="sm"
-                variant="ghost"
-                title="Remove from this test"
-                onClick={() => onRemoveQuestion(q.id)}
-              >
-                <Trash2 size={15} />
-              </Button>
-            </div>
+            {isTemplate && (
+              <div className="list-actions">
+                <Button size="sm" variant="ghost" title="Remove from this test" onClick={() => onRemoveQuestion(q.id)}>
+                  <Trash2 size={15} />
+                </Button>
+              </div>
+            )}
           </div>
         ))}
       </Card>
 
-      <SubmissionsCard id={a.id} />
+      {!isTemplate && <SubmissionsCard id={a.id} />}
 
       <Modal open={pickerOpen} title="Add questions from the bank" size="lg" onClose={() => setPickerOpen(false)}>
         <BankPicker assessment={a} onClose={() => setPickerOpen(false)} />
@@ -190,7 +195,11 @@ function ProctoringCell({ s }) {
   );
 }
 
-function ProctoringCard({ a }) {
+/**
+ * Template: admin edits proctoring + duration (no schedule).
+ * Instance: trainer edits the schedule (window); proctoring + duration are fixed by admin.
+ */
+function ProctoringCard({ a, isTemplate }) {
   const update = useUpdateAssessment();
   const init = splitDateTime(a.availableFrom);
   const end = splitDateTime(a.deadline);
@@ -205,51 +214,75 @@ function ProctoringCard({ a }) {
   const [err, setErr] = useState('');
   const timed = form.proctoring !== ProctoringMode.NONE;
 
-  async function save() {
-    setErr('');
-    setMsg('');
-    if (timed) {
-      const windowErr = validateExamWindow(form);
+  async function saveTemplate() {
+    setErr(''); setMsg('');
+    try {
+      await update.mutateAsync({
+        id: a.id,
+        proctoring: form.proctoring,
+        durationMinutes: timed && form.durationMinutes ? Number(form.durationMinutes) : null,
+      });
+      setMsg('Saved.');
+    } catch (e) { setErr(apiErrorMessage(e)); }
+  }
+
+  async function saveSchedule() {
+    setErr(''); setMsg('');
+    if (a.proctored) {
+      const windowErr = validateExamWindow({ ...form, durationMinutes: a.durationMinutes });
       if (windowErr) return setErr(windowErr);
     }
     try {
       await update.mutateAsync({
         id: a.id,
-        proctoring: form.proctoring,
-        availableFrom: timed ? combineDateTime(form.examDate, form.windowStart) ?? null : null,
-        deadline: timed ? combineDateTime(form.examDate, form.windowEnd) ?? null : null,
-        durationMinutes: timed && form.durationMinutes ? Number(form.durationMinutes) : null,
+        availableFrom: combineDateTime(form.examDate, form.windowStart) ?? null,
+        deadline: combineDateTime(form.examDate, form.windowEnd) ?? null,
       });
       setMsg('Saved.');
-    } catch (e) {
-      setErr(apiErrorMessage(e));
-    }
+    } catch (e) { setErr(apiErrorMessage(e)); }
   }
 
+  // ── Template: format + duration ─────────────────────────────────────────────
+  if (isTemplate) {
+    return (
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <CardHeader title="Format & duration" subtitle="How this ready-made test is invigilated. Trainers can't change this." />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+          <div style={{ maxWidth: '24rem' }}>
+            <Select label="Proctoring / format" value={form.proctoring} onChange={(e) => setForm({ ...form, proctoring: e.target.value })} options={PROCTORING_OPTIONS} />
+          </div>
+          {timed && (
+            <Input label="Duration (minutes per student)" type="number" min="1" max="600" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} style={{ maxWidth: '16rem' }} />
+          )}
+          {form.proctoring === ProctoringMode.SEB && (
+            <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>Set the global SEB Config Key in Settings.</span>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+            <Button onClick={saveTemplate} loading={update.isPending}>Save</Button>
+            {msg && <span className="lms-muted" style={{ color: 'var(--color-success)' }}>{msg}</span>}
+          </div>
+        </div>
+        {err && <span className="field__error" style={{ display: 'block', marginTop: 'var(--space-2)' }}>{err}</span>}
+      </Card>
+    );
+  }
+
+  // ── Instance: schedule only ─────────────────────────────────────────────────
   return (
     <Card style={{ marginBottom: 'var(--space-6)' }}>
-      <CardHeader title="Proctoring & exam window" subtitle="Choose how this test is invigilated. Built-in and SEB run a timed, full-screen exam." />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
-        <div style={{ maxWidth: '24rem' }}>
-          <Select label="Proctoring mode" value={form.proctoring} onChange={(e) => setForm({ ...form, proctoring: e.target.value })} options={PROCTORING_OPTIONS} />
-        </div>
-        {timed && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'flex-end' }}>
-            <Input label="Test date" type="date" value={form.examDate} onChange={(e) => setForm({ ...form, examDate: e.target.value })} />
-            <Input label="Window opens" type="time" value={form.windowStart} onChange={(e) => setForm({ ...form, windowStart: e.target.value })} />
-            <Input label="Window closes" type="time" value={form.windowEnd} onChange={(e) => setForm({ ...form, windowEnd: e.target.value })} />
-            <Input label="Duration (min)" type="number" min="1" max="600" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} style={{ maxWidth: '8rem' }} />
-          </div>
-        )}
-        {form.proctoring === ProctoringMode.SEB && (
-          <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
-            Set the global SEB Config Key in Settings and give students the .seb launch file.
-          </span>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-          <Button onClick={save} loading={update.isPending}>Save proctoring</Button>
-          {msg && <span className="lms-muted" style={{ color: 'var(--color-success)' }}>{msg}</span>}
-        </div>
+      <CardHeader title="Schedule" subtitle="When your students can take it. Format & duration are fixed by the admin." />
+      <div className="module-card__meta" style={{ margin: 'var(--space-2) 0 var(--space-3)' }}>
+        <Badge tone={PROCTORING_TONE[a.proctoring] ?? 'neutral'}>{PROCTORING_LABEL[a.proctoring] ?? 'No proctoring'}</Badge>
+        {a.durationMinutes ? <Badge tone="neutral">{a.durationMinutes} min</Badge> : <Badge tone="neutral">Untimed</Badge>}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'flex-end' }}>
+        <Input label="Test date" type="date" value={form.examDate} onChange={(e) => setForm({ ...form, examDate: e.target.value })} />
+        <Input label="Opens" type="time" value={form.windowStart} onChange={(e) => setForm({ ...form, windowStart: e.target.value })} />
+        <Input label="Closes" type="time" value={form.windowEnd} onChange={(e) => setForm({ ...form, windowEnd: e.target.value })} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+        <Button onClick={saveSchedule} loading={update.isPending}>Save schedule</Button>
+        {msg && <span className="lms-muted" style={{ color: 'var(--color-success)' }}>{msg}</span>}
       </div>
       {err && <span className="field__error" style={{ display: 'block', marginTop: 'var(--space-2)' }}>{err}</span>}
     </Card>

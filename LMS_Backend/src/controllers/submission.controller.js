@@ -1,12 +1,12 @@
 import multer from 'multer';
 import { z } from 'zod';
-import { AssessmentType, QuestionType, SubmissionStatus, UserRole } from '#shared';
+import { QuestionType, SubmissionStatus, UserRole } from '#shared';
 import { Assessment, Batch, Module, Submission, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { toCsv, sendCsv } from '../utils/csv.js';
 import { gridfsStorage } from '../services/fileStore.js';
-import { attemptEndsAt, finalGateForStudent, isAvailableNow, studentMayAccess } from './assessment.controller.js';
+import { attemptEndsAt, isAvailableNow, studentMayAccess } from './assessment.controller.js';
 import { assertSeb } from '../services/seb.js';
 import { notify } from '../services/notify.js';
 import { audit } from '../services/audit.js';
@@ -125,10 +125,6 @@ export async function startAttempt(req, res) {
   await assertSeb(req, assessment); // Safe Exam Browser gate (if required)
 
   if (!isAvailableNow(assessment)) throw ApiError.forbidden('This test is locked or outside its window.');
-  if (assessment.type === AssessmentType.FINAL) {
-    const gate = await finalGateForStudent(assessment.module, req.auth.userId);
-    if (gate.gated) throw ApiError.forbidden(gate.reason);
-  }
 
   let sub = await Submission.findOne({ assessment: assessment._id, student: req.auth.userId });
   if (sub) {
@@ -258,10 +254,6 @@ export async function submit(req, res) {
   } else {
     if (!isAvailableNow(assessment)) {
       throw ApiError.forbidden('This assessment is locked or outside its availability window');
-    }
-    if (assessment.type === AssessmentType.FINAL) {
-      const gate = await finalGateForStudent(assessment.module, req.auth.userId);
-      if (gate.gated) throw ApiError.forbidden(gate.reason);
     }
     if (existing && existing.status !== SubmissionStatus.NOT_STARTED) {
       throw ApiError.conflict('You have already submitted this assessment');

@@ -41,16 +41,18 @@ test('opening notifications marks them read', async () => {
   assert.ok(notes.every((n) => n.read === true));
 });
 
-test('unlocking an assessment writes an audit entry the admin can see', async () => {
+test('assigning a ready-made test writes an audit entry the admin can see', async () => {
   const { req } = ctx;
-  const bank = await req('POST', '/question-bank', T, { module: mod._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
-  const prac = await req('POST', '/assessments', T, { module: mod._id.toString(), title: 'Practice 1', type: 'practice', practiceIndex: 1, proctoring: 'none' });
-  await req('POST', `/assessments/${prac.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
-  await req('POST', `/assessments/${prac.data.id}/unlock`, T);
-  const log = await req('GET', '/audit?action=assessment.unlock', admin);
+  // Admin authors a ready-made template; the trainer assigns it to the batch.
+  const bank = await req('POST', '/question-bank', admin, { module: mod._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
+  const tmpl = await req('POST', '/assessments', admin, { module: mod._id.toString(), title: 'Practice 1', type: 'practice', proctoring: 'none' });
+  await req('POST', `/assessments/${tmpl.data.id}/questions/from-bank`, admin, { questionIds: [bank.data.id] });
+  const asg = await req('POST', `/assessments/${tmpl.data.id}/assign`, T, { batch: batch._id.toString() });
+  assert.equal(asg.status, 201);
+  const log = await req('GET', '/audit?action=assessment.assign', admin);
   assert.equal(log.status, 200);
   assert.ok(log.data.length >= 1);
-  assert.equal(log.data[0].action, 'assessment.unlock');
+  assert.equal(log.data[0].action, 'assessment.assign');
 });
 
 test('audit log is admin-only', async () => {

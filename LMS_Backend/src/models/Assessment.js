@@ -29,8 +29,15 @@ const assessmentSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
     module: { type: Schema.Types.ObjectId, ref: 'Module', required: true, index: true },
+    // A "ready-made test" authored by an admin. Templates carry the questions +
+    // duration + proctoring but NO batch/schedule — trainers assign them (which
+    // clones the template into a real, batch-scoped test). Templates are never
+    // visible to students.
+    isTemplate: { type: Boolean, default: false, index: true },
+    // For an assigned test: the ready-made template it was cloned from.
+    sourceTemplate: { type: Schema.Types.ObjectId, ref: 'Assessment', default: null },
     // The batch this assessment is assigned to — only its students can see/take it.
-    // Null on legacy assessments, which fall back to whole-module-curriculum visibility.
+    // Null on templates + legacy assessments (which fall back to module-curriculum).
     batch: { type: Schema.Types.ObjectId, ref: 'Batch', default: null, index: true },
     // Optional per-student allow-list WITHIN the batch. Empty = the whole batch may take it.
     allowedStudents: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },

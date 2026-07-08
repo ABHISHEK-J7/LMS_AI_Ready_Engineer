@@ -22,41 +22,48 @@ export const questionParam = z.object({ id: objectId, questionId: objectId });
 export const listAssessmentsQuery = z.object({
   module: objectId.optional(),
   type: z.nativeEnum(AssessmentType).optional(),
+  // 'true' → browse the ready-made test library (templates) instead of assigned tests.
+  template: z.enum(['true', 'false']).optional(),
 });
 
-export const createAssessmentSchema = z
-  .object({
-    // The trainer names the test freely; `type` is just the category
-    // (practice / preparation / final). Any number of each is allowed.
-    title: z.string().min(2),
-    module: objectId,
-    batch: objectId.optional(),
-    type: z.nativeEnum(AssessmentType),
-    topic: objectId.optional().nullable(),
-    passingScore: z.number().int().min(0).max(100).optional(),
-    availableFrom: z.coerce.date().optional(),
-    deadline: z.coerce.date().optional(),
-    durationMinutes: z.number().int().min(1).max(600).optional(),
-    proctoring: z.nativeEnum(ProctoringMode).optional(),
-    // Questions are sourced from the module's question bank (hand-picked).
-    questionIds: z.array(objectId).optional(),
-  })
-  .superRefine((d, ctx) => {
-    // Only practice tests may be topic-scoped; prep/final cover the whole module.
-    if (d.topic && d.type !== AssessmentType.PRACTICE) {
-      ctx.addIssue({ code: 'custom', message: 'Only practice tests can target a specific topic', path: ['topic'] });
-    }
-    validateWindow(d, ctx);
-  });
+// Ready-made tests are the only two categories now.
+const READY_MADE_TYPES = [AssessmentType.PRACTICE, AssessmentType.FINAL];
+
+// Admin authors a "ready-made test" (template): no batch, no schedule — those are
+// set by the trainer at assign time. Questions are added from the module's bank.
+export const createAssessmentSchema = z.object({
+  title: z.string().min(2),
+  module: objectId,
+  type: z.enum(READY_MADE_TYPES),
+  topic: objectId.optional().nullable(),
+  passingScore: z.number().int().min(0).max(100).optional(),
+  durationMinutes: z.number().int().min(1).max(600).optional(),
+  proctoring: z.nativeEnum(ProctoringMode).optional(),
+  questionIds: z.array(objectId).optional(),
+});
 
 export const fromBankSchema = z.object({
   questionIds: z.array(objectId).min(1, 'Pick at least one question'),
 });
 
+// A trainer assigns a ready-made template to their batch, setting who takes it and
+// when. Everything else (questions, duration, format, proctoring) comes from the template.
+export const assignTemplateSchema = z
+  .object({
+    batch: objectId,
+    studentIds: z.array(objectId).optional(),
+    availableFrom: z.coerce.date().optional(),
+    deadline: z.coerce.date().optional(),
+  })
+  .superRefine((d, ctx) => validateWindow(d, ctx));
+
 export const setAllowedStudentsSchema = z.object({
   // Empty array = the whole batch may take the assessment.
   studentIds: z.array(objectId),
 });
+
+// Practice ready-made tests are capped at exactly this many questions.
+export const PRACTICE_QUESTION_COUNT = 10;
 
 export const updateAssessmentSchema = z
   .object({
@@ -106,6 +113,8 @@ async function loadAssessmentForManage(req) {
   const assessment = await Assessment.findById(req.params.id);
   if (!assessment) throw ApiError.notFound('Assessment not found');
   if (req.auth.role === UserRole.TRAINER) {
+    // Ready-made templates are admin-owned; trainers only manage tests they assigned.
+    if (assessment.isTemplate) throw ApiError.forbidden('Ready-made tests are managed by admins');
     const module = await Module.findById(assessment.module).select('assignedTrainers');
     const assigned = module?.assignedTrainers.some((t) => t.toString() === req.auth.userId);
     if (!assigned) throw ApiError.forbidden('You are not assigned to this module');
@@ -134,41 +143,6 @@ function studentMayAccess(assessment, studentBatch, studentId) {
   const allow = assessment.allowedStudents ?? [];
   if (allow.length === 0) return true; // whole batch
   return allow.some((s) => (s._id ? s._id.toString() : s.toString()) === studentId.toString());
-}
-
-/**
- * A student may only attempt a module's FINAL after attempting EVERY preparation
- * test that exists for the module (regardless of current lock state — re-locking
- * a prep doesn't shrink the requirement, and a leftover attempt still counts).
- * Returns { gated, reason, pending } where `pending` is the titles still to do.
- */
-async function finalGateForStudent(moduleId, studentId) {
-  // Gate against ALL preparation tests defined for the module, not just the
-  // currently-unlocked subset (fixes the 1-prep / re-lock bypass).
-  const preps = await Assessment.find({
-    module: moduleId,
-    type: AssessmentType.PREPARATION,
-  }).select('_id title');
-
-  if (!preps.length) {
-    // No preps configured yet → the final isn't reachable until the trainer sets them up.
-    return { gated: true, reason: 'Preparation tests for this module haven’t been set up yet.', pending: [] };
-  }
-
-  const subs = await Submission.find({
-    student: studentId,
-    assessment: { $in: preps.map((p) => p._id) },
-    status: { $ne: SubmissionStatus.NOT_STARTED },
-    disqualified: { $ne: true }, // a kicked-out attempt doesn't count as "attempted"
-  }).select('assessment');
-  const done = new Set(subs.map((s) => s.assessment.toString()));
-  const pending = preps.filter((p) => !done.has(p._id.toString())).map((p) => p.title);
-
-  return {
-    gated: pending.length > 0,
-    reason: pending.length ? `Attempt all ${preps.length} preparation test(s) before taking the final.` : null,
-    pending,
-  };
 }
 
 /** Strip everything a student must never see from a question (answer key + rubric). */
@@ -213,8 +187,19 @@ export async function listAssessments(req, res) {
     const batch = myBatchId ? await Batch.findById(myBatchId).select('modules') : null;
     filter.module = { $in: batch?.modules ?? [] };
     filter.availability = AssessmentAvailability.UNLOCKED; // students only see unlocked
+    filter.isTemplate = { $ne: true }; // students never see the ready-made library
+  } else if (req.query.template === 'true') {
+    // Staff browsing the ready-made test library (admin templates).
+    filter.isTemplate = true;
+    if (req.query.module) filter.module = req.query.module;
+    // Trainers only see templates for the modules they're assigned to.
+    if (role === UserRole.TRAINER) {
+      const mine = await Module.find({ assignedTrainers: userId }).select('_id');
+      filter.module = filter.module ? filter.module : { $in: mine.map((m) => m._id) };
+    }
   } else if (req.query.module) {
     filter.module = req.query.module;
+    filter.isTemplate = { $ne: true }; // assigned instances only, not templates
   }
 
   let assessments = await Assessment.find(filter)
@@ -235,16 +220,6 @@ export async function listAssessments(req, res) {
         const view = toStudentView(a);
         const sub = byAssessment.get(a._id.toString());
         view.availableNow = isAvailableNow(a);
-        // Finals are additionally gated until every preparation test is attempted.
-        if (a.type === AssessmentType.FINAL && view.availableNow) {
-          const gate = await finalGateForStudent(a.module._id, userId);
-          if (gate.gated) {
-            view.availableNow = false;
-            view.gated = true;
-            view.gateReason = gate.reason;
-            view.gatePending = gate.pending;
-          }
-        }
         view.submission = sub
           ? { id: sub.id, status: sub.status, score: sub.score, passed: sub.passed, startedAt: sub.startedAt ?? null }
           : null;
@@ -310,10 +285,6 @@ export async function getAssessment(req, res) {
     if (!isAvailableNow(assessment)) {
       throw ApiError.forbidden('This assessment is locked or not currently available');
     }
-    if (assessment.type === AssessmentType.FINAL) {
-      const gate = await finalGateForStudent(assessment.module._id, req.auth.userId);
-      if (gate.gated) throw ApiError.forbidden(gate.reason);
-    }
 
     const view = toStudentView(assessment);
     if (assessment.proctored) {
@@ -360,40 +331,18 @@ async function snapshotsFromBank(questionIds, moduleId) {
   }));
 }
 
+/**
+ * Admin authors a ready-made test (template). It holds the questions + duration +
+ * proctoring but no batch or schedule — trainers assign it later. Practice templates
+ * are capped at PRACTICE_QUESTION_COUNT questions.
+ */
 export async function createAssessment(req, res) {
   const data = req.body;
 
-  // A trainer may only author for modules they're assigned to.
-  const module = await Module.findById(data.module).select('assignedTrainers topics');
+  const module = await Module.findById(data.module).select('topics');
   if (!module) throw ApiError.badRequest('Module not found');
-  if (req.auth.role === UserRole.TRAINER) {
-    const assigned = module.assignedTrainers.some((t) => t.toString() === req.auth.userId);
-    if (!assigned) throw ApiError.forbidden('You are not assigned to this module');
-  }
 
-  // Any number of practice / preparation tests may exist per module (each named
-  // by the trainer). A module still has exactly one final.
-  if (data.type === AssessmentType.FINAL && (await Assessment.findOne({ module: data.module, type: AssessmentType.FINAL }))) {
-    throw ApiError.conflict('A final assessment already exists for this module');
-  }
-
-  // Resolve + validate the batch this assessment is assigned to. Only that batch's
-  // students will see it. The batch must carry this module, and a trainer must belong
-  // to the batch.
-  let batchId = null;
-  if (data.batch) {
-    const batch = await Batch.findById(data.batch).select('modules trainers');
-    if (!batch) throw ApiError.badRequest('Batch not found');
-    if (!batch.modules.some((m) => m.toString() === data.module)) {
-      throw ApiError.badRequest('That batch does not include this module');
-    }
-    if (req.auth.role === UserRole.TRAINER && !batch.trainers.some((t) => t.toString() === req.auth.userId)) {
-      throw ApiError.forbidden('You are not a trainer on that batch');
-    }
-    batchId = batch._id;
-  }
-
-  // Resolve the optional topic (practice tests only) to its title.
+  // Resolve the optional topic to its title (used for display / coverage).
   let topicTitle = '';
   if (data.topic) {
     const t = module.topics.id(data.topic);
@@ -402,32 +351,100 @@ export async function createAssessment(req, res) {
   }
 
   const questions = await snapshotsFromBank(data.questionIds, data.module);
+  if (data.type === AssessmentType.PRACTICE && questions.length > PRACTICE_QUESTION_COUNT) {
+    throw ApiError.badRequest(`A practice test can have at most ${PRACTICE_QUESTION_COUNT} questions.`);
+  }
 
-  // Invigilation mode is chosen per test. Default: practice = none, prep/final = built-in app.
+  // Default: practice = built-in proctoring off, final = built-in app.
   const proctoring = data.proctoring
     ?? (data.type === AssessmentType.PRACTICE ? ProctoringMode.NONE : ProctoringMode.APP);
-  const proctored = proctoring !== ProctoringMode.NONE; // app/seb run the timed exam flow
+  const proctored = proctoring !== ProctoringMode.NONE;
   const requireSeb = proctoring === ProctoringMode.SEB;
 
   const settings = await getSettings();
   const assessment = await Assessment.create({
     title: data.title,
     module: data.module,
-    batch: batchId,
+    isTemplate: true, // admin authors templates only; trainers assign them
+    batch: null,
     type: data.type,
-    topic: data.type === AssessmentType.PRACTICE ? (data.topic ?? null) : null,
-    topicTitle: data.type === AssessmentType.PRACTICE ? topicTitle : '',
+    topic: data.topic ?? null,
+    topicTitle,
     passingScore: data.passingScore ?? settings.passingScore,
-    availableFrom: data.availableFrom,
-    deadline: data.deadline,
     proctoring,
     proctored,
     requireSeb,
     durationMinutes: proctored ? data.durationMinutes : undefined,
     questions,
-    availability: AssessmentAvailability.LOCKED, // always starts locked
+    availability: AssessmentAvailability.LOCKED,
   });
   ok(res, assessment.toJSON(), 201);
+}
+
+/**
+ * Trainer (or admin) assigns a ready-made template to a batch: clones its questions,
+ * duration, proctoring, and passing score into a new batch-scoped test, adding the
+ * chosen students + schedule. The clone is created UNLOCKED so students see it.
+ */
+export async function assignTemplate(req, res) {
+  const template = await Assessment.findById(req.params.id);
+  if (!template) throw ApiError.notFound('Ready-made test not found');
+  if (!template.isTemplate) throw ApiError.badRequest('That test is not a ready-made template');
+  if (template.questions.length === 0) throw ApiError.badRequest('This ready-made test has no questions yet.');
+
+  const { batch: batchId, studentIds = [], availableFrom, deadline } = req.body;
+  const batch = await Batch.findById(batchId).select('modules trainers students');
+  if (!batch) throw ApiError.badRequest('Batch not found');
+  if (!batch.modules.some((m) => m.toString() === template.module.toString())) {
+    throw ApiError.badRequest('That batch does not include this test’s module');
+  }
+  if (req.auth.role === UserRole.TRAINER && !batch.trainers.some((t) => t.toString() === req.auth.userId)) {
+    throw ApiError.forbidden('You are not a trainer on that batch');
+  }
+
+  // Validate the student allow-list belongs to the batch.
+  const inBatch = new Set(batch.students.map((s) => s.toString()));
+  const allow = [...new Set(studentIds)];
+  if (allow.some((id) => !inBatch.has(id))) {
+    throw ApiError.badRequest('Some selected students are not in that batch');
+  }
+
+  // A proctored (timed) test needs a valid window + duration to be takeable.
+  if (template.proctored) {
+    if (!availableFrom || !deadline) throw ApiError.badRequest('Set the exam window (start and end) for this proctored test.');
+    if (new Date(availableFrom) >= new Date(deadline)) throw ApiError.badRequest('The window end must be after its start.');
+    if (template.durationMinutes && template.durationMinutes * 60000 > new Date(deadline).getTime() - new Date(availableFrom).getTime()) {
+      throw ApiError.badRequest('The exam duration is longer than the window you set.');
+    }
+  }
+
+  const instance = await Assessment.create({
+    title: template.title,
+    module: template.module,
+    isTemplate: false,
+    sourceTemplate: template._id,
+    batch: batch._id,
+    allowedStudents: allow,
+    type: template.type,
+    topic: template.topic ?? null,
+    topicTitle: template.topicTitle ?? '',
+    passingScore: template.passingScore,
+    availableFrom: availableFrom ?? undefined,
+    deadline: deadline ?? undefined,
+    proctoring: template.proctoring,
+    proctored: template.proctored,
+    requireSeb: template.requireSeb,
+    durationMinutes: template.durationMinutes,
+    // Deep-copy the question snapshots so later template edits never change a live test.
+    questions: template.questions.map((q) => ({
+      type: q.type, prompt: q.prompt, options: q.options, correctOption: q.correctOption,
+      referenceAnswer: q.referenceAnswer || '', points: q.points, sourceId: q.sourceId,
+    })),
+    availability: AssessmentAvailability.UNLOCKED, // assigning makes it available
+    unlockedBy: req.auth.userId,
+  });
+  audit(req, 'assessment.assign', { targetType: 'assessment', targetId: instance.id, meta: { template: template.title, batch: batch._id.toString(), students: allow.length } });
+  ok(res, instance.toJSON(), 201);
 }
 
 export async function updateAssessment(req, res) {
@@ -505,14 +522,18 @@ export async function addQuestionsFromBank(req, res) {
   const snapshots = await snapshotsFromBank(req.body.questionIds, assessment.module);
   // Skip bank questions already added to this test (by source id).
   const already = new Set(assessment.questions.map((q) => q.sourceId?.toString()).filter(Boolean));
+  const cap = assessment.type === AssessmentType.PRACTICE ? PRACTICE_QUESTION_COUNT : Infinity;
   let added = 0;
+  let capped = false;
   for (const q of snapshots) {
     if (q.sourceId && already.has(q.sourceId.toString())) continue;
+    // Practice tests are capped — add up to the limit and drop the rest.
+    if (assessment.questions.length >= cap) { capped = true; break; }
     assessment.questions.push(q);
     added += 1;
   }
   await assessment.save();
-  ok(res, { ...assessment.toJSON(), added }, 201);
+  ok(res, { ...assessment.toJSON(), added, capped }, 201);
 }
 
 /**
@@ -546,4 +567,4 @@ export async function deleteQuestion(req, res) {
 }
 
 // Re-export helpers for the submission controller.
-export { isAvailableNow, finalGateForStudent, studentMayAccess };
+export { isAvailableNow, studentMayAccess };

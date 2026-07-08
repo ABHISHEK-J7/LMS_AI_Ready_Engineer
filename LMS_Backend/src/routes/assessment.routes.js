@@ -9,6 +9,7 @@ import { asyncHandler } from '../utils/http.js';
 const router = Router();
 router.use(authenticate);
 
+const adminOnly = requireRole(UserRole.ADMIN);
 const adminOrTrainer = requireRole(UserRole.ADMIN, UserRole.TRAINER);
 const studentOnly = requireRole(UserRole.STUDENT);
 
@@ -16,20 +17,21 @@ const studentOnly = requireRole(UserRole.STUDENT);
 router.get('/', validate({ query: a.listAssessmentsQuery }), asyncHandler(a.listAssessments));
 router.get('/:id', validate({ params: a.assessmentIdParam }), asyncHandler(a.getAssessment));
 
-// Authoring (admin or assigned trainer).
-router.post('/', adminOrTrainer, validate({ body: a.createAssessmentSchema }), asyncHandler(a.createAssessment));
+// Ready-made test authoring — ADMIN ONLY (creates templates; edits their questions).
+router.post('/', adminOnly, validate({ body: a.createAssessmentSchema }), asyncHandler(a.createAssessment));
+router.post('/:id/questions/from-bank', adminOnly, validate({ params: a.assessmentIdParam, body: a.fromBankSchema }), asyncHandler(a.addQuestionsFromBank));
+router.delete('/:id/questions/:questionId', adminOnly, validate({ params: a.questionParam }), asyncHandler(a.deleteQuestion));
+
+// A trainer assigns a ready-made template to their batch (clones it into a live test).
+router.post('/:id/assign', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.assignTemplateSchema }), asyncHandler(a.assignTemplate));
+
+// Managing a test (template: admin only; assigned instance: admin or its trainer).
 router.patch('/:id', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.updateAssessmentSchema }), asyncHandler(a.updateAssessment));
 router.delete('/:id', adminOrTrainer, validate({ params: a.assessmentIdParam }), asyncHandler(a.deleteAssessment));
-
-// The trainer-controlled gate.
 router.post('/:id/unlock', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.unlockSchema }), asyncHandler(a.unlockAssessment));
 router.post('/:id/lock', adminOrTrainer, validate({ params: a.assessmentIdParam }), asyncHandler(a.lockAssessment));
 
-// Build a test by hand-picking from the module's question bank (bank-only authoring).
-router.post('/:id/questions/from-bank', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.fromBankSchema }), asyncHandler(a.addQuestionsFromBank));
-router.delete('/:id/questions/:questionId', adminOrTrainer, validate({ params: a.questionParam }), asyncHandler(a.deleteQuestion));
-
-// Restrict an assessment to specific students within its batch (chips / Excel of emails).
+// Restrict an assigned test to specific students within its batch (chips / Excel of emails).
 router.patch('/:id/allowed-students', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.setAllowedStudentsSchema }), asyncHandler(a.setAllowedStudents));
 
 // Timed/proctored attempts.

@@ -4,7 +4,7 @@ import { ThemeName } from '@/shared';
 import { Badge, Button, Card, CardHeader, ErrorState, Input, Select, SkeletonText } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
-import { useSettings, useTestAiConnection, useTestZoomConnection, useUpdateSettings, useUploadSebConfig } from '@/lib/settings';
+import { useSettings, useTestAiConnection, useTestEmail, useTestZoomConnection, useUpdateSettings, useUploadSebConfig } from '@/lib/settings';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export function SettingsPage() {
@@ -128,6 +128,7 @@ export function SettingsPage() {
       </Card>
 
       <AiGradingCard settings={data} />
+      <EmailCard />
       <ZoomCard settings={data} />
       <LiveKitCard settings={data} />
       <SafeExamBrowserCard settings={data} />
@@ -204,6 +205,48 @@ function SafeExamBrowserCard({ settings }) {
           In the <strong>SEB Config Tool</strong>, set the exam Start URL to this app, copy the generated{' '}
           <strong>Config Key</strong> here, and upload the same <strong>.seb</strong> file so students can launch it.
           Then tick “Require Safe Exam Browser” on a proctored exam. SEB is desktop-only (Windows/macOS).
+        </p>
+      </form>
+    </Card>
+  );
+}
+
+/** Email delivery — send a real test email so verification-code delivery can be confirmed. */
+function EmailCard() {
+  const test = useTestEmail();
+  const [to, setTo] = useState('');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  async function runTest(e) {
+    e.preventDefault();
+    setMsg(''); setErr('');
+    try {
+      const r = await test.mutateAsync(to.trim() || undefined);
+      setMsg(`Test email sent to ${r.to}. Check that inbox (and spam) — if it arrives, verification codes will too.`);
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+
+  return (
+    <Card style={{ maxWidth: '40rem', marginTop: 'var(--space-6)' }}>
+      <CardHeader title="Email delivery (verification codes)" subtitle="Login/onboarding 6-digit codes are emailed via SMTP. Send a test to confirm it works on this server." />
+      <form onSubmit={runTest} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        <Input
+          label="Send a test email to"
+          type="email"
+          placeholder="your own email (defaults to your admin address)"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+        />
+        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button type="submit" variant="outline" loading={test.isPending}>Send test email</Button>
+          {msg && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)' }}>{msg}</span>}
+          {err && <span className="field__error">{err}</span>}
+        </div>
+        <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+          If this fails, verification codes won't send. Set <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>MAIL_FROM</code> in the backend <code>.env</code> and restart it. The error shown here is the exact SMTP reason.
         </p>
       </form>
     </Card>

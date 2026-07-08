@@ -11,6 +11,11 @@ export async function startTestServer() {
   process.env.NODE_ENV = 'test';
   process.env.JWT_ACCESS_SECRET = 'test-access';
   process.env.JWT_REFRESH_SECRET = 'test-refresh';
+  // NEVER send real email from tests — force the dev mailer (logs, doesn't send).
+  // dotenv won't override an already-set key, so this wins over a real .env.
+  process.env.SMTP_HOST = '';
+  process.env.SMTP_USER = '';
+  process.env.SMTP_PASS = '';
 
   const mongoose = (await import('mongoose')).default;
   const { createApp } = await import('../src/app.js');

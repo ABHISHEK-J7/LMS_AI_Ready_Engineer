@@ -46,6 +46,11 @@ export function useTestZoomConnection() {
   return useMutation({ mutationFn: () => unwrap(api.post('/settings/test-zoom')) });
 }
 
+/** Send a real test email through SMTP to confirm verification codes will deliver. */
+export function useTestEmail() {
+  return useMutation({ mutationFn: (to) => unwrap(api.post('/settings/test-email', to ? { to } : {})) });
+}
+
 /** Admin: upload a Safe Exam Browser .seb config file (sets the launch URL). */
 export function useUploadSebConfig() {
   const qc = useQueryClient();

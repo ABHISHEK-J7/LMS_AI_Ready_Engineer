@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { UserRole, UserStatus } from '#shared';
 import { User, getSettings } from '../models/index.js';
+import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { invalidateAuthUser } from '../services/authCache.js';
@@ -177,7 +178,11 @@ export async function requestOtp(req, res) {
     // eslint-disable-next-line no-console
     console.error(`[auth] failed to send OTP email to ${user.email}: ${err.message}`);
   }
-  ok(res, { sent: true });
+  // In non-production, return the code so staging/dev can test without real email.
+  // In production this is NEVER included, so it can't be used to bypass email.
+  const body = { sent: true };
+  if (!env.isProd) body.devOtp = otp;
+  ok(res, body);
 }
 
 /**

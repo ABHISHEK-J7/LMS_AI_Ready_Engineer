@@ -2,9 +2,10 @@ import path from 'node:path';
 import multer from 'multer';
 import { z } from 'zod';
 import { ThemeName } from '#shared';
-import { getSettings, getStoredSebConfigKey } from '../models/index.js';
+import { getSettings, getStoredSebConfigKey, User } from '../models/index.js';
 import { env } from '../config/env.js';
 import { gridfsStorage } from '../services/fileStore.js';
+import { sendMail } from '../services/mailer.js';
 import { aiKeySource, getEvaluator } from '../services/aiGrading.js';
 import { verifyZoom, zoomConfigured, zoomSource } from '../services/meetings.js';
 import { livekitConfigured } from '../services/livekit.js';
@@ -105,6 +106,35 @@ export async function testAiConnection(_req, res) {
     ok(res, { ok: true, model: result.model, source: await aiKeySource() });
   } catch (err) {
     throw ApiError.badRequest(`Claude connection failed: ${err.message}`);
+  }
+}
+
+export const testEmailSchema = z.object({ to: z.string().email().max(160).optional() });
+
+/**
+ * Admin: send a real test email through the configured SMTP so email delivery can
+ * be verified FROM THE RUNNING SERVER (this is what makes verification codes work).
+ * Surfaces the exact SMTP error instead of the silent swallow the OTP flow uses.
+ */
+export async function testEmailConnection(req, res) {
+  const to = req.body.to || (await User.findById(req.auth.userId).select('email'))?.email;
+  if (!to) throw ApiError.badRequest('No recipient address to send the test to.');
+  if (!env.mail.host) {
+    throw ApiError.badRequest('SMTP is not configured on this server (SMTP_HOST is blank). Set SMTP_HOST/PORT/USER/PASS in the backend .env and restart it.');
+  }
+  try {
+    const r = await sendMail({
+      to,
+      subject: 'AI Ready Engineer — email delivery test',
+      text: 'This is a test email. If you received it, SMTP is working and verification codes will be delivered.',
+    });
+    if (r?.delivered === false) {
+      throw ApiError.badRequest('SMTP is not configured (no transport). Set SMTP_HOST/PORT/USER/PASS and restart.');
+    }
+    ok(res, { ok: true, to, from: env.mail.from });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw ApiError.badRequest(`Email send failed: ${err.message}`);
   }
 }
 

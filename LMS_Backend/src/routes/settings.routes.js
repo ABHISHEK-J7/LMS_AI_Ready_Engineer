@@ -14,6 +14,7 @@ router.use(authenticate, requireRole(UserRole.ADMIN));
 router.get('/', asyncHandler(settings.getAllSettings));
 router.patch('/', validate({ body: settings.updateSettingsSchema }), asyncHandler(settings.updateSettings));
 router.post('/test-ai', asyncHandler(settings.testAiConnection));
+router.post('/test-email', validate({ body: settings.testEmailSchema }), asyncHandler(settings.testEmailConnection));
 router.post('/test-zoom', asyncHandler(settings.testZoomConnection));
 router.post('/seb-config', settings.uploadSebConfig, asyncHandler(settings.setSebConfig));
 

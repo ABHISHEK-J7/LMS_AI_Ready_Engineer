@@ -51,7 +51,9 @@ async function ensureStudentCanAccess(req, assessment) {
 function studentQuestions(assessment) {
   return assessment.questions.map((q) => {
     const j = q.toJSON();
+    // Never leak the answer key or the private grading rubric to the student.
     delete j.correctOption;
+    delete j.referenceAnswer;
     return j;
   });
 }

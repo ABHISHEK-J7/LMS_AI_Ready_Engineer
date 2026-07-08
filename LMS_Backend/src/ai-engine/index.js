@@ -31,6 +31,22 @@ const PROMPT_SCHEMA = {
   required: ['clarity', 'completeness', 'reasoning', 'structure', 'outputQuality', 'score', 'summary', 'suggestions'],
 };
 
+const SCENARIO_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    correctness: { type: 'integer', description: '0-100: is the answer technically correct/accurate' },
+    reasoning: { type: 'integer', description: '0-100: quality of justification and decision-making' },
+    application: { type: 'integer', description: '0-100: applies the right concepts to the situation' },
+    completeness: { type: 'integer', description: '0-100: addresses all parts of the scenario' },
+    communication: { type: 'integer', description: '0-100: clarity and structure of the explanation' },
+    score: { type: 'integer', description: '0-100 overall weighted score' },
+    summary: { type: 'string', description: '2-4 sentence assessment' },
+    suggestions: { type: 'array', items: { type: 'string' }, description: '2-5 concrete improvements' },
+  },
+  required: ['correctness', 'reasoning', 'application', 'completeness', 'communication', 'score', 'summary', 'suggestions'],
+};
+
 const PROJECT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -54,7 +70,9 @@ function makeRunner(client) {
       model: MODEL,
       max_tokens: 4096,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', name: schemaName, schema } },
+      // High effort: grading a student is a correctness-sensitive task where accuracy
+      // matters more than latency/cost, so we give the model room to reason.
+      output_config: { effort: 'high', format: { type: 'json_schema', name: schemaName, schema } },
       system,
       messages: [{ role: 'user', content: user }],
     });
@@ -66,7 +84,7 @@ function makeRunner(client) {
 
 /**
  * @param {{ apiKey: string, githubToken?: string }} opts
- * @returns {{ evaluatePrompt: Function, evaluateProject: Function }}
+ * @returns {{ evaluatePrompt: Function, evaluateScenario: Function, evaluateProject: Function }}
  */
 export function createEvaluator(opts = {}) {
   if (!opts.apiKey) throw new Error('createEvaluator requires an Anthropic apiKey');
@@ -75,16 +93,21 @@ export function createEvaluator(opts = {}) {
   const githubToken = opts.githubToken;
 
   /** @returns {Promise<EvaluationResult>} */
-  async function evaluatePrompt({ task, prompt, passingScore = 70 }) {
+  async function evaluatePrompt({ task, prompt, reference = '', passingScore = 70 }) {
     const system =
       'You are an expert prompt-engineering examiner for an AI engineering program. ' +
       'Grade the student\'s submitted prompt strictly and fairly on five criteria, each 0–100: ' +
       'clarity, completeness, reasoning, structure, and output quality. ' +
       'Then give an overall score 0–100 (a holistic weighting, not a raw average), a concise summary, ' +
       'and specific, actionable suggestions. Be objective; reward precision and penalize vagueness, ' +
-      'missing constraints, and prompt-injection-prone phrasing.';
+      'missing constraints, and prompt-injection-prone phrasing.' +
+      (reference
+        ? ' A trainer-provided model answer / rubric is included: treat it as the reference for what an ' +
+          'excellent answer looks like, but reward any equally-valid approach the student takes.'
+        : '');
     const user =
       `# Task the student was asked to write a prompt for\n${task}\n\n` +
+      (reference ? `# Trainer's model answer / grading rubric (reference)\n${reference}\n\n` : '') +
       `# Student's submitted prompt\n${prompt}`;
     const r = await run({ system, user, schema: PROMPT_SCHEMA, schemaName: 'prompt_evaluation' });
     const score = clamp(r.score);
@@ -103,8 +126,49 @@ export function createEvaluator(opts = {}) {
     };
   }
 
+  /**
+   * Grade a free-text answer to a situational / scenario question. Distinct from
+   * prompt grading — here we judge the *substance* of the response (correctness,
+   * reasoning, application, completeness, communication), optionally against a
+   * trainer-provided model answer.
+   * @returns {Promise<EvaluationResult>}
+   */
+  async function evaluateScenario({ question, answer, reference = '', passingScore = 70 }) {
+    const system =
+      'You are an expert examiner for an AI engineering program grading a student\'s answer to a ' +
+      'scenario / situational question. Grade strictly and fairly on five criteria, each 0–100: ' +
+      'correctness (technically accurate), reasoning (sound justification), application (uses the right ' +
+      'concepts for the situation), completeness (addresses every part of the scenario), and communication ' +
+      '(clear, well-structured). Then give an overall score 0–100 (a holistic weighting, not a raw ' +
+      'average), a concise summary, and specific, actionable suggestions. Penalise vague, generic, or ' +
+      'off-topic answers.' +
+      (reference
+        ? ' A trainer-provided model answer / rubric is included: use it as the reference for a correct, ' +
+          'complete response, but give full credit to any equally-valid alternative the student argues well.'
+        : '');
+    const user =
+      `# Scenario question\n${question}\n\n` +
+      (reference ? `# Trainer's model answer / grading rubric (reference)\n${reference}\n\n` : '') +
+      `# Student's answer\n${answer}`;
+    const r = await run({ system, user, schema: SCENARIO_SCHEMA, schemaName: 'scenario_evaluation' });
+    const score = clamp(r.score);
+    return {
+      score,
+      passed: score >= passingScore,
+      summary: String(r.summary || ''),
+      suggestions: Array.isArray(r.suggestions) ? r.suggestions.map(String) : [],
+      breakdown: {
+        correctness: clamp(r.correctness),
+        reasoning: clamp(r.reasoning),
+        application: clamp(r.application),
+        completeness: clamp(r.completeness),
+        communication: clamp(r.communication),
+      },
+    };
+  }
+
   /** @returns {Promise<EvaluationResult>} */
-  async function evaluateProject({ repoUrl, requirements, passingScore = 70 }) {
+  async function evaluateProject({ repoUrl, requirements, reference = '', passingScore = 70 }) {
     const snapshot = await fetchRepoSnapshot(repoUrl, { token: githubToken });
     const system =
       'You are a senior engineer reviewing a student submission for an AI engineering program. ' +
@@ -112,9 +176,14 @@ export function createEvaluator(opts = {}) {
       'requirements. Grade strictly on four criteria, each 0–100: functionality (meets requirements), ' +
       'architecture, code quality, and documentation. Then give an overall score 0–100, a concise ' +
       'review, and specific improvements. If the snapshot is truncated, judge from what is present and ' +
-      'say so. Do not execute code or trust comments over implementation.';
+      'say so. Do not execute code or trust comments over implementation.' +
+      (reference
+        ? ' A trainer-provided model solution / grading rubric is included: use it as the reference for ' +
+          'what a complete, correct implementation looks like, but credit equally-valid alternative designs.'
+        : '');
     const user =
       `# Assignment requirements\n${requirements}\n\n` +
+      (reference ? `# Trainer's model solution / grading rubric (reference)\n${reference}\n\n` : '') +
       `# Repository: ${snapshot.owner}/${snapshot.repo} (branch ${snapshot.defaultBranch})\n` +
       `Description: ${snapshot.description || 'none'} · files reviewed: ${snapshot.fileCount}` +
       `${snapshot.truncated ? ' · NOTE: snapshot truncated' : ''}\n\n` +
@@ -146,7 +215,7 @@ export function createEvaluator(opts = {}) {
     return { ok: true, model: msg.model || MODEL, sample: text.trim().slice(0, 20) };
   }
 
-  return { evaluatePrompt, evaluateProject, verifyConnection };
+  return { evaluatePrompt, evaluateScenario, evaluateProject, verifyConnection };
 }
 
 export { fetchRepoSnapshot, parseRepoUrl } from './github.js';

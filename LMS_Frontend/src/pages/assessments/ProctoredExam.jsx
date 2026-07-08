@@ -6,7 +6,8 @@ import { Badge, Button, Card, CardHeader } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useProctorShot, useRecordWarning, useSaveProgress, useStartAttempt, useSubmitAssessment } from '@/lib/assessments';
-import { assessmentLabel } from './assessmentsUi';
+import { assessmentLabel, isGithubRepoUrl, QUESTION_TYPE_HINT } from './assessmentsUi';
+import { RepoInput } from './TakeAssessment';
 import './exam.css';
 const fmtClock = (ms) => {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -404,11 +405,13 @@ function TimedExam({ assessment, questions, endsAt, serverNow, initialStream }) 
                     {opt}
                   </label>
                 ))
+              ) : q.type === QuestionType.CODING ? (
+                <RepoInput value={answers[q.id]?.text ?? ''} onChange={(v) => setAnswer(q.id, { text: v })} />
               ) : (
                 <textarea
                   className="input"
                   style={{ minHeight: '7rem', width: '100%' }}
-                  placeholder={q.type === QuestionType.CODING ? 'Paste your public GitHub repository URL' : 'Type your answer…'}
+                  placeholder={QUESTION_TYPE_HINT[q.type] || 'Type your answer…'}
                   value={answers[q.id]?.text ?? ''}
                   onChange={(e) => setAnswer(q.id, { text: e.target.value })}
                 />

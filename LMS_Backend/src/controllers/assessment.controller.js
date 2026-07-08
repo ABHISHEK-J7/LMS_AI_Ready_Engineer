@@ -149,13 +149,16 @@ async function finalGateForStudent(moduleId, studentId) {
   };
 }
 
-/** Student-facing projection: never leak the correct answer. */
+/** Strip everything a student must never see from a question (answer key + rubric). */
+function sanitizeQuestion(q) {
+  const { correctOption, referenceAnswer, ...rest } = q;
+  return rest;
+}
+
+/** Student-facing projection: never leak the correct answer or grading rubric. */
 function toStudentView(a) {
   const json = a.toJSON();
-  json.questions = json.questions.map((q) => {
-    const { correctOption, ...rest } = q;
-    return rest;
-  });
+  json.questions = json.questions.map(sanitizeQuestion);
   return json;
 }
 
@@ -251,6 +254,10 @@ export async function getAssessment(req, res) {
       if (heldUntil) {
         full.questions = [];
         full.answersLockedUntil = heldUntil;
+      } else {
+        // Review keeps the MCQ correct answers (so students learn) but never the
+        // trainer's private grading rubric / model answer.
+        full.questions = full.questions.map(({ referenceAnswer, ...rest }) => rest);
       }
       return ok(res, full);
     }
@@ -302,6 +309,7 @@ async function snapshotsFromBank(questionIds, moduleId) {
     prompt: q.prompt,
     options: q.options,
     correctOption: q.correctOption,
+    referenceAnswer: q.referenceAnswer || '',
     points: q.points,
     sourceId: q._id,
   }));

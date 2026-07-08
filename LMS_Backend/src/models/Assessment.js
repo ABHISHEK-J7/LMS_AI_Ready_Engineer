@@ -14,6 +14,10 @@ const questionSchema = new Schema(
     prompt: { type: String, required: true },
     options: [String],
     correctOption: Number,
+    // Trainer-authored model answer / grading rubric for AI-graded questions
+    // (scenario / prompt / repo). Fed to the evaluator to anchor its scoring, and
+    // NEVER exposed to students. Empty for MCQ.
+    referenceAnswer: { type: String, default: '' },
     points: { type: Number, default: 1 },
     // The question-bank item this was snapshot from (for de-duping re-adds).
     sourceId: { type: Schema.Types.ObjectId },

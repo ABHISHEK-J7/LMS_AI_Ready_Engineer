@@ -19,6 +19,9 @@ const questionBankSchema = new Schema(
     prompt: { type: String, required: true, trim: true },
     options: { type: [String], default: [] },
     correctOption: { type: Number },
+    // Model answer / grading rubric for AI-graded questions (scenario / prompt /
+    // repo). Anchors the evaluator's scoring; never shown to students. Empty for MCQ.
+    referenceAnswer: { type: String, default: '' },
     points: { type: Number, default: 1, min: 1, max: 100 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },

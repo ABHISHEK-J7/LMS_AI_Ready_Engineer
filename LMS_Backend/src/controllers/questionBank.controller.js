@@ -20,6 +20,7 @@ const questionInput = z
     prompt: z.string().min(1),
     options: z.array(z.string().min(1)).optional(),
     correctOption: z.number().int().min(0).optional(),
+    referenceAnswer: z.string().max(5000).optional(),
     points: z.number().int().min(1).max(100).default(1),
   })
   .superRefine((q, ctx) => {
@@ -40,6 +41,7 @@ export const createBankItemSchema = z
     prompt: z.string().min(1),
     options: z.array(z.string().min(1)).optional(),
     correctOption: z.number().int().min(0).optional(),
+    referenceAnswer: z.string().max(5000).optional(),
     points: z.number().int().min(1).max(100).default(1),
   })
   .superRefine((q, ctx) => {
@@ -64,6 +66,7 @@ export const updateBankItemSchema = z
     type: z.nativeEnum(QuestionType).optional(),
     options: z.array(z.string().min(1)).optional(),
     correctOption: z.number().int().min(0).optional(),
+    referenceAnswer: z.string().max(5000).optional(),
     points: z.number().int().min(1).max(100).optional(),
     topic: objectId.optional().nullable(),
   })
@@ -123,6 +126,8 @@ export async function createBankItem(req, res) {
     prompt: req.body.prompt,
     options: req.body.options ?? [],
     correctOption: req.body.correctOption,
+    // MCQ is graded deterministically, so it never carries a reference answer.
+    referenceAnswer: req.body.type === QuestionType.MCQ ? '' : (req.body.referenceAnswer ?? ''),
     points: req.body.points,
     createdBy: req.auth.userId,
   });
@@ -141,6 +146,7 @@ export async function bulkAddBankItems(req, res) {
     prompt: q.prompt,
     options: q.options ?? [],
     correctOption: q.correctOption,
+    referenceAnswer: q.type === QuestionType.MCQ ? '' : (q.referenceAnswer ?? ''),
     points: q.points,
     createdBy: req.auth.userId,
   }));
@@ -152,12 +158,15 @@ export async function updateBankItem(req, res) {
   const item = await QuestionBankItem.findById(req.params.itemId);
   if (!item) throw ApiError.notFound('Question not found');
   const module = await loadManageableModule(req, item.module); // authorize on its module
-  const { prompt, type, options, correctOption, points, topic } = req.body;
+  const { prompt, type, options, correctOption, referenceAnswer, points, topic } = req.body;
   if (prompt !== undefined) item.prompt = prompt;
   if (type !== undefined) item.type = type;
   if (options !== undefined) item.options = options;
   if (correctOption !== undefined) item.correctOption = correctOption;
+  if (referenceAnswer !== undefined) item.referenceAnswer = referenceAnswer;
   if (points !== undefined) item.points = points;
+  // Switching a question to MCQ clears any leftover reference answer.
+  if ((type ?? item.type) === QuestionType.MCQ) item.referenceAnswer = '';
   if (topic !== undefined) {
     item.topic = topic ?? null;
     item.topicTitle = topicTitleOf(module, topic);

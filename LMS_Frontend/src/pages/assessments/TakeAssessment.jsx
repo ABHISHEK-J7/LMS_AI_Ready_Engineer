@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { Check, CheckCircle2, Lock, ShieldAlert, Trophy, X } from 'lucide-react';
+import { Check, CheckCircle2, Github, Lock, ShieldAlert, Trophy, X } from 'lucide-react';
 import { QuestionType } from '@/shared';
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Skeleton, SkeletonText, Spinner, Textarea, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { assessmentKeys, useAssessment, useLeaderboard, useMySubmission, useSubmitAssessment } from '@/lib/assessments';
-import { assessmentLabel } from './assessmentsUi';
+import { assessmentLabel, isGithubRepoUrl, QUESTION_TYPE_HINT } from './assessmentsUi';
 import { ProctoredFlow } from './ProctoredExam';
 import '../modules/modules.css';
 import './exam.css';
@@ -292,6 +292,34 @@ function Leaderboard({ id }) {
   );
 }
 
+/** Repo Evaluation answer input: a single-line GitHub URL field with live validity. */
+export function RepoInput({ value, onChange }) {
+  const trimmed = (value ?? '').trim();
+  const valid = isGithubRepoUrl(trimmed);
+  return (
+    <div>
+      <div className={`repo-input${trimmed && !valid ? ' repo-input--invalid' : ''}`}>
+        <Github size={16} className="repo-input__icon" />
+        <input
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="https://github.com/you/project"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {trimmed && (valid ? <Check size={15} className="repo-input__ok" /> : <X size={15} className="repo-input__bad" />)}
+      </div>
+      <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 4 }}>
+        {trimmed && !valid
+          ? 'Enter a public GitHub repo URL like https://github.com/you/project'
+          : 'Paste the link to your public GitHub repository — the AI reviews its code.'}
+      </div>
+    </div>
+  );
+}
+
 function Quiz({ a }) {
   const confirm = useConfirm();
   const [answers, setAnswers] = useState({}); // questionId -> { selectedOption | text }
@@ -309,6 +337,15 @@ function Quiz({ a }) {
 
   async function onSubmit() {
     setErr('');
+    // Repo Evaluation answers must be a valid GitHub URL, or the AI grader can't clone them.
+    const badRepo = a.questions.find((q) => {
+      const t = answers[q.id]?.text?.trim();
+      return q.type === QuestionType.CODING && t && !isGithubRepoUrl(t);
+    });
+    if (badRepo) {
+      setErr('One Repo Evaluation answer is not a valid GitHub URL (https://github.com/you/project). Fix it before submitting.');
+      return;
+    }
     if (answeredCount < a.questions.length) {
       const ok = await confirm({
         title: 'Submit incomplete attempt?',
@@ -360,13 +397,11 @@ function Quiz({ a }) {
                 </label>
               ))}
             </div>
+          ) : q.type === QuestionType.CODING ? (
+            <RepoInput value={answers[q.id]?.text ?? ''} onChange={(v) => setAnswer(q.id, { text: v })} />
           ) : (
             <Textarea
-              placeholder={
-                q.type === QuestionType.CODING
-                  ? 'Paste your public GitHub repository URL (https://github.com/you/project)'
-                  : 'Type your answer…'
-              }
+              placeholder={QUESTION_TYPE_HINT[q.type] || 'Type your answer…'}
               value={answers[q.id]?.text ?? ''}
               onChange={(e) => setAnswer(q.id, { text: e.target.value })}
             />

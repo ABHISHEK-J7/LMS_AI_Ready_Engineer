@@ -37,9 +37,18 @@ export const ASSESSMENT_TYPE_TONE = {
 
 export const QUESTION_TYPE_LABEL = {
   [QuestionType.MCQ]: 'Multiple Choice',
-  [QuestionType.SCENARIO]: 'Scenario',
+  [QuestionType.SCENARIO]: 'Scenario Based',
   [QuestionType.PROMPT_WRITING]: 'Prompt Writing',
-  [QuestionType.CODING]: 'Coding',
+  // Enum value stays `coding`; the student answers with a GitHub repo URL that the
+  // AI evaluation engine clones and reviews. "Repo Evaluation" is the accurate name.
+  [QuestionType.CODING]: 'Repo Evaluation',
+};
+
+/** How each non-MCQ type is answered — drives placeholders + hints in the take UI. */
+export const QUESTION_TYPE_HINT = {
+  [QuestionType.SCENARIO]: 'Write your response to the scenario…',
+  [QuestionType.PROMPT_WRITING]: 'Write the prompt you would use…',
+  [QuestionType.CODING]: 'Paste your public GitHub repository URL (https://github.com/you/project)',
 };
 
 export const QUESTION_TYPE_OPTIONS = Object.values(QuestionType).map((v) => ({
@@ -50,6 +59,11 @@ export const QUESTION_TYPE_OPTIONS = Object.values(QuestionType).map((v) => ({
 /** Only MCQ is auto-graded today; others await the AI evaluation engine. */
 export function isAutoGraded(type) {
   return type === QuestionType.MCQ;
+}
+
+/** A Repo Evaluation answer must be a public GitHub repository URL. */
+export function isGithubRepoUrl(v = '') {
+  return /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/i.test(String(v).trim());
 }
 
 export function submissionBadge(sub) {

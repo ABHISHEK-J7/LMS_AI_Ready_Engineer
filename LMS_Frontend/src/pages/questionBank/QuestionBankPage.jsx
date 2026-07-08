@@ -174,7 +174,7 @@ export function QuestionBankPage() {
 
 // ── Add / edit a single question ────────────────────────────────────────────────
 
-const BLANK_Q = { type: QuestionType.MCQ, prompt: '', options: ['', ''], correctOption: 0, points: 1, topic: '' };
+const BLANK_Q = { type: QuestionType.MCQ, prompt: '', options: ['', ''], correctOption: 0, referenceAnswer: '', points: 1, topic: '' };
 
 function BankQuestionModal({ moduleId, topics, question, onClose }) {
   const isEdit = Boolean(question);
@@ -192,6 +192,7 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
             prompt: question.prompt,
             options: question.options?.length ? [...question.options] : ['', ''],
             correctOption: question.correctOption ?? 0,
+            referenceAnswer: question.referenceAnswer ?? '',
             points: question.points ?? 1,
             topic: question.topic ?? '',
           }
@@ -217,8 +218,8 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
       points: Number(form.points) || 1,
       topic: form.topic || null,
       ...(isMcq
-        ? { options: form.options.map((o) => o.trim()).filter(Boolean), correctOption: form.correctOption }
-        : { options: [] }),
+        ? { options: form.options.map((o) => o.trim()).filter(Boolean), correctOption: form.correctOption, referenceAnswer: '' }
+        : { options: [], referenceAnswer: form.referenceAnswer?.trim() || '' }),
     };
     try {
       if (isEdit) await update.mutateAsync({ id: question.id, ...payload });
@@ -265,8 +266,26 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
             <Button type="button" size="sm" variant="outline" onClick={addOption}>+ Option</Button>
           </div>
         )}
+        {!isMcq && (
+          <div className="field">
+            <label className="field__label">Expected answer / grading rubric <span className="lms-muted">(optional)</span></label>
+            <textarea
+              className="input"
+              style={{ minHeight: '6rem', resize: 'vertical' }}
+              placeholder={
+                form.type === QuestionType.CODING
+                  ? 'What a strong repo should contain: required features, expected architecture, must-have files…'
+                  : 'The model answer or key points a correct response must cover. The AI uses this to grade accurately.'
+              }
+              value={form.referenceAnswer}
+              onChange={(e) => setForm({ ...form, referenceAnswer: e.target.value })}
+            />
+            <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 4 }}>
+              Graded by the AI evaluation engine. Providing a model answer here makes grading far more accurate — it is never shown to students.
+            </p>
+          </div>
+        )}
         <Input label="Points" type="number" min="1" max="100" value={form.points} onChange={(e) => setForm({ ...form, points: e.target.value })} />
-        {!isMcq && <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>Non-MCQ questions are graded by the AI evaluation engine.</p>}
         {err && <span className="field__error">{err}</span>}
       </form>
     </Modal>
@@ -283,6 +302,7 @@ function fieldFor(header) {
   if (k === 'option3' || k === 'optionc' || k === 'c') return 'opt3';
   if (k === 'option4' || k === 'optiond' || k === 'd') return 'opt4';
   if (k === 'correctanswer' || k === 'correct' || k === 'answer' || k === 'correctoption') return 'correct';
+  if (k === 'expectedanswer' || k === 'modelanswer' || k === 'answerkey' || k === 'rubric' || k === 'gradingnotes' || k === 'guidance') return 'reference';
   if (k === 'points' || k === 'marks' || k === 'point') return 'points';
   return null;
 }
@@ -308,7 +328,7 @@ function resolveCorrect(correctRaw, options) {
 function rowToQuestion(row, type) {
   if (!row.prompt) return null;
   const points = Math.max(1, Math.min(100, Math.round(Number(row.points) || 1)));
-  if (type !== QuestionType.MCQ) return { type, prompt: row.prompt, points };
+  if (type !== QuestionType.MCQ) return { type, prompt: row.prompt, points, referenceAnswer: row.reference || '' };
   const options = [row.opt1, row.opt2, row.opt3, row.opt4].filter((o) => o && o.trim() !== '');
   if (options.length < 2) return null;
   const correctOption = resolveCorrect(row.correct, options);
@@ -317,7 +337,7 @@ function rowToQuestion(row, type) {
 }
 
 const MCQ_HEADERS = ['question', 'option 1', 'option 2', 'option 3', 'option 4', 'correct answer', 'points'];
-const TEXT_HEADERS = ['question', 'points'];
+const TEXT_HEADERS = ['question', 'expected answer', 'points'];
 
 function BankExcelImport({ moduleId, topics, onClose }) {
   const [type, setType] = useState(QuestionType.MCQ);
@@ -356,7 +376,7 @@ function BankExcelImport({ moduleId, topics, onClose }) {
     const headers = isMcq ? MCQ_HEADERS : TEXT_HEADERS;
     const example = isMcq
       ? ['What does LLM stand for?', 'Large Language Model', 'Low Level Machine', 'Linear Logic Map', 'Long Lived Memory', 'Large Language Model', 1]
-      : ['Describe how you would design a RAG pipeline for a support chatbot.', 5];
+      : ['Describe how you would design a RAG pipeline for a support chatbot.', 'Should cover: chunking strategy, embeddings + vector store, retrieval, and grounding the LLM answer in retrieved context.', 5];
     const ws = XLSX.utils.aoa_to_sheet([headers, example]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Questions');
@@ -406,7 +426,7 @@ function BankExcelImport({ moduleId, topics, onClose }) {
         {isMcq ? (
           <>Columns: <strong>question</strong>, <strong>option 1–4</strong>, <strong>correct answer</strong> (option text, or 1–4, or A–D), optional <strong>points</strong>.</>
         ) : (
-          <>Columns: a <strong>question</strong> column (the scenario/prompt) and optional <strong>points</strong>.</>
+          <>Columns: a <strong>question</strong> column (the scenario / prompt / repo task), an optional <strong>expected answer</strong> (model answer or rubric — improves grading accuracy, never shown to students), and optional <strong>points</strong>.</>
         )}
       </p>
 

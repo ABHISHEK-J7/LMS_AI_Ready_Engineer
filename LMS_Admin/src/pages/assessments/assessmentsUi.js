@@ -37,9 +37,11 @@ export const ASSESSMENT_TYPE_TONE = {
 
 export const QUESTION_TYPE_LABEL = {
   [QuestionType.MCQ]: 'Multiple Choice',
-  [QuestionType.SCENARIO]: 'Scenario',
+  [QuestionType.SCENARIO]: 'Scenario Based',
   [QuestionType.PROMPT_WRITING]: 'Prompt Writing',
-  [QuestionType.CODING]: 'Coding',
+  // Enum value stays `coding`; the student answers with a GitHub repo URL that the
+  // AI evaluation engine clones and reviews. "Repo Evaluation" is the accurate name.
+  [QuestionType.CODING]: 'Repo Evaluation',
 };
 
 export const QUESTION_TYPE_OPTIONS = Object.values(QuestionType).map((v) => ({

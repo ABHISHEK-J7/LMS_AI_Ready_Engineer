@@ -76,18 +76,31 @@ export async function gradeSubmission(assessment, submission, evaluator = undefi
       throw new Error('AI evaluator not configured');
     } else {
       try {
-        const result =
-          q.type === QuestionType.CODING
-            ? await evaluator.evaluateProject({
-                repoUrl: answer.text.trim(),
-                requirements: q.prompt,
-                passingScore: assessment.passingScore,
-              })
-            : await evaluator.evaluatePrompt({
-                task: q.prompt,
-                prompt: answer.text,
-                passingScore: assessment.passingScore,
-              });
+        const reference = q.referenceAnswer || '';
+        let result;
+        if (q.type === QuestionType.CODING) {
+          result = await evaluator.evaluateProject({
+            repoUrl: answer.text.trim(),
+            requirements: q.prompt,
+            reference,
+            passingScore: assessment.passingScore,
+          });
+        } else if (q.type === QuestionType.SCENARIO) {
+          result = await evaluator.evaluateScenario({
+            question: q.prompt,
+            answer: answer.text,
+            reference,
+            passingScore: assessment.passingScore,
+          });
+        } else {
+          // PROMPT_WRITING
+          result = await evaluator.evaluatePrompt({
+            task: q.prompt,
+            prompt: answer.text,
+            reference,
+            passingScore: assessment.passingScore,
+          });
+        }
         fraction = (Number(result.score) || 0) / 100;
         if (result.summary) summaries.push(result.summary);
         if (Array.isArray(result.suggestions)) suggestions.push(...result.suggestions);

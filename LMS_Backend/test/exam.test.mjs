@@ -39,6 +39,32 @@ test('proctored test: questions hidden until start, then revealed without the co
   assert.equal(started.data.questions[0].correctOption, undefined);
 });
 
+test('a scenario question never leaks its correctOption or referenceAnswer to the student', async () => {
+  const { req } = ctx;
+  // Author a Scenario Based question WITH a private grading rubric.
+  const bank = await req('POST', '/question-bank', T, {
+    module: mod._id.toString(),
+    type: 'scenario',
+    prompt: 'A user reports the model is hallucinating. How do you respond?',
+    referenceAnswer: 'SECRET RUBRIC: mention grounding, retrieval, and evaluation.',
+  });
+  assert.equal(bank.data.referenceAnswer, 'SECRET RUBRIC: mention grounding, retrieval, and evaluation.');
+
+  const a = await req('POST', '/assessments', T, {
+    module: mod._id.toString(), title: 'Scenario prep', type: 'preparation',
+    proctoring: 'app', availableFrom: iso(-5), deadline: iso(240), durationMinutes: 60,
+  });
+  await req('POST', `/assessments/${a.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
+  await req('POST', `/assessments/${a.data.id}/unlock`, T);
+
+  const started = await req('POST', `/assessments/${a.data.id}/start`, S);
+  assert.equal(started.status, 201);
+  const q = started.data.questions[0];
+  assert.equal(q.type, 'scenario');
+  assert.equal(q.correctOption, undefined, 'correctOption must be stripped');
+  assert.equal(q.referenceAnswer, undefined, 'private grading rubric must NEVER reach the student');
+});
+
 test('final is gated until BOTH preparation tests are attempted', async () => {
   const { req } = ctx;
   // module already has Prep one (index 1) from the test above; add prep 2 + final.

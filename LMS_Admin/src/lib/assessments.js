@@ -66,6 +66,13 @@ export function useDeleteQuestion() {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: ({ id, questionId }) => unwrap(api.delete(`/assessments/${id}/questions/${questionId}`)), onSuccess: invalidate });
 }
+export function useSetAllowedStudents() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, studentIds }) => unwrap(api.patch(`/assessments/${id}/allowed-students`, { studentIds })),
+    onSuccess: invalidate,
+  });
+}
 
 // ── Submissions ───────────────────────────────────────────────────────────────
 

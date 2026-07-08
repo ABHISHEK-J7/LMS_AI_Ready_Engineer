@@ -65,6 +65,38 @@ test('a scenario question never leaks its correctOption or referenceAnswer to th
   assert.equal(q.referenceAnswer, undefined, 'private grading rubric must NEVER reach the student');
 });
 
+test('batch + allow-list scoping: only assigned students in the batch see the assessment', async () => {
+  const { req, models } = ctx;
+  const trainerId = mod.assignedTrainers[0];
+  const a1 = await ctx.mkUser('A1', 'a1@x.local', 'student');
+  const b1 = await ctx.mkUser('B1', 'b1@x.local', 'student');
+  const m2 = await models.Module.create({ name: 'M2', code: 'EXAM2', order: 2, assignedTrainers: [trainerId], topics: [{ title: 'a', order: 0 }] });
+  const batch2 = await models.Batch.create({ name: 'B2', code: 'EXB2', startDate: new Date('2026-01-01'), endDate: new Date('2027-01-01'), students: [a1._id, b1._id], trainers: [trainerId], modules: [m2._id] });
+  a1.batch = batch2._id; await a1.save();
+  b1.batch = batch2._id; await b1.save();
+  const A1 = await ctx.login('a1@x.local');
+  const B1 = await ctx.login('b1@x.local');
+
+  const bank = await req('POST', '/question-bank', T, { module: m2._id.toString(), type: 'mcq', prompt: 'Q', options: ['A', 'B'], correctOption: 0 });
+  const created = await req('POST', '/assessments', T, { module: m2._id.toString(), batch: batch2._id.toString(), title: 'Scoped practice', type: 'practice', proctoring: 'none' });
+  await req('POST', `/assessments/${created.data.id}/questions/from-bank`, T, { questionIds: [bank.data.id] });
+  // Restrict to A1 only.
+  await req('PATCH', `/assessments/${created.data.id}/allowed-students`, T, { studentIds: [a1._id.toString()] });
+  await req('POST', `/assessments/${created.data.id}/unlock`, T);
+
+  const listA = await req('GET', '/assessments', A1);
+  const listB = await req('GET', '/assessments', B1);
+  assert.ok(listA.data.some((x) => x.id === created.data.id), 'allowed student A1 sees it');
+  assert.ok(!listB.data.some((x) => x.id === created.data.id), 'non-allowed student B1 does NOT see it');
+  assert.equal((await req('GET', `/assessments/${created.data.id}`, B1)).status, 403, 'B1 is blocked from opening it');
+  assert.equal((await req('GET', `/assessments/${created.data.id}`, A1)).status, 200, 'A1 can open it');
+
+  // Clearing the allow-list opens it to the whole batch → B1 now sees it.
+  await req('PATCH', `/assessments/${created.data.id}/allowed-students`, T, { studentIds: [] });
+  const listB2 = await req('GET', '/assessments', B1);
+  assert.ok(listB2.data.some((x) => x.id === created.data.id), 'empty allow-list = whole batch can see it');
+});
+
 test('final is gated until BOTH preparation tests are attempted', async () => {
   const { req } = ctx;
   // module already has Prep one (index 1) from the test above; add prep 2 + final.

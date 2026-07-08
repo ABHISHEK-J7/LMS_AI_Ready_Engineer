@@ -29,6 +29,9 @@ router.post('/:id/lock', adminOrTrainer, validate({ params: a.assessmentIdParam 
 router.post('/:id/questions/from-bank', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.fromBankSchema }), asyncHandler(a.addQuestionsFromBank));
 router.delete('/:id/questions/:questionId', adminOrTrainer, validate({ params: a.questionParam }), asyncHandler(a.deleteQuestion));
 
+// Restrict an assessment to specific students within its batch (chips / Excel of emails).
+router.patch('/:id/allowed-students', adminOrTrainer, validate({ params: a.assessmentIdParam, body: a.setAllowedStudentsSchema }), asyncHandler(a.setAllowedStudents));
+
 // Timed/proctored attempts.
 router.post('/:id/start', studentOnly, validate({ params: sub.assessmentIdParam }), asyncHandler(sub.startAttempt));
 router.patch('/:id/progress', studentOnly, validate({ params: sub.assessmentIdParam, body: sub.progressSchema }), asyncHandler(sub.saveProgress));

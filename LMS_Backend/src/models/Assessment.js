@@ -29,6 +29,11 @@ const assessmentSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
     module: { type: Schema.Types.ObjectId, ref: 'Module', required: true, index: true },
+    // The batch this assessment is assigned to — only its students can see/take it.
+    // Null on legacy assessments, which fall back to whole-module-curriculum visibility.
+    batch: { type: Schema.Types.ObjectId, ref: 'Batch', default: null, index: true },
+    // Optional per-student allow-list WITHIN the batch. Empty = the whole batch may take it.
+    allowedStudents: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },
     type: { type: String, enum: Object.values(AssessmentType), required: true },
     // Optional topic scoping (practice tests can target one module topic);
     // preparation/final cover the whole module so topic stays null.

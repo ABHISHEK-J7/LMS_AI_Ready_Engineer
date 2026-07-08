@@ -30,6 +30,7 @@ export const createAssessmentSchema = z
     // (practice / preparation / final). Any number of each is allowed.
     title: z.string().min(2),
     module: objectId,
+    batch: objectId.optional(),
     type: z.nativeEnum(AssessmentType),
     topic: objectId.optional().nullable(),
     passingScore: z.number().int().min(0).max(100).optional(),
@@ -50,6 +51,11 @@ export const createAssessmentSchema = z
 
 export const fromBankSchema = z.object({
   questionIds: z.array(objectId).min(1, 'Pick at least one question'),
+});
+
+export const setAllowedStudentsSchema = z.object({
+  // Empty array = the whole batch may take the assessment.
+  studentIds: z.array(objectId),
 });
 
 export const updateAssessmentSchema = z
@@ -115,6 +121,22 @@ function isAvailableNow(a, now = new Date()) {
 }
 
 /**
+ * Batch + per-student scoping. A student may access an assessment only if it is
+ * assigned to their batch, and — when an explicit allow-list is set — only if they
+ * are on it. Legacy assessments with no batch keep the old (module-curriculum) rule.
+ * The `batch` arg may be an id or a populated doc.
+ */
+function studentMayAccess(assessment, studentBatch, studentId) {
+  if (!assessment.batch) return true; // legacy: visible to the whole module curriculum
+  const assessmentBatchId = assessment.batch._id ? assessment.batch._id.toString() : assessment.batch.toString();
+  const studentBatchId = studentBatch?._id ? studentBatch._id.toString() : studentBatch?.toString();
+  if (!studentBatchId || assessmentBatchId !== studentBatchId) return false;
+  const allow = assessment.allowedStudents ?? [];
+  if (allow.length === 0) return true; // whole batch
+  return allow.some((s) => (s._id ? s._id.toString() : s.toString()) === studentId.toString());
+}
+
+/**
  * A student may only attempt a module's FINAL after attempting EVERY preparation
  * test that exists for the module (regardless of current lock state — re-locking
  * a prep doesn't shrink the requirement, and a leftover attempt still counts).
@@ -155,9 +177,16 @@ function sanitizeQuestion(q) {
   return rest;
 }
 
-/** Student-facing projection: never leak the correct answer or grading rubric. */
+/** Remove roster/allow-list internals a student should never receive. */
+function stripBatchInternals(json) {
+  delete json.allowedStudents;
+  if (json.batch && typeof json.batch === 'object') delete json.batch.students;
+  return json;
+}
+
+/** Student-facing projection: never leak the correct answer, rubric, or batch roster. */
 function toStudentView(a) {
-  const json = a.toJSON();
+  const json = stripBatchInternals(a.toJSON());
   json.questions = json.questions.map(sanitizeQuestion);
   return json;
 }
@@ -177,19 +206,24 @@ export async function listAssessments(req, res) {
   const filter = {};
   if (req.query.type) filter.type = req.query.type;
 
+  let myBatchId = null;
   if (role === UserRole.STUDENT) {
-    const moduleIds = await studentModuleIds(userId);
-    filter.module = { $in: moduleIds };
+    const me = await User.findById(userId).select('batch');
+    myBatchId = me?.batch ?? null;
+    const batch = myBatchId ? await Batch.findById(myBatchId).select('modules') : null;
+    filter.module = { $in: batch?.modules ?? [] };
     filter.availability = AssessmentAvailability.UNLOCKED; // students only see unlocked
   } else if (req.query.module) {
     filter.module = req.query.module;
   }
 
-  const assessments = await Assessment.find(filter)
+  let assessments = await Assessment.find(filter)
     .sort({ module: 1, type: 1, createdAt: 1 })
     .populate('module', 'name code');
 
   if (role === UserRole.STUDENT) {
+    // Batch + per-student allow-list scoping (legacy no-batch tests stay visible).
+    assessments = assessments.filter((a) => studentMayAccess(a, myBatchId, userId));
     // Attach the student's submission summary + a computed "available now" flag.
     const subs = await Submission.find({
       student: userId,
@@ -227,13 +261,24 @@ export async function listAssessments(req, res) {
 }
 
 export async function getAssessment(req, res) {
-  const assessment = await Assessment.findById(req.params.id).populate('module', 'name code');
+  // Staff (admin/trainer) get the batch's student roster populated so the Manage
+  // screen can render the allow-list chips.
+  const assessment = await Assessment.findById(req.params.id)
+    .populate('module', 'name code')
+    .populate({ path: 'batch', select: 'name code', populate: { path: 'students', select: 'name email status' } });
   if (!assessment) throw ApiError.notFound('Assessment not found');
 
   if (req.auth.role === UserRole.STUDENT) {
+    const me = await User.findById(req.auth.userId).select('batch');
     const moduleIds = (await studentModuleIds(req.auth.userId)).map((m) => m.toString());
     if (!moduleIds.includes(assessment.module._id.toString())) {
       throw ApiError.forbidden('This assessment is not part of your curriculum');
+    }
+    // Batch + allow-list scoping (skipped for a student who already has a submission,
+    // so they can always review their own past attempt below).
+    const hasSubmission = await Submission.exists({ assessment: assessment._id, student: req.auth.userId });
+    if (!hasSubmission && !studentMayAccess(assessment, me?.batch, req.auth.userId)) {
+      throw ApiError.forbidden('This assessment is not assigned to you');
     }
 
     // If the student already has a submission, this is a RESULT view — show the
@@ -249,7 +294,7 @@ export async function getAssessment(req, res) {
         assessment.proctored && assessment.deadline && Date.now() < new Date(assessment.deadline).getTime()
           ? assessment.deadline
           : null;
-      const full = assessment.toJSON();
+      const full = stripBatchInternals(assessment.toJSON());
       full.review = true;
       if (heldUntil) {
         full.questions = [];
@@ -332,6 +377,22 @@ export async function createAssessment(req, res) {
     throw ApiError.conflict('A final assessment already exists for this module');
   }
 
+  // Resolve + validate the batch this assessment is assigned to. Only that batch's
+  // students will see it. The batch must carry this module, and a trainer must belong
+  // to the batch.
+  let batchId = null;
+  if (data.batch) {
+    const batch = await Batch.findById(data.batch).select('modules trainers');
+    if (!batch) throw ApiError.badRequest('Batch not found');
+    if (!batch.modules.some((m) => m.toString() === data.module)) {
+      throw ApiError.badRequest('That batch does not include this module');
+    }
+    if (req.auth.role === UserRole.TRAINER && !batch.trainers.some((t) => t.toString() === req.auth.userId)) {
+      throw ApiError.forbidden('You are not a trainer on that batch');
+    }
+    batchId = batch._id;
+  }
+
   // Resolve the optional topic (practice tests only) to its title.
   let topicTitle = '';
   if (data.topic) {
@@ -352,6 +413,7 @@ export async function createAssessment(req, res) {
   const assessment = await Assessment.create({
     title: data.title,
     module: data.module,
+    batch: batchId,
     type: data.type,
     topic: data.type === AssessmentType.PRACTICE ? (data.topic ?? null) : null,
     topicTitle: data.type === AssessmentType.PRACTICE ? topicTitle : '',
@@ -453,6 +515,27 @@ export async function addQuestionsFromBank(req, res) {
   ok(res, { ...assessment.toJSON(), added }, 201);
 }
 
+/**
+ * Set the per-student allow-list for an assessment (from the Manage screen's chips
+ * / Excel-of-emails). Every id must be a student in the assessment's batch. An empty
+ * list means "the whole batch may take it".
+ */
+export async function setAllowedStudents(req, res) {
+  const assessment = await loadAssessmentForManage(req);
+  if (!assessment.batch) throw ApiError.badRequest('Assign a batch to this assessment first');
+
+  const batch = await Batch.findById(assessment.batch).select('students');
+  const inBatch = new Set((batch?.students ?? []).map((s) => s.toString()));
+  const ids = [...new Set(req.body.studentIds)];
+  const stray = ids.filter((id) => !inBatch.has(id));
+  if (stray.length) throw ApiError.badRequest('Some selected students are not in this assessment’s batch');
+
+  assessment.allowedStudents = ids;
+  await assessment.save();
+  audit(req, 'assessment.allowedStudents', { targetType: 'assessment', targetId: assessment.id, meta: { count: ids.length } });
+  ok(res, assessment.toJSON());
+}
+
 export async function deleteQuestion(req, res) {
   const assessment = await loadAssessmentForManage(req);
   const q = assessment.questions.id(req.params.questionId);
@@ -463,4 +546,4 @@ export async function deleteQuestion(req, res) {
 }
 
 // Re-export helpers for the submission controller.
-export { isAvailableNow, finalGateForStudent };
+export { isAvailableNow, finalGateForStudent, studentMayAccess };

@@ -599,3 +599,45 @@
   overflow: auto;
 }
 .syllabus-preview__topic { font-size: var(--font-size-sm); }
+
+/* Assessments landing: clickable module cards + icon chip. */
+.module-card--clickable { transition: transform 160ms var(--ease-out, ease), box-shadow 160ms var(--ease-out, ease), border-color 160ms var(--ease-out, ease); }
+.module-card--clickable:hover { transform: translateY(-2px); box-shadow: var(--shadow-md, 0 6px 20px rgba(0,0,0,0.08)); border-color: var(--color-primary); }
+.module-card--clickable:active { transform: translateY(0) scale(0.99); }
+.module-card--clickable:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.module-card__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  display: grid;
+  place-items: center;
+}
+
+/* "Who can take this" — student allow-list chips. */
+.allow-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.allow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: background 140ms var(--ease-out, ease), border-color 140ms var(--ease-out, ease), transform 100ms var(--ease-out, ease);
+  user-select: none;
+}
+.allow-chip:hover { border-color: var(--color-primary); }
+.allow-chip:active { transform: scale(0.97); }
+.allow-chip--on {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-hover);
+  font-weight: var(--font-weight-semibold);
+}
+.allow-chip__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-border); }
+.allow-chip--on .allow-chip__dot { background: var(--color-primary); }

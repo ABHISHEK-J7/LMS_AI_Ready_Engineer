@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AssessmentAvailability, AssessmentType, ProctoringMode, UserRole } from '@/shared';
-import { FileQuestion } from 'lucide-react';
+import { ChevronLeft, FileQuestion, FolderOpen, Layers } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, SkeletonTable, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useAssessments, useCreateAssessment, useDeleteAssessment, useSetAvailability } from '@/lib/assessments';
 import { useModules } from '@/lib/modules';
+import { useBatches } from '@/lib/batches';
 import { assessmentLabel, ASSESSMENT_TYPE_LABEL, ASSESSMENT_TYPE_TONE, PROCTORING_OPTIONS, submissionBadge } from './assessmentsUi';
 import { combineDateTime } from './examWindow';
 import '../modules/modules.css';
@@ -89,7 +90,7 @@ function StudentAssessments() {
 
 // ── Trainer / Admin ─────────────────────────────────────────────────────────────
 
-const BLANK = { title: '', type: AssessmentType.PRACTICE, topic: '', passingScore: '', proctoring: ProctoringMode.NONE, examDate: '', windowStart: '', windowEnd: '', durationMinutes: '' };
+const BLANK = { title: '', batch: '', type: AssessmentType.PRACTICE, topic: '', passingScore: '', proctoring: ProctoringMode.NONE, examDate: '', windowStart: '', windowEnd: '', durationMinutes: '' };
 
 /** Date + window start/end + duration for proctored (app/seb) tests. */
 function ExamWindowFields({ form, setForm }) {
@@ -117,11 +118,13 @@ function ExamWindowFields({ form, setForm }) {
 function StaffAssessments() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const { data: modules } = useModules();
+  const { data: modules, isLoading: modulesLoading } = useModules();
+  const { data: batches } = useBatches();
   const [moduleId, setModuleId] = useState('');
   const { data: assessments, isLoading, isError, error, refetch } = useAssessments(moduleId ? { module: moduleId } : {});
   const moduleObj = (modules ?? []).find((m) => m.id === moduleId);
   const topics = moduleObj?.topics ?? [];
+  const moduleBatches = (batches ?? []).filter((b) => (b.modules ?? []).some((m) => (m.id ?? m) === moduleId));
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(BLANK);
@@ -133,6 +136,7 @@ function StaffAssessments() {
   async function submitCreate(e) {
     e.preventDefault();
     setErr('');
+    if (!form.batch) return setErr('Choose the batch this assessment is for.');
     // Proctored (app/seb) tests must define a valid exam window + duration.
     if (form.proctoring !== ProctoringMode.NONE) {
       const availableFrom = combineDateTime(form.examDate, form.windowStart);
@@ -151,6 +155,7 @@ function StaffAssessments() {
       const body = {
         title: form.title,
         module: moduleId,
+        batch: form.batch,
         type: form.type,
         ...(form.type === AssessmentType.PRACTICE && form.topic ? { topic: form.topic } : {}),
         ...(form.passingScore ? { passingScore: Number(form.passingScore) } : {}),
@@ -177,27 +182,45 @@ function StaffAssessments() {
     <>
       <PageHeader title="Assessments" subtitle="Author practice tests & finals, then unlock them for students." />
 
+      {!moduleId ? (
+        modulesLoading && !modules ? (
+          <SkeletonCards count={6} height="7.5rem" />
+        ) : (modules ?? []).length === 0 ? (
+          <EmptyState icon={<FolderOpen size={26} />} title="No modules assigned yet" description="You'll see a card for each module you're assigned to." />
+        ) : (
+          <div className="module-grid">
+            {(modules ?? []).map((m) => (
+              <Card key={m.id} className="module-card module-card--clickable" onClick={() => setModuleId(m.id)} role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setModuleId(m.id); } }}>
+                <div className="module-card__top">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                    <span className="module-card__icon"><Layers size={20} /></span>
+                    <div>
+                      <div className="module-card__name">{m.name}</div>
+                      <div className="lms-muted" style={{ fontSize: 'var(--font-size-sm)' }}>{m.code}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="module-card__meta">
+                  <Badge tone="neutral">{m.topics?.length ?? 0} topics</Badge>
+                  <Badge tone="primary">Manage assessments →</Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
+      ) : (
+        <>
       <div className="toolbar">
-        <div style={{ flex: '1 1 16rem', minWidth: 0, maxWidth: '22rem' }}>
-          <Select
-            value={moduleId}
-            onChange={(e) => setModuleId(e.target.value)}
-            options={[
-              { value: '', label: 'Select a module…' },
-              ...(modules ?? []).map((m) => ({ value: m.id, label: `${m.name} (${m.code})` })),
-            ]}
-          />
-        </div>
-        {moduleId && <Button onClick={() => setCreating(true)}>+ New Assessment</Button>}
+        <Button variant="ghost" size="sm" onClick={() => setModuleId('')}>
+          <ChevronLeft size={16} /> All modules
+        </Button>
+        <strong style={{ fontSize: 'var(--font-size-lg)' }}>{moduleObj?.name}</strong>
+        <span style={{ marginLeft: 'auto' }} />
+        <Button onClick={() => setCreating(true)}>+ New Assessment</Button>
       </div>
 
-      {!moduleId ? (
-        <EmptyState
-          icon={<FileQuestion size={26} />}
-          title="Select a module"
-          description="Choose a module to manage its assessments."
-        />
-      ) : isError ? (
+      {isError ? (
         <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
       ) : isLoading && !assessments ? (
         <SkeletonTable rows={5} cols={5} />
@@ -267,6 +290,15 @@ function StaffAssessments() {
         <form id="create-assessment-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Prompt Patterns — Practice Test 1" required />
           <Select
+            label="Batch (only this batch's students will see it)"
+            value={form.batch}
+            onChange={(e) => setForm({ ...form, batch: e.target.value })}
+            options={[
+              { value: '', label: moduleBatches.length ? 'Select a batch…' : 'No batch has this module yet' },
+              ...moduleBatches.map((b) => ({ value: b.id, label: `${b.name} (${b.code}) · ${b.students?.length ?? 0} students` })),
+            ]}
+          />
+          <Select
             label="Type"
             value={form.type}
             onChange={(e) => setForm({ ...form, type: e.target.value })}
@@ -301,6 +333,8 @@ function StaffAssessments() {
           {err && <span className="field__error">{err}</span>}
         </form>
       </Modal>
+        </>
+      )}
     </>
   );
 }

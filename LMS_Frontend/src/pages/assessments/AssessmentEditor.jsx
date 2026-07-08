@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, Database, FileQuestion, Inbox, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Check, Database, FileQuestion, Inbox, Trash2, UploadCloud, Users } from 'lucide-react';
 import { AssessmentAvailability, ProctoringMode, QuestionType } from '@/shared';
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, Skeleton, SkeletonTable, SkeletonText, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage, fileSrc } from '@/lib/api';
-import { useAssessment, useDeleteQuestion, useSetAvailability, useSubmissions, useUpdateAssessment } from '@/lib/assessments';
+import { useAssessment, useDeleteQuestion, useSetAllowedStudents, useSetAvailability, useSubmissions, useUpdateAssessment } from '@/lib/assessments';
 import {
   assessmentLabel,
   ASSESSMENT_TYPE_LABEL,
@@ -56,6 +57,7 @@ export function AssessmentEditor() {
 
       <div className="module-card__meta" style={{ marginBottom: 'var(--space-6)' }}>
         <Badge tone="neutral">{a.module?.name}</Badge>
+        {a.batch && <Badge tone="primary">Batch: {a.batch.name}</Badge>}
         <Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge>
         {a.topicTitle && <Badge tone="primary">{a.topicTitle}</Badge>}
         <Badge tone="neutral">Pass ≥ {a.passingScore}%</Badge>
@@ -74,6 +76,8 @@ export function AssessmentEditor() {
       </div>
 
       <ProctoringCard a={a} />
+
+      <AllowedStudentsCard a={a} />
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
         <div className="panel-head">
@@ -238,6 +242,119 @@ function ProctoringCard({ a }) {
         </div>
       </div>
       {err && <span className="field__error" style={{ display: 'block', marginTop: 'var(--space-2)' }}>{err}</span>}
+    </Card>
+  );
+}
+
+/** Restrict an assessment to specific students in its batch — chips + Excel-of-emails. */
+function AllowedStudentsCard({ a }) {
+  const save = useSetAllowedStudents();
+  const students = a.batch?.students ?? [];
+  const [selected, setSelected] = useState(() => new Set((a.allowedStudents ?? []).map(String)));
+  const [msg, setMsg] = useState('');
+  const [importMsg, setImportMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  if (!a.batch) {
+    return (
+      <Card style={{ marginBottom: 'var(--space-6)' }}>
+        <CardHeader title="Who can take this" subtitle="Restrict the assessment to specific students" />
+        <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)' }}>
+          This assessment isn’t tied to a batch, so it uses the old module-wide visibility. Create assessments with a batch to control who takes them.
+        </p>
+      </Card>
+    );
+  }
+
+  const toggle = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  const selectAll = () => setSelected(new Set(students.map((s) => s.id)));
+  const clear = () => setSelected(new Set());
+
+  async function onExcel(e) {
+    setErr(''); setImportMsg(''); setMsg('');
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      const emails = new Set();
+      for (const row of rows) {
+        for (const v of Object.values(row)) {
+          const s = String(v).trim().toLowerCase();
+          if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)) emails.add(s);
+        }
+      }
+      const byEmail = new Map(students.map((s) => [s.email.toLowerCase(), s.id]));
+      const matched = [...emails].map((em) => byEmail.get(em)).filter(Boolean);
+      const notFound = [...emails].filter((em) => !byEmail.has(em)).length;
+      if (!matched.length) { setErr('No emails in that file matched a student in this batch.'); return; }
+      setSelected(new Set(matched));
+      setImportMsg(`Selected ${matched.length} student(s) from the file${notFound ? ` · ${notFound} email(s) not in this batch were ignored` : ''}.`);
+    } catch {
+      setErr('Could not read that file. Use a .xlsx or .csv with an email column.');
+    }
+  }
+
+  async function onSave() {
+    setErr(''); setMsg('');
+    try {
+      await save.mutateAsync({ id: a.id, studentIds: [...selected] });
+      setMsg(selected.size === 0 ? 'Saved — everyone in the batch can take this.' : `Saved — restricted to ${selected.size} student(s).`);
+    } catch (e2) {
+      setErr(apiErrorMessage(e2));
+    }
+  }
+
+  return (
+    <Card style={{ marginBottom: 'var(--space-6)' }}>
+      <CardHeader
+        title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Users size={18} style={{ color: 'var(--color-primary)' }} /> Who can take this</span>}
+        subtitle={`Batch ${a.batch.name} (${a.batch.code}) · ${students.length} student${students.length === 1 ? '' : 's'}`}
+      />
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', margin: 'var(--space-3) 0' }}>
+        <Button size="sm" variant="outline" onClick={selectAll} disabled={!students.length}>Select all</Button>
+        <Button size="sm" variant="ghost" onClick={clear} disabled={!selected.size}>Clear (whole batch)</Button>
+        <label className="btn btn--outline btn--sm" style={{ cursor: 'pointer' }}>
+          <UploadCloud size={15} style={{ marginRight: 6 }} /> Import emails (Excel)
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={onExcel} style={{ display: 'none' }} />
+        </label>
+      </div>
+
+      <div style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
+        {selected.size === 0
+          ? '✓ Everyone in the batch can take this. Select students below to restrict it.'
+          : `Restricted to ${selected.size} of ${students.length} students — only they will see it.`}
+      </div>
+
+      {students.length === 0 ? (
+        <EmptyState icon={<Users size={24} />} title="No students in this batch yet" />
+      ) : (
+        <div className="allow-chips">
+          {students.map((s) => {
+            const on = selected.has(s.id);
+            return (
+              <button type="button" key={s.id} className={`allow-chip${on ? ' allow-chip--on' : ''}`} onClick={() => toggle(s.id)} title={s.email}>
+                <span className="allow-chip__dot" /> {s.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {importMsg && <p style={{ fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-2)', color: 'var(--color-success)' }}>{importMsg}</p>}
+      {err && <span className="field__error" style={{ display: 'block', marginTop: 'var(--space-2)' }}>{err}</span>}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+        <Button onClick={onSave} loading={save.isPending}>Save who can take this</Button>
+        {msg && <span className="lms-muted" style={{ color: 'var(--color-success)' }}>{msg}</span>}
+      </div>
     </Card>
   );
 }

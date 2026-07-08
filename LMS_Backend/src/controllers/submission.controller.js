@@ -6,7 +6,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { toCsv, sendCsv } from '../utils/csv.js';
 import { gridfsStorage } from '../services/fileStore.js';
-import { attemptEndsAt, finalGateForStudent, isAvailableNow } from './assessment.controller.js';
+import { attemptEndsAt, finalGateForStudent, isAvailableNow, studentMayAccess } from './assessment.controller.js';
 import { assertSeb } from '../services/seb.js';
 import { notify } from '../services/notify.js';
 import { audit } from '../services/audit.js';
@@ -46,6 +46,10 @@ async function ensureStudentCanAccess(req, assessment) {
   const batch = await Batch.findById(me.batch).select('modules');
   const inCurriculum = (batch?.modules ?? []).some((m) => m.toString() === assessment.module.toString());
   if (!inCurriculum) throw ApiError.forbidden('This assessment is not part of your curriculum');
+  // Batch + per-student allow-list scoping (legacy no-batch tests stay open).
+  if (!studentMayAccess(assessment, me.batch, req.auth.userId)) {
+    throw ApiError.forbidden('This assessment is not assigned to you');
+  }
 }
 
 function studentQuestions(assessment) {

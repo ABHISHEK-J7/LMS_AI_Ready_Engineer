@@ -73,6 +73,24 @@ export function useArchiveModule() {
   });
 }
 
+/** Permanently delete a module (server refuses if it's still referenced anywhere). */
+export function useDeleteModule() {
+  const invalidate = useModuleInvalidation();
+  return useMutation({
+    mutationFn: (id) => unwrap(api.delete(`/modules/${id}/permanent`)),
+    onSuccess: invalidate,
+  });
+}
+
+/** Bulk reorder — pass the full ordered array of module ids. */
+export function useReorderModules() {
+  const invalidate = useModuleInvalidation();
+  return useMutation({
+    mutationFn: (order) => unwrap(api.post('/modules/reorder', { order })),
+    onSuccess: invalidate,
+  });
+}
+
 export function useAssignTrainer() {
   const invalidate = useModuleInvalidation();
   return useMutation({

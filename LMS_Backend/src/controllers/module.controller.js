@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { SkillLevel, UserRole } from '#shared';
-import { Module, User } from '../models/index.js';
+import {
+  Assessment,
+  Batch,
+  Certificate,
+  Module,
+  ModuleProgress,
+  QuestionBankItem,
+  User,
+} from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -157,6 +165,41 @@ export async function archiveModule(req, res) {
   );
   if (!module) throw ApiError.notFound('Module not found');
   ok(res, module.toJSON());
+}
+
+/**
+ * Permanently delete a module. Refused if anything still references it, so a delete
+ * can never orphan curriculum, exams, progress, or certificates. When it's safe, the
+ * module and its (now-unused) question-bank items are removed. Use archive for the
+ * soft, reversible option.
+ */
+export async function deleteModulePermanent(req, res) {
+  const module = await Module.findById(req.params.id);
+  if (!module) throw ApiError.notFound('Module not found');
+
+  // Submissions are keyed by assessment, so an assessment count already covers them.
+  const [batches, assessments, progress, certs] = await Promise.all([
+    Batch.countDocuments({ modules: module._id }),
+    Assessment.countDocuments({ module: module._id }),
+    ModuleProgress.countDocuments({ module: module._id }),
+    Certificate.countDocuments({ module: module._id }),
+  ]);
+
+  const blockers = [];
+  if (batches > 0) blockers.push(`${batches} batch(es) include it`);
+  if (assessments > 0) blockers.push(`${assessments} assessment(s) belong to it`);
+  if (progress > 0) blockers.push(`${progress} student progress record(s) reference it`);
+  if (certs > 0) blockers.push(`${certs} certificate(s) reference it`);
+  if (blockers.length) {
+    throw ApiError.conflict(
+      `Can’t delete this module while ${blockers.join(', ')}. Remove those first, or archive it instead.`,
+    );
+  }
+
+  // Safe to delete: drop the module and its now-unused question-bank items.
+  await QuestionBankItem.deleteMany({ module: module._id });
+  await module.deleteOne();
+  ok(res, { id: req.params.id, deleted: true });
 }
 
 /** Bulk reorder: order[] of module ids, position = new order index (1-based). */

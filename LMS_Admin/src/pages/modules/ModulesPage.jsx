@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '@/shared';
-import { BookOpen } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea, useConfirm } from '@/components/ui';
+import { BookOpen, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, Select, SkeletonCards, Textarea, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useArchiveModule, useCreateModule, useModules, useUpdateModule } from '@/lib/modules';
+import { useArchiveModule, useCreateModule, useDeleteModule, useModules, useReorderModules, useUpdateModule } from '@/lib/modules';
 import { LEVEL_OPTIONS, levelTone, titleCase, topicProgress } from './moduleUi';
 import './modules.css';
 
@@ -26,7 +26,10 @@ export function ModulesPage() {
   const createModule = useCreateModule();
   const archiveModule = useArchiveModule();
   const updateModule = useUpdateModule();
+  const deleteModule = useDeleteModule();
+  const reorderModules = useReorderModules();
   const confirm = useConfirm();
+  const toast = useToast();
 
   const subtitle = {
     [UserRole.ADMIN]: 'Create and manage the AI Ready Engineer curriculum.',
@@ -59,6 +62,37 @@ export function ModulesPage() {
   async function onUnarchive(e, id) {
     e.stopPropagation();
     await updateModule.mutateAsync({ id, archived: false });
+  }
+
+  // Reorder: swap a module with its neighbour and persist the whole new order.
+  async function move(e, index, dir) {
+    e.stopPropagation();
+    const arr = [...(modules ?? [])];
+    const j = index + dir;
+    if (j < 0 || j >= arr.length) return;
+    [arr[index], arr[j]] = [arr[j], arr[index]];
+    try {
+      await reorderModules.mutateAsync(arr.map((m) => m.id));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
+  }
+
+  async function onDelete(e, m) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title: `Delete “${m.name}” permanently?`,
+      message: 'This removes the module and its question bank for good. It is refused if any batch, assessment, student progress, or certificate still uses it. This cannot be undone — use Archive to hide it instead.',
+      confirmLabel: 'Delete permanently',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteModule.mutateAsync(m.id);
+      toast.success(`“${m.name}” deleted.`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   }
 
   return (
@@ -97,12 +131,37 @@ export function ModulesPage() {
         />
       ) : (
         <div className="module-grid">
-          {modules?.map((m) => {
+          {modules?.map((m, i) => {
             const { done, total, pct } = topicProgress(m.topics);
+            const canReorder = isAdmin && !showArchived && !m.archived;
             return (
               <Card key={m.id} hover className="module-card" onClick={() => navigate(`/app/modules/${m.id}`)}>
                 <div className="module-card__top">
-                  <span className="module-card__order">{m.order}</span>
+                  <div className="module-card__order-ctl">
+                    {canReorder && (
+                      <button
+                        type="button"
+                        className="ord-btn"
+                        title="Move up"
+                        disabled={i === 0 || reorderModules.isPending}
+                        onClick={(e) => move(e, i, -1)}
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                    )}
+                    <span className="module-card__order">{m.order}</span>
+                    {canReorder && (
+                      <button
+                        type="button"
+                        className="ord-btn"
+                        title="Move down"
+                        disabled={i === (modules?.length ?? 0) - 1 || reorderModules.isPending}
+                        onClick={(e) => move(e, i, 1)}
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    )}
+                  </div>
                   <div className="module-card__meta">
                     <Badge tone={levelTone(m.level)}>{titleCase(m.level)}</Badge>
                     {m.archived && <Badge tone="neutral">Archived</Badge>}
@@ -139,6 +198,9 @@ export function ModulesPage() {
                         Archive
                       </Button>
                     )}
+                    <Button size="sm" variant="ghost" title="Delete permanently" onClick={(e) => onDelete(e, m)}>
+                      <Trash2 size={14} />
+                    </Button>
                   </div>
                 )}
               </Card>

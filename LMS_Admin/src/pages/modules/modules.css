@@ -518,3 +518,22 @@
 }
 .allow-chip__dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
 .allow-chip--on .allow-chip__dot { background: #ffffff; }
+
+/* Module reorder control: order number flanked by up/down arrows. */
+.module-card__order-ctl { display: inline-flex; align-items: center; gap: 4px; }
+.ord-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 130ms var(--ease-out, ease), color 130ms var(--ease-out, ease), border-color 130ms var(--ease-out, ease), transform 90ms var(--ease-out, ease);
+}
+.ord-btn:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.ord-btn:active:not(:disabled) { transform: scale(0.9); }
+.ord-btn:disabled { opacity: 0.35; cursor: not-allowed; }

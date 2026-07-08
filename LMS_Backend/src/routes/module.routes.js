@@ -39,6 +39,13 @@ router.delete(
   validate({ params: modules.moduleIdParam }),
   asyncHandler(modules.archiveModule),
 );
+// Permanent delete (guarded — refused if the module is still referenced anywhere).
+router.delete(
+  '/:id/permanent',
+  adminOnly,
+  validate({ params: modules.moduleIdParam }),
+  asyncHandler(modules.deleteModulePermanent),
+);
 
 // ── Trainer assignment (admin) ────────────────────────────────────────────────
 router.post(

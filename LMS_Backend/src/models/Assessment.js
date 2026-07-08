@@ -28,6 +28,9 @@ const questionSchema = new Schema(
 const assessmentSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
+    // Admin-authored blurb — typically the topics this test covers. Shown with the
+    // test name to trainers + students; copied onto assigned tests.
+    description: { type: String, trim: true, default: '' },
     module: { type: Schema.Types.ObjectId, ref: 'Module', required: true, index: true },
     // A "ready-made test" authored by an admin. Templates carry the questions +
     // duration + proctoring but NO batch/schedule — trainers assign them (which

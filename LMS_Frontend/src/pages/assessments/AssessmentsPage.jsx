@@ -53,6 +53,9 @@ function StudentAssessments() {
                   </div>
                   <Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge>
                 </div>
+                {a.description && (
+                  <div className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)' }}>{a.description}</div>
+                )}
                 <div className="module-card__meta">
                   <Badge tone="neutral">{a.questionCount} questions</Badge>
                   <Badge tone="neutral">Pass ≥ {a.passingScore}%</Badge>
@@ -140,7 +143,7 @@ function ModuleBar({ moduleObj, onBack, children }) {
 
 // ── Admin: author ready-made test templates ─────────────────────────────────────
 
-const BLANK_TEMPLATE = { title: '', type: AssessmentType.PRACTICE, proctoring: ProctoringMode.NONE, durationMinutes: '', passingScore: '' };
+const BLANK_TEMPLATE = { title: '', description: '', type: AssessmentType.PRACTICE, proctoring: ProctoringMode.NONE, durationMinutes: '', passingScore: '' };
 
 function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   const navigate = useNavigate();
@@ -162,6 +165,7 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
     try {
       const created = await create.mutateAsync({
         title: form.title,
+        ...(form.description.trim() ? { description: form.description.trim() } : {}),
         module: moduleId,
         type: form.type,
         proctoring: form.proctoring,
@@ -201,7 +205,11 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
             <tbody>
               {templates?.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.title}<div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{PROCTORING_LABEL[a.proctoring] ?? 'No proctoring'}</div></td>
+                  <td>
+                    {a.title}
+                    {a.description && <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', maxWidth: '26rem' }}>{a.description}</div>}
+                    <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{PROCTORING_LABEL[a.proctoring] ?? 'No proctoring'}</div>
+                  </td>
                   <td><Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge></td>
                   <td>
                     {a.questions.length}
@@ -225,6 +233,16 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
         footer={<><Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button><Button form="tmpl-form" type="submit" loading={create.isPending}>Create</Button></>}>
         <form id="tmpl-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <Input label="Test name" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Prompt Patterns — Practice Test" required />
+          <div className="field">
+            <label className="field__label">Description <span className="lms-muted">— topics this test covers</span></label>
+            <textarea
+              className="input"
+              style={{ minHeight: '5rem', resize: 'vertical' }}
+              placeholder="e.g. Covers Prompt Patterns, Chain of Thought, and Structured Outputs."
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
           <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={TYPE_OPTIONS} />
           <Select label="Proctoring / format" value={form.proctoring} onChange={(e) => setForm({ ...form, proctoring: e.target.value })} options={PROCTORING_OPTIONS} />
           {timed && (
@@ -271,7 +289,10 @@ function TrainerModuleTests({ moduleId, moduleObj, onBack }) {
               <tbody>
                 {templates?.map((a) => (
                   <tr key={a.id}>
-                    <td>{a.title}</td>
+                    <td>
+                      {a.title}
+                      {a.description && <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', maxWidth: '26rem' }}>{a.description}</div>}
+                    </td>
                     <td><Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge></td>
                     <td>{a.questions.length}</td>
                     <td>{a.durationMinutes ? `${a.durationMinutes} min` : '—'}</td>
@@ -364,6 +385,9 @@ function AssignModal({ template, moduleId, onClose }) {
     <Modal open title={`Assign: ${template.title}`} onClose={onClose}
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button form="assign-form" type="submit" loading={assign.isPending}>Assign</Button></>}>
       <form id="assign-form" onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        {template.description && (
+          <div className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)' }}>{template.description}</div>
+        )}
         <div className="module-card__meta">
           <Badge tone={ASSESSMENT_TYPE_TONE[template.type]}>{ASSESSMENT_TYPE_LABEL[template.type]}</Badge>
           <Badge tone="neutral">{template.questions.length} questions</Badge>

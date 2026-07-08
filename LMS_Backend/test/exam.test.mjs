@@ -128,6 +128,17 @@ test('a practice template is capped at 10 questions', async () => {
   assert.equal(eleventh.data.capped, true);
 });
 
+test('a template carries its description onto the assigned test', async () => {
+  const t = await ctx.req('POST', '/assessments', ADMIN, {
+    module: mod._id.toString(), title: 'Described', type: 'final', proctoring: 'none',
+    description: 'Covers topics A, B and C.',
+  });
+  assert.equal(t.data.description, 'Covers topics A, B and C.');
+  await ctx.req('POST', `/assessments/${t.data.id}/questions/from-bank`, ADMIN, { questionIds: [bankMcq] });
+  const asg = await assign(t.data.id);
+  assert.equal(asg.data.description, 'Covers topics A, B and C.', 'assigned test copies the description');
+});
+
 test('trainers cannot edit a template’s questions', async () => {
   const tmpl = await makeTemplate({ type: 'final', proctoring: 'none' });
   const r = await ctx.req('POST', `/assessments/${tmpl}/questions/from-bank`, T, { questionIds: [bankMcq] });

@@ -33,6 +33,7 @@ const READY_MADE_TYPES = [AssessmentType.PRACTICE, AssessmentType.FINAL];
 // set by the trainer at assign time. Questions are added from the module's bank.
 export const createAssessmentSchema = z.object({
   title: z.string().min(2),
+  description: z.string().max(2000).optional(),
   module: objectId,
   type: z.enum(READY_MADE_TYPES),
   topic: objectId.optional().nullable(),
@@ -68,6 +69,7 @@ export const PRACTICE_QUESTION_COUNT = 10;
 export const updateAssessmentSchema = z
   .object({
     title: z.string().min(2).optional(),
+    description: z.string().max(2000).optional(),
     passingScore: z.number().int().min(0).max(100).optional(),
     availableFrom: z.coerce.date().optional().nullable(),
     deadline: z.coerce.date().optional().nullable(),
@@ -364,6 +366,7 @@ export async function createAssessment(req, res) {
   const settings = await getSettings();
   const assessment = await Assessment.create({
     title: data.title,
+    description: data.description ?? '',
     module: data.module,
     isTemplate: true, // admin authors templates only; trainers assign them
     batch: null,
@@ -420,6 +423,7 @@ export async function assignTemplate(req, res) {
 
   const instance = await Assessment.create({
     title: template.title,
+    description: template.description ?? '',
     module: template.module,
     isTemplate: false,
     sourceTemplate: template._id,
@@ -449,8 +453,9 @@ export async function assignTemplate(req, res) {
 
 export async function updateAssessment(req, res) {
   const assessment = await loadAssessmentForManage(req);
-  const { title, passingScore, availableFrom, deadline, durationMinutes, proctoring } = req.body;
+  const { title, description, passingScore, availableFrom, deadline, durationMinutes, proctoring } = req.body;
   if (title !== undefined) assessment.title = title;
+  if (description !== undefined) assessment.description = description;
   if (passingScore !== undefined) assessment.passingScore = passingScore;
   if (availableFrom !== undefined) assessment.availableFrom = availableFrom ?? undefined;
   if (deadline !== undefined) assessment.deadline = deadline ?? undefined;

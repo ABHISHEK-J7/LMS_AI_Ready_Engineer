@@ -100,6 +100,14 @@ export function AssessmentEditor() {
         )}
       </div>
 
+      {isTemplate ? <DescriptionCard a={a} /> : (
+        a.description && (
+          <Card style={{ marginBottom: 'var(--space-6)' }}>
+            <div className="lms-secondary-text">{a.description}</div>
+          </Card>
+        )
+      )}
+
       <ProctoringCard a={a} isTemplate={isTemplate} />
 
       {!isTemplate && <AllowedStudentsCard a={a} />}
@@ -194,6 +202,47 @@ function ProctoringCell({ s }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Admin edits a ready-made test's name + description (the topics it covers). */
+function DescriptionCard({ a }) {
+  const update = useUpdateAssessment();
+  const [title, setTitle] = useState(a.title);
+  const [description, setDescription] = useState(a.description ?? '');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  async function save() {
+    setMsg(''); setErr('');
+    try {
+      await update.mutateAsync({ id: a.id, title, description });
+      setMsg('Saved.');
+    } catch (e) { setErr(apiErrorMessage(e)); }
+  }
+
+  return (
+    <Card style={{ marginBottom: 'var(--space-6)' }}>
+      <CardHeader title="Name & description" subtitle="Shown with the test to trainers and students." />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+        <Input label="Test name" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <div className="field">
+          <label className="field__label">Description <span className="lms-muted">— topics this test covers</span></label>
+          <textarea
+            className="input"
+            style={{ minHeight: '5rem', resize: 'vertical' }}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Covers Prompt Patterns, Chain of Thought, and Structured Outputs."
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <Button onClick={save} loading={update.isPending}>Save</Button>
+          {msg && <span className="lms-muted" style={{ color: 'var(--color-success)' }}>{msg}</span>}
+        </div>
+        {err && <span className="field__error" style={{ display: 'block' }}>{err}</span>}
+      </div>
+    </Card>
   );
 }
 

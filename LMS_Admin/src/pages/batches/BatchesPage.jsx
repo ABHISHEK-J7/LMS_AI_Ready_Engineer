@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '@/shared';
-import { FolderOpen } from 'lucide-react';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, SkeletonCards, useConfirm } from '@/components/ui';
+import { FolderOpen, Trash2 } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, SkeletonCards, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useArchiveBatch, useBatches, useCreateBatch, useUpdateBatch } from '@/lib/batches';
+import { useArchiveBatch, useBatches, useCreateBatch, useDeleteBatch, useUpdateBatch } from '@/lib/batches';
 import { formatDateRange } from '@/lib/format';
 import '../modules/modules.css';
 
@@ -36,7 +36,9 @@ export function BatchesPage() {
   const createBatch = useCreateBatch();
   const archiveBatch = useArchiveBatch();
   const updateBatch = useUpdateBatch();
+  const deleteBatch = useDeleteBatch();
   const confirm = useConfirm();
+  const toast = useToast();
 
   const subtitle = {
     [UserRole.ADMIN]: 'Create and manage cohorts running through the curriculum.',
@@ -66,6 +68,23 @@ export function BatchesPage() {
   async function onUnarchive(e, id) {
     e.stopPropagation();
     await updateBatch.mutateAsync({ id, archived: false });
+  }
+
+  async function onDelete(e, b) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title: `Delete “${b.name}” permanently?`,
+      message: 'This removes the batch for good. It is refused if any students, assigned tests, or scheduled classes still belong to it. This cannot be undone — use Archive to hide it instead.',
+      confirmLabel: 'Delete permanently',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteBatch.mutateAsync(b.id);
+      toast.success(`“${b.name}” deleted.`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   }
 
   return (
@@ -131,6 +150,9 @@ export function BatchesPage() {
                         Archive
                       </Button>
                     )}
+                    <Button size="sm" variant="ghost" title="Delete permanently" onClick={(e) => onDelete(e, b)}>
+                      <Trash2 size={14} />
+                    </Button>
                   </div>
                 )}
               </Card>

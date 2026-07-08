@@ -48,6 +48,12 @@ export function useArchiveBatch() {
   return useMutation({ mutationFn: (id) => unwrap(api.delete(`/batches/${id}`)), onSuccess: invalidate });
 }
 
+/** Permanently delete a batch (server refuses while it's still referenced). */
+export function useDeleteBatch() {
+  const invalidate = useBatchInvalidation();
+  return useMutation({ mutationFn: (id) => unwrap(api.delete(`/batches/${id}/permanent`)), onSuccess: invalidate });
+}
+
 export function useAssignStudents() {
   const invalidate = useBatchInvalidation();
   return useMutation({

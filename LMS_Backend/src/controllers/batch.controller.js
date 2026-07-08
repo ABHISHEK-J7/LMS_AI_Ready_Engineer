@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { UserRole } from '#shared';
-import { Batch, User } from '../models/index.js';
+import { Announcement, Assessment, Batch, ClassSchedule, User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -113,6 +113,37 @@ export async function archiveBatch(req, res) {
   const batch = await Batch.findByIdAndUpdate(req.params.id, { archived: true }, { new: true });
   if (!batch) throw ApiError.notFound('Batch not found');
   ok(res, batch.toJSON());
+}
+
+/**
+ * Permanently delete a batch. Refused while students, assigned tests, or scheduled
+ * classes still reference it, so a delete can't orphan people or data. When it's
+ * safe, the batch and its batch-wide announcements are removed. Archive is the soft,
+ * reversible option.
+ */
+export async function deleteBatchPermanent(req, res) {
+  const batch = await Batch.findById(req.params.id).select('students name');
+  if (!batch) throw ApiError.notFound('Batch not found');
+
+  const [assessments, classes] = await Promise.all([
+    Assessment.countDocuments({ batch: batch._id }),
+    ClassSchedule.countDocuments({ batch: batch._id }),
+  ]);
+  const students = batch.students?.length ?? 0;
+
+  const blockers = [];
+  if (students > 0) blockers.push(`${students} student(s) are still in it`);
+  if (assessments > 0) blockers.push(`${assessments} assigned test(s) reference it`);
+  if (classes > 0) blockers.push(`${classes} scheduled class(es) reference it`);
+  if (blockers.length) {
+    throw ApiError.conflict(
+      `Can’t delete this batch while ${blockers.join(', ')}. Remove those first, or archive it instead.`,
+    );
+  }
+
+  await Announcement.deleteMany({ batch: batch._id }); // batch-wide notices are now moot
+  await batch.deleteOne();
+  ok(res, { id: req.params.id, deleted: true });
 }
 
 // ── Student assignment (a student belongs to exactly one batch) ────────────────

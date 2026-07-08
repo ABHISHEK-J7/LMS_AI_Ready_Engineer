@@ -24,6 +24,8 @@ router.patch(
   asyncHandler(batches.updateBatch),
 );
 router.delete('/:id', adminOnly, validate({ params: batches.batchIdParam }), asyncHandler(batches.archiveBatch));
+// Permanent delete (guarded — refused while students/tests/classes still reference it).
+router.delete('/:id/permanent', adminOnly, validate({ params: batches.batchIdParam }), asyncHandler(batches.deleteBatchPermanent));
 
 // Membership (admin).
 router.post(

@@ -295,7 +295,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  text-decoration: none;
 }
+.res-item__title:hover { color: var(--color-primary); }
 .res-add {
   display: flex;
   flex-direction: column;
@@ -524,7 +528,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  text-decoration: none;
 }
+.res-matrix__link:hover { color: var(--color-primary); }
 .res-matrix__del { width: 24px; height: 24px; flex: none; }
 
 /* ── Assessment result: score + batch leaderboard side by side ── */

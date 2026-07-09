@@ -39,9 +39,10 @@ export function ModuleDetailPage() {
 
   const { data: module, isLoading, isError, error, refetch } = useModule(id);
 
-  // Clean, visible back control (replaces the faint "All modules" text link).
+  // Clean, visible back control. Students came from My Curriculum; staff from My Modules.
+  const backTo = user?.role === UserRole.STUDENT ? '/app/curriculum' : '/app/modules';
   const backBtn = (
-    <button type="button" className="page-back" onClick={() => navigate('/app/modules')}>
+    <button type="button" className="page-back" onClick={() => navigate(backTo)}>
       <ChevronLeft size={15} /> Back
     </button>
   );

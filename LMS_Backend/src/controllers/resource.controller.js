@@ -38,7 +38,13 @@ const addBodySchema = z.object({
   type: z.nativeEnum(ResourceType),
   title: z.string().min(1).max(200),
   topic: objectId.optional(),
-  url: z.string().url().optional(), // required when no file is uploaded
+  url: z.string().url().optional(), // required for video/link when no file is uploaded
+  content: z.string().max(200000).optional(), // markdown body — required for articles
+});
+
+export const updateResourceSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().max(200000).optional(),
 });
 
 /** Admin, or a trainer assigned to the module. Returns the module doc. */
@@ -88,14 +94,21 @@ export async function listResources(req, res) {
 export async function addResource(req, res) {
   const parsed = addBodySchema.safeParse(req.body);
   if (!parsed.success) throw ApiError.badRequest('Validation failed', parsed.error.flatten());
-  const { module, type, title, topic, url } = parsed.data;
+  const { module, type, title, topic, url, content } = parsed.data;
 
   await loadModuleForEdit(module, req.auth);
 
-  let finalUrl = url;
-  if (req.file) {
+  let finalUrl = '';
+  let finalContent = '';
+  if (type === ResourceType.ARTICLE) {
+    // Articles carry markdown text directly — no file, no URL.
+    if (!content || !content.trim()) throw ApiError.badRequest('An article needs some content.');
+    finalContent = content;
+  } else if (req.file) {
     finalUrl = req.file.url;
-  } else if (!url) {
+  } else if (url) {
+    finalUrl = url;
+  } else {
     throw ApiError.badRequest('Provide a file upload or a url');
   }
 
@@ -105,9 +118,28 @@ export async function addResource(req, res) {
     type,
     title,
     url: finalUrl,
+    content: finalContent,
     uploadedBy: req.auth.userId,
   });
   ok(res, resource.toJSON(), 201);
+}
+
+/** Edit an article's title/content (articles only — others are re-added). */
+export async function updateResource(req, res) {
+  const resource = await Resource.findById(req.params.id);
+  if (!resource) throw ApiError.notFound('Resource not found');
+  await loadModuleForEdit(resource.module, req.auth);
+  if (resource.type !== ResourceType.ARTICLE) {
+    throw ApiError.badRequest('Only articles can be edited. Delete and re-add other materials.');
+  }
+  const { title, content } = req.body;
+  if (title !== undefined) resource.title = title;
+  if (content !== undefined) {
+    if (!content.trim()) throw ApiError.badRequest('An article needs some content.');
+    resource.content = content;
+  }
+  await resource.save();
+  ok(res, resource.toJSON());
 }
 
 export async function deleteResource(req, res) {

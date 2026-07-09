@@ -1,26 +1,25 @@
-import { useState } from 'react';
-import { FileText, Film, Link2, Lock, Plus, PencilLine, Presentation, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, Film, Link2, Lock, Plus, PencilLine, Trash2 } from 'lucide-react';
 import { ResourceType, UserRole } from '@/shared';
-import { Button, Input, Select, SkeletonText, useConfirm } from '@/components/ui';
+import { Button, Input, Modal, Select, SkeletonText, useConfirm } from '@/components/ui';
 import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useAddResource, useDeleteResource, useResources } from '@/lib/resources';
+import { Markdown } from '@/components/Markdown';
+import { ArticleEditor } from '@/components/ArticleEditor';
+import { useAddResource, useDeleteResource, useResources, useUpdateResource } from '@/lib/resources';
 
-// Display metadata per resource type (kept in the order learners see them).
+// Materials are Videos, Articles (markdown), and Links only.
 const TYPE_META = [
   { value: ResourceType.VIDEO, label: 'Videos', single: 'Video', Icon: Film },
-  { value: ResourceType.DOCUMENT, label: 'Documents', single: 'Document', Icon: FileText },
-  { value: ResourceType.PRESENTATION, label: 'Presentations', single: 'Presentation', Icon: Presentation },
-  { value: ResourceType.ASSIGNMENT, label: 'Assignments', single: 'Assignment', Icon: PencilLine },
+  { value: ResourceType.ARTICLE, label: 'Articles', single: 'Article', Icon: BookOpen },
   { value: ResourceType.LINK, label: 'Links', single: 'Link', Icon: Link2 },
 ];
 const TYPE_OPTIONS = TYPE_META.map((t) => ({ value: t.value, label: t.single }));
-const BLANK = { type: ResourceType.VIDEO, title: '', source: 'file', url: '', file: null };
+const BLANK = { type: ResourceType.VIDEO, title: '', source: 'file', url: '', file: null, content: '' };
 
 /**
- * Manage the learning resources for ONE syllabus topic — grouped by type
- * (videos / documents / presentations / assignments / links), with an add form.
- * Resources are scoped to the topic via `resource.topic`.
+ * Learning resources for ONE topic — Videos, Articles (markdown, read in a modal),
+ * and Links. Scoped to the topic via `resource.topic`.
  */
 export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
   const confirm = useConfirm();
@@ -31,11 +30,16 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
   const del = useDeleteResource();
   const [form, setForm] = useState(BLANK);
   const [err, setErr] = useState('');
+  const [viewing, setViewing] = useState(null); // article being read
+  const [editing, setEditing] = useState(null); // article being edited
 
   const resources = (all ?? []).filter((r) => (r.topic ?? null) === topic.id);
-  // Matrix view: one column per type, resources stacked down each column.
   const byType = TYPE_META.map((t) => ({ ...t, items: resources.filter((r) => r.type === t.value) }));
   const maxRows = byType.reduce((m, t) => Math.max(m, t.items.length), 0);
+
+  const removeResource = async (r) => {
+    if (await confirm({ title: 'Delete this resource?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate({ id: r.id, module: module.id });
+  };
 
   // For students, the backend only returns resources of topics the trainer has
   // marked taught in their batch. If none come back, the topic isn't released.
@@ -50,23 +54,43 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
       </div>
     );
   }
+
+  const isArticle = form.type === ResourceType.ARTICLE;
   const isLink = form.type === ResourceType.LINK;
   const useUrl = isLink || form.source === 'link';
+
+  /** A resource's clickable title — articles open a reader; others open the file/link. */
+  function ResTitle({ r, className }) {
+    if (r.type === ResourceType.ARTICLE) {
+      return (
+        <button type="button" className={className} style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, color: 'inherit', font: 'inherit' }} onClick={() => setViewing(r)}>
+          {r.title}
+        </button>
+      );
+    }
+    return <a href={fileSrc(r.url)} target="_blank" rel="noreferrer" className={className}>{r.title}</a>;
+  }
 
   async function submit(e) {
     e.preventDefault();
     setErr('');
     if (!form.title.trim()) return setErr('Enter a title.');
-    if (useUrl && !form.url.trim()) return setErr('Enter a URL.');
-    if (!useUrl && !form.file) return setErr('Choose a file to upload.');
+    if (isArticle) {
+      if (!form.content.trim()) return setErr('Write the article, or upload a markdown file.');
+    } else if (useUrl && !form.url.trim()) {
+      return setErr('Enter a URL.');
+    } else if (!useUrl && !form.file) {
+      return setErr('Choose a file to upload.');
+    }
     try {
       await add.mutateAsync({
         module: module.id,
         topic: topic.id,
         type: form.type,
         title: form.title.trim(),
-        url: useUrl ? form.url.trim() : undefined,
-        file: useUrl ? undefined : form.file,
+        ...(isArticle
+          ? { content: form.content }
+          : { url: useUrl ? form.url.trim() : undefined, file: useUrl ? undefined : form.file }),
       });
       setForm(BLANK);
     } catch (e2) {
@@ -90,9 +114,7 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
           <div className="res-matrix-scroll">
             <table className="res-matrix">
               <thead>
-                <tr>
-                  <th className="res-matrix__group" colSpan={byType.length}>TYPE</th>
-                </tr>
+                <tr><th className="res-matrix__group" colSpan={byType.length}>TYPE</th></tr>
                 <tr>
                   {byType.map((t) => (
                     <th key={t.value}>
@@ -106,11 +128,7 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
               </thead>
               <tbody>
                 {maxRows === 0 ? (
-                  <tr>
-                    <td colSpan={byType.length} className="res-matrix__empty lms-muted">
-                      No resources for this topic yet.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={byType.length} className="res-matrix__empty lms-muted">No resources for this topic yet.</td></tr>
                 ) : (
                   Array.from({ length: maxRows }).map((_, i) => (
                     <tr key={i}>
@@ -120,14 +138,14 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
                           <td key={t.value}>
                             {r && (
                               <span className="res-matrix__cell">
-                                <a href={fileSrc(r.url)} target="_blank" rel="noreferrer" className="res-matrix__link">{r.title}</a>
+                                <ResTitle r={r} className="res-matrix__link" />
+                                {canEdit && r.type === ResourceType.ARTICLE && (
+                                  <button type="button" className="icon-btn res-matrix__del" aria-label={`Edit ${r.title}`} onClick={() => setEditing(r)}>
+                                    <PencilLine size={12} />
+                                  </button>
+                                )}
                                 {canEdit && (
-                                  <button
-                                    type="button"
-                                    className="icon-btn icon-btn--danger res-matrix__del"
-                                    aria-label={`Delete ${r.title}`}
-                                    onClick={async () => { if (await confirm({ title: 'Delete this resource?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate({ id: r.id, module: module.id }); }}
-                                  >
+                                  <button type="button" className="icon-btn icon-btn--danger res-matrix__del" aria-label={`Delete ${r.title}`} onClick={() => removeResource(r)}>
                                     <Trash2 size={12} />
                                   </button>
                                 )}
@@ -159,14 +177,14 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
                 ) : (
                   items.map((r) => (
                     <div className="res-item" key={r.id}>
-                      <a href={fileSrc(r.url)} target="_blank" rel="noreferrer" className="res-item__title">{r.title}</a>
+                      <ResTitle r={r} className="res-item__title" />
+                      {canEdit && r.type === ResourceType.ARTICLE && (
+                        <button type="button" className="icon-btn" aria-label={`Edit ${r.title}`} onClick={() => setEditing(r)}>
+                          <PencilLine size={13} />
+                        </button>
+                      )}
                       {canEdit && (
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn--danger"
-                          aria-label={`Delete ${r.title}`}
-                          onClick={async () => { if (await confirm({ title: 'Delete this resource?', tone: 'danger', confirmLabel: 'Delete' })) del.mutate({ id: r.id, module: module.id }); }}
-                        >
+                        <button type="button" className="icon-btn icon-btn--danger" aria-label={`Delete ${r.title}`} onClick={() => removeResource(r)}>
                           <Trash2 size={13} />
                         </button>
                       )}
@@ -182,8 +200,8 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
       {canEdit && (
         <form onSubmit={submit} className="res-add">
           <div className="res-add__row">
-            <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={TYPE_OPTIONS} />
-            {!isLink && (
+            <Select label="Type" value={form.type} onChange={(e) => setForm({ ...BLANK, title: form.title, type: e.target.value })} options={TYPE_OPTIONS} />
+            {!isArticle && !isLink && (
               <Select
                 label="Source"
                 value={form.source}
@@ -192,8 +210,10 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
               />
             )}
           </div>
-          <Input label="Title" placeholder="e.g. Intro to prompting (Part 1)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-          {useUrl ? (
+          <Input label="Title" placeholder={isArticle ? 'e.g. Prompt patterns — a primer' : 'e.g. Intro to prompting (Part 1)'} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+          {isArticle ? (
+            <ArticleEditor value={form.content} onChange={(content) => setForm({ ...form, content })} />
+          ) : useUrl ? (
             <Input label="URL" placeholder="https://…" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
           ) : (
             <label className="field">
@@ -209,6 +229,50 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
           </div>
         </form>
       )}
+
+      {/* Read an article (exactly how it renders for students). */}
+      <Modal open={Boolean(viewing)} title={viewing?.title ?? 'Article'} size="lg" onClose={() => setViewing(null)}>
+        {viewing && <Markdown source={viewing.content} />}
+      </Modal>
+
+      {editing && <EditArticleModal resource={editing} moduleId={module.id} onClose={() => setEditing(null)} />}
     </div>
+  );
+}
+
+function EditArticleModal({ resource, moduleId, onClose }) {
+  const update = useUpdateResource();
+  const [title, setTitle] = useState(resource.title);
+  const [content, setContent] = useState(resource.content ?? '');
+  const [err, setErr] = useState('');
+
+  useEffect(() => { setTitle(resource.title); setContent(resource.content ?? ''); setErr(''); }, [resource]);
+
+  async function save() {
+    setErr('');
+    if (!title.trim()) return setErr('Enter a title.');
+    if (!content.trim()) return setErr('The article needs some content.');
+    try {
+      await update.mutateAsync({ id: resource.id, module: moduleId, title: title.trim(), content });
+      onClose();
+    } catch (e) {
+      setErr(apiErrorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      open
+      title="Edit article"
+      size="lg"
+      onClose={onClose}
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} loading={update.isPending}>Save</Button></>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <ArticleEditor value={content} onChange={setContent} />
+        {err && <span className="field__error">{err}</span>}
+      </div>
+    </Modal>
   );
 }

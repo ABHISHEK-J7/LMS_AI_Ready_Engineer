@@ -15,6 +15,14 @@ router.get('/', validate({ query: resources.moduleQuery }), asyncHandler(resourc
 // Multer runs first to parse multipart (file + fields), then the handler validates.
 router.post('/', adminOrTrainer, resources.uploadResourceFile, asyncHandler(resources.addResource));
 
+// Edit an article's title/content.
+router.patch(
+  '/:id',
+  adminOrTrainer,
+  validate({ params: resources.resourceIdParam, body: resources.updateResourceSchema }),
+  asyncHandler(resources.updateResource),
+);
+
 router.delete(
   '/:id',
   adminOrTrainer,

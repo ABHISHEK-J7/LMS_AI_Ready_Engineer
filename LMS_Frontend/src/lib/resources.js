@@ -16,7 +16,7 @@ export function useResources(moduleId) {
 export function useAddResource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ module, type, title, topic, url, file }) => {
+    mutationFn: ({ module, type, title, topic, url, file, content }) => {
       const fd = new FormData();
       fd.append('module', module);
       fd.append('type', type);
@@ -24,9 +24,19 @@ export function useAddResource() {
       if (topic) fd.append('topic', topic);
       if (url) fd.append('url', url);
       if (file) fd.append('file', file);
+      if (content != null) fd.append('content', content); // markdown for articles
       // Content-Type undefined lets axios set multipart/form-data + boundary.
       return unwrap(api.post('/resources', fd, { headers: { 'Content-Type': undefined } }));
     },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: resourceKeys.forModule(vars.module) }),
+  });
+}
+
+/** Edit an article's title/content. */
+export function useUpdateResource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title, content }) => unwrap(api.patch(`/resources/${id}`, { title, content })),
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: resourceKeys.forModule(vars.module) }),
   });
 }

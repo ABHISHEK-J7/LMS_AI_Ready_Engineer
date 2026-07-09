@@ -96,6 +96,7 @@ export const ModuleProgressStatus = {
 
 export const ResourceType = {
   VIDEO: 'video',
+  ARTICLE: 'article',
   DOCUMENT: 'document',
   PRESENTATION: 'presentation',
   LINK: 'link',

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, Target, Users, X } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Target, Users, X } from 'lucide-react';
 import { UserRole } from '@/shared';
 import {
   Badge,
@@ -33,21 +33,25 @@ import './modules.css';
 
 export function ModuleDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const user = useAuth((s) => s.user);
   const isAdmin = user?.role === UserRole.ADMIN;
 
   const { data: module, isLoading, isError, error, refetch } = useModule(id);
+
+  // Clean, visible back control (replaces the faint "All modules" text link).
+  const backBtn = (
+    <button type="button" className="page-back" onClick={() => navigate('/app/modules')}>
+      <ChevronLeft size={15} /> Back
+    </button>
+  );
 
   if (isLoading && !module) {
     return (
       <>
         <PageHeader
           title={<Skeleton width="14rem" height="1.75rem" />}
-          subtitle={
-            <Link to="/app/modules" className="lms-muted">
-              ← All modules
-            </Link>
-          }
+          subtitle={backBtn}
         />
         <Card>
           <SkeletonText lines={4} />
@@ -69,11 +73,7 @@ export function ModuleDetailPage() {
     <>
       <PageHeader
         title={module.name}
-        subtitle={
-          <Link to="/app/modules" className="lms-muted">
-            ← All modules
-          </Link>
-        }
+        subtitle={backBtn}
       />
 
       <div className="module-card__meta" style={{ marginBottom: 'var(--space-6)' }}>

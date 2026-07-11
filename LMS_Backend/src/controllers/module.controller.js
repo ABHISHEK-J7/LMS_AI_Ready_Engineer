@@ -56,12 +56,14 @@ const subtopicInput = z.object({
 export const topicSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
+  contentDeliverables: z.string().max(20000).optional(),
   subtopics: z.array(subtopicInput).max(100).optional(),
 });
 
 export const updateTopicSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
+  contentDeliverables: z.string().max(20000).optional(),
   order: z.number().int().min(0).optional(),
   completed: z.boolean().optional(),
   subtopics: z.array(subtopicInput).max(100).optional(),
@@ -75,6 +77,7 @@ export const importSyllabusSchema = z.object({
       z.object({
         title: z.string().min(1).max(200),
         description: z.string().max(2000).optional(),
+        contentDeliverables: z.string().max(20000).optional(),
         subtopics: z.array(subtopicInput).max(100).optional(),
       }),
     )
@@ -325,12 +328,14 @@ export async function importSyllabus(req, res) {
     const existing = module.topics.find((x) => x.title.trim().toLowerCase() === title.toLowerCase());
     if (existing) {
       if (t.description !== undefined) existing.description = t.description;
+      if (t.contentDeliverables !== undefined) existing.contentDeliverables = t.contentDeliverables;
       existing.subtopics = subs;
       updated += 1;
     } else {
       module.topics.push({
         title,
         description: t.description ?? '',
+        contentDeliverables: t.contentDeliverables ?? '',
         order: module.topics.length,
         completed: false,
         subtopics: subs,

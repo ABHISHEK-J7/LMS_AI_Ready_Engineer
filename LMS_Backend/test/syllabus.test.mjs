@@ -65,6 +65,20 @@ test('a topic can be edited to set subtopics directly', async () => {
   assert.equal(rag.subtopics[1].title, 'Retrieval');
 });
 
+test('a topic stores one shared contentDeliverables block', async () => {
+  const m = await ctx.models.Module.findById(mod._id);
+  const ragId = m.topics.find((t) => t.title === 'RAG').id;
+  const res = await ctx.req('PATCH', `/modules/${mod._id}/topics/${ragId}`, T, {
+    subtopics: [{ title: 'Firefly' }, { title: 'Midjourney' }],
+    contentDeliverables: 'Covers image tools\nHands-on demo',
+  });
+  assert.equal(res.status, 200);
+  const rag = res.data.topics.find((t) => t.id === ragId);
+  assert.equal(rag.subtopics.length, 2);
+  assert.equal(rag.subtopics[0].title, 'Firefly');
+  assert.equal(rag.contentDeliverables, 'Covers image tools\nHands-on demo');
+});
+
 test('subtopics persist From/To dates, and blank dates clear cleanly', async () => {
   const m = await ctx.models.Module.findById(mod._id);
   const ragId = m.topics.find((t) => t.title === 'RAG').id;

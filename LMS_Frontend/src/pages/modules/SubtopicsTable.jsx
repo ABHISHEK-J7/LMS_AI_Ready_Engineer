@@ -14,67 +14,87 @@ function daySpan(from, to) {
   return Math.round((b - a) / 86400000) + 1;
 }
 
-const asRows = (subs) =>
-  subs.map((s) => ({ title: s.title ?? '', description: s.description ?? '', fromDate: toInput(s.fromDate), toDate: toInput(s.toDate) }));
+const asRows = (subs) => subs.map((s) => ({ title: s.title ?? '', fromDate: toInput(s.fromDate), toDate: toInput(s.toDate) }));
+
+// Migration: if the topic has no shared deliverables yet, seed it from any old
+// per-subtopic descriptions so nothing that was already typed is lost.
+const seedDeliverables = (contentDeliverables, subs) =>
+  (contentDeliverables && contentDeliverables.trim())
+    ? contentDeliverables
+    : subs.map((s) => s.description).filter(Boolean).join('\n');
 
 /**
- * The concept breakdown for one topic — a polished table of subtopics, each with
- * a name, the content delivered in class, and the From/To dates it was covered
- * over (and the resulting day span).
- *  - Staff (canEdit): inline-editable rows + add/remove + Save.
- *  - Students (read-only): a clean schedule of concepts to view.
+ * A topic's concept breakdown: a NUMBERED list of subtopics (each with its own
+ * From/To dates) plus ONE shared "Content deliverables" note for the whole topic.
+ *  - Staff (canEdit): editable rows + add/remove, a shared deliverables box, Save.
+ *  - Students (read-only): a clean numbered schedule + the deliverables note.
  */
-export function SubtopicsTable({ subtopics = [], canEdit = false, onSave, saving = false }) {
+export function SubtopicsTable({ subtopics = [], contentDeliverables = '', canEdit = false, onSave, saving = false }) {
   const [rows, setRows] = useState(() => asRows(subtopics));
+  const [deliverables, setDeliverables] = useState(() => seedDeliverables(contentDeliverables, subtopics));
 
-  useEffect(() => { setRows(asRows(subtopics)); }, [subtopics]);
+  useEffect(() => {
+    setRows(asRows(subtopics));
+    setDeliverables(seedDeliverables(contentDeliverables, subtopics));
+  }, [subtopics, contentDeliverables]);
 
-  const dirty = JSON.stringify(rows) !== JSON.stringify(asRows(subtopics));
+  const baseRows = asRows(subtopics);
+  const baseDeliverables = seedDeliverables(contentDeliverables, subtopics);
+  const dirty = JSON.stringify(rows) !== JSON.stringify(baseRows) || deliverables !== baseDeliverables;
+
   const setAt = (i, patch) => setRows((r) => r.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
-  const addRow = () => setRows((r) => [...r, { title: '', description: '', fromDate: '', toDate: '' }]);
+  const addRow = () => setRows((r) => [...r, { title: '', fromDate: '', toDate: '' }]);
   const removeRow = (i) => setRows((r) => r.filter((_, idx) => idx !== i));
   const save = () =>
-    onSave?.(
-      rows
-        .map((r) => ({ title: r.title.trim(), description: r.description.trim(), fromDate: r.fromDate || null, toDate: r.toDate || null }))
-        .filter((r) => r.title || r.description),
-    );
+    onSave?.({
+      subtopics: rows
+        .map((r) => ({ title: r.title.trim(), fromDate: r.fromDate || null, toDate: r.toDate || null }))
+        .filter((r) => r.title),
+      contentDeliverables: deliverables.trim(),
+    });
 
   // ── Read-only (student) view ────────────────────────────────────────────────
   if (!canEdit) {
-    if (!subtopics.length) {
-      return <p className="lms-muted" style={{ margin: 0 }}>No concepts listed for this topic yet.</p>;
-    }
     return (
-      <div className="table-wrap">
-        <table className="table subtopics-table">
-          <thead>
-            <tr>
-              <th className="col-num">#</th>
-              <th className="col-sub">Subtopics</th>
-              <th>Content deliverables</th>
-              <th className="col-date">From</th>
-              <th className="col-date">To</th>
-              <th className="col-days">Days</th>
-            </tr>
-          </thead>
-          <tbody>
-            {subtopics.map((s, i) => {
-              const span = daySpan(toInput(s.fromDate), toInput(s.toDate));
-              return (
-                <tr key={s.id ?? i}>
-                  <td className="lms-muted">{i + 1}</td>
-                  <td className="subtopics-table__name">{s.title || '—'}</td>
-                  <td>{s.description || '—'}</td>
-                  <td className="lms-muted">{fmtDate(s.fromDate) || '—'}</td>
-                  <td className="lms-muted">{fmtDate(s.toDate) || '—'}</td>
-                  <td>{span ? <span className="day-pill">{span} day{span === 1 ? '' : 's'}</span> : <span className="lms-muted">—</span>}</td>
+      <>
+        {subtopics.length === 0 ? (
+          <p className="lms-muted" style={{ margin: 0 }}>No concepts listed for this topic yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="table subtopics-table">
+              <thead>
+                <tr>
+                  <th className="col-num">#</th>
+                  <th className="col-sub">Subtopics</th>
+                  <th className="col-date">From</th>
+                  <th className="col-date">To</th>
+                  <th className="col-days">Days</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {subtopics.map((s, i) => {
+                  const span = daySpan(toInput(s.fromDate), toInput(s.toDate));
+                  return (
+                    <tr key={s.id ?? i}>
+                      <td className="lms-muted">{i + 1}</td>
+                      <td className="subtopics-table__name">{s.title || '—'}</td>
+                      <td className="lms-muted">{fmtDate(s.fromDate) || '—'}</td>
+                      <td className="lms-muted">{fmtDate(s.toDate) || '—'}</td>
+                      <td>{span ? <span className="day-pill">{span} day{span === 1 ? '' : 's'}</span> : <span className="lms-muted">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {baseDeliverables.trim() && (
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <div className="lms-secondary-text" style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 4 }}>Content deliverables</div>
+            <p className="lms-secondary-text" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{baseDeliverables}</p>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -87,7 +107,6 @@ export function SubtopicsTable({ subtopics = [], canEdit = false, onSave, saving
             <tr>
               <th className="col-num">#</th>
               <th className="col-sub">Subtopics</th>
-              <th>Content deliverables</th>
               <th className="col-date">From</th>
               <th className="col-date">To</th>
               <th className="col-act" />
@@ -95,15 +114,14 @@ export function SubtopicsTable({ subtopics = [], canEdit = false, onSave, saving
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={6} className="lms-muted" style={{ textAlign: 'center', padding: 'var(--space-4)' }}>No concepts yet — add the first one.</td></tr>
+              <tr><td colSpan={5} className="lms-muted" style={{ textAlign: 'center', padding: 'var(--space-4)' }}>No subtopics yet — add the first one.</td></tr>
             ) : (
               rows.map((r, i) => {
                 const span = daySpan(r.fromDate, r.toDate);
                 return (
                   <tr key={i}>
                     <td className="lms-muted">{i + 1}</td>
-                    <td><Input placeholder="e.g. Embeddings" value={r.title} onChange={(e) => setAt(i, { title: e.target.value })} /></td>
-                    <td><Textarea rows={2} placeholder="What the trainer delivers in class…" value={r.description} onChange={(e) => setAt(i, { description: e.target.value })} /></td>
+                    <td><Input placeholder="e.g. Firefly" value={r.title} onChange={(e) => setAt(i, { title: e.target.value })} /></td>
                     <td><Input type="date" value={r.fromDate} onChange={(e) => setAt(i, { fromDate: e.target.value })} /></td>
                     <td>
                       <Input type="date" value={r.toDate} min={r.fromDate || undefined} onChange={(e) => setAt(i, { toDate: e.target.value })} />
@@ -119,9 +137,20 @@ export function SubtopicsTable({ subtopics = [], canEdit = false, onSave, saving
           </tbody>
         </table>
       </div>
+
+      <div style={{ marginTop: 'var(--space-4)' }}>
+        <Textarea
+          label="Content deliverables — one shared note for the whole topic"
+          rows={4}
+          placeholder="What the trainer delivers for this topic (applies to all the subtopics above)…"
+          value={deliverables}
+          onChange={(e) => setDeliverables(e.target.value)}
+        />
+      </div>
+
       <div className="subtopics-edit__actions">
-        <Button type="button" variant="outline" size="sm" onClick={addRow}><Plus size={15} /> Add concept</Button>
-        <Button type="button" size="sm" onClick={save} loading={saving} disabled={!dirty}><Save size={15} /> Save concepts</Button>
+        <Button type="button" variant="outline" size="sm" onClick={addRow}><Plus size={15} /> Add subtopic</Button>
+        <Button type="button" size="sm" onClick={save} loading={saving} disabled={!dirty}><Save size={15} /> Save</Button>
       </div>
     </div>
   );

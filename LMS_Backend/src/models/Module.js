@@ -14,6 +14,8 @@ const subtopicSchema = new Schema(
   subSchemaOptions,
 );
 
+// A topic groups its subtopics (a numbered list of concepts). `contentDeliverables`
+// is one shared block describing what's delivered for the whole topic.
 const topicSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -21,6 +23,8 @@ const topicSchema = new Schema(
     order: { type: Number, required: true, default: 0 },
     completed: { type: Boolean, default: false },
     subtopics: { type: [subtopicSchema], default: [] },
+    // One shared "content deliverables" block for the whole topic (same for all subtopics).
+    contentDeliverables: { type: String, trim: true, default: '' },
   },
   subSchemaOptions,
 );

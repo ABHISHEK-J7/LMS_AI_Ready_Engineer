@@ -55,8 +55,8 @@ export function SyllabusBoard({ module, canEdit }) {
     setEditing(null);
   }
 
-  const saveSubtopics = (subtopics) =>
-    updateTopic.mutateAsync({ id: module.id, topicId: openTopicId, subtopics });
+  const saveSubtopics = ({ subtopics, contentDeliverables }) =>
+    updateTopic.mutateAsync({ id: module.id, topicId: openTopicId, subtopics, contentDeliverables });
 
   return (
     <Card>
@@ -151,6 +151,7 @@ export function SyllabusBoard({ module, canEdit }) {
               <SubtopicsHeader count={openTopic.subtopics?.length ?? 0} />
               <SubtopicsTable
                 subtopics={openTopic.subtopics ?? []}
+                contentDeliverables={openTopic.contentDeliverables ?? ''}
                 canEdit={canEdit}
                 onSave={saveSubtopics}
                 saving={updateTopic.isPending}

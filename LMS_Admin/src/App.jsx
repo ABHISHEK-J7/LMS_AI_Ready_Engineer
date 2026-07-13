@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { LoginPage } from '@/pages/LoginPage';
 import { OrganizationsPage } from '@/pages/organizations/OrganizationsPage';
 import { OrganizationDetailPage } from '@/pages/organizations/OrganizationDetailPage';
+import { SuperAdminDashboard } from '@/pages/organizations/SuperAdminDashboard';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
 import { UsersPage } from '@/pages/users/UsersPage';
 import { StudentDetailPage } from '@/pages/students/StudentDetailPage';
@@ -49,10 +50,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/app/organizations" replace />} />
+          <Route index element={<SuperAdminDashboard />} />
           <Route path="organizations" element={<OrganizationsPage />} />
           <Route path="organizations/:id" element={<OrganizationDetailPage />} />
-          <Route path="*" element={<Navigate to="/app/organizations" replace />} />
+          <Route path="*" element={<Navigate to="/app" replace />} />
         </Route>
         <Route path="/" element={<Navigate to="/app" replace />} />
         <Route path="*" element={<NotFound />} />

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Building2, LogIn, Plus, Settings2, Users } from 'lucide-react';
+import { Building2, LogIn, Plus, Settings2, Trash2, Users } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, SkeletonCards, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useCreateOrganization, useOrganizations } from '@/lib/organizations';
+import { useCreateOrganization, useDeleteOrganization, useOrganizations } from '@/lib/organizations';
 import '../modules/modules.css';
 
 const BLANK = { name: '', code: '', adminName: '', adminEmail: '', adminPassword: '' };
@@ -19,8 +19,22 @@ export function OrganizationsPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(BLANK);
   const [err, setErr] = useState('');
+  const [deleting, setDeleting] = useState(null); // org pending delete
+  const [confirmText, setConfirmText] = useState('');
   const create = useCreateOrganization();
+  const del = useDeleteOrganization();
   const toast = useToast();
+
+  async function confirmDelete() {
+    try {
+      await del.mutateAsync(deleting.id);
+      toast.success(`“${deleting.name}” and all its data were deleted.`);
+      setDeleting(null);
+      setConfirmText('');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
 
   // Drill into an org: act as its admin. Clear cached (global) data first.
   function enter(org) {
@@ -86,6 +100,7 @@ export function OrganizationsPage() {
               <div className="list-actions">
                 <Button size="sm" onClick={() => enter(o)}><LogIn size={14} style={{ marginRight: 6 }} /> Enter</Button>
                 <Button size="sm" variant="outline" onClick={() => navigate(`/app/organizations/${o.id}`)}><Settings2 size={14} style={{ marginRight: 6 }} /> Manage</Button>
+                <Button size="sm" variant="ghost" title="Delete organization" onClick={() => { setDeleting(o); setConfirmText(''); }}><Trash2 size={14} /></Button>
               </div>
             </Card>
           ))}
@@ -110,6 +125,37 @@ export function OrganizationsPage() {
           <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>The new organization gets its own private copy of the default curriculum.</p>
           {err && <span className="field__error">{err}</span>}
         </form>
+      </Modal>
+
+      {/* Cascade delete — type the code to confirm. */}
+      <Modal
+        open={Boolean(deleting)}
+        title="Delete organization"
+        onClose={() => setDeleting(null)}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="danger" loading={del.isPending} disabled={confirmText.trim().toUpperCase() !== deleting?.code} onClick={confirmDelete}>
+              Delete permanently
+            </Button>
+          </>
+        }
+      >
+        {deleting && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <p style={{ margin: 0 }}>
+              This permanently deletes <strong>{deleting.name}</strong> and <strong>everything inside it</strong> —
+              all its admins, trainers, students, batches, curriculum, assessments, submissions, resources, and records.
+              <strong> This cannot be undone.</strong>
+            </p>
+            <Input
+              label={`Type the code “${deleting.code}” to confirm`}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={deleting.code}
+            />
+          </div>
+        )}
       </Modal>
     </>
   );

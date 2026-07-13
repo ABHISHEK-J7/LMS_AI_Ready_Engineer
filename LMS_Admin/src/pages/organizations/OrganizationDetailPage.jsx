@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, LogIn, Plus, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, LogIn, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonText, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useCreateOrgAdmin, useOrganization, useOrgAdmins, useUpdateOrganization } from '@/lib/organizations';
+import { useCreateOrgAdmin, useDeleteOrganization, useOrganization, useOrgAdmins, useUpdateOrganization } from '@/lib/organizations';
 
 export function OrganizationDetailPage() {
   const { id } = useParams();
@@ -17,12 +17,15 @@ export function OrganizationDetailPage() {
   const { data: admins } = useOrgAdmins(id);
   const update = useUpdateOrganization();
   const createAdmin = useCreateOrgAdmin();
+  const del = useDeleteOrganization();
   const toast = useToast();
 
   const [name, setName] = useState('');
   const [status, setStatus] = useState('active');
   const [addOpen, setAddOpen] = useState(false);
   const [adminForm, setAdminForm] = useState({ name: '', email: '', password: '' });
+  const [delOpen, setDelOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
   const [err, setErr] = useState('');
 
   const back = <Link to="/app/organizations" className="lms-muted">← Organizations</Link>;
@@ -49,6 +52,16 @@ export function OrganizationDetailPage() {
     } catch (e2) { setErr(apiErrorMessage(e2)); }
   }
 
+  async function confirmDelete() {
+    try {
+      await del.mutateAsync(org.id);
+      toast.success(`“${org.name}” and all its data were deleted.`);
+      navigate('/app/organizations', { replace: true });
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
   async function addAdmin(e) {
     e.preventDefault();
     setErr('');
@@ -70,6 +83,7 @@ export function OrganizationDetailPage() {
       <div className="toolbar">
         <Button variant="ghost" size="sm" onClick={() => navigate('/app/organizations')}><ChevronLeft size={16} /> All organizations</Button>
         <span style={{ marginLeft: 'auto' }} />
+        <Button variant="ghost" onClick={() => { setDelOpen(true); setConfirmText(''); }} title="Delete organization"><Trash2 size={15} style={{ marginRight: 6 }} /> Delete</Button>
         <Button onClick={enter}><LogIn size={15} style={{ marginRight: 6 }} /> Enter organization</Button>
       </div>
 
@@ -119,6 +133,29 @@ export function OrganizationDetailPage() {
           <Input label="Password" type="password" value={adminForm.password} onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })} placeholder="At least 8 characters" required />
           {err && <span className="field__error">{err}</span>}
         </form>
+      </Modal>
+
+      <Modal
+        open={delOpen}
+        title="Delete organization"
+        onClose={() => setDelOpen(false)}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDelOpen(false)}>Cancel</Button>
+            <Button variant="danger" loading={del.isPending} disabled={confirmText.trim().toUpperCase() !== org.code} onClick={confirmDelete}>
+              Delete permanently
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <p style={{ margin: 0 }}>
+            This permanently deletes <strong>{org.name}</strong> and <strong>everything inside it</strong> —
+            admins, trainers, students, batches, curriculum, assessments, submissions, and all records.
+            <strong> This cannot be undone.</strong>
+          </p>
+          <Input label={`Type the code “${org.code}” to confirm`} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={org.code} />
+        </div>
       </Modal>
     </>
   );

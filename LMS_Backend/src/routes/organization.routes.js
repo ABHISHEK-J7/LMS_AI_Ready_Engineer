@@ -9,9 +9,11 @@ const router = Router();
 router.use(authenticate, requireRole(UserRole.SUPER_ADMIN));
 
 router.get('/', asyncHandler(org.listOrganizations));
+router.get('/overview', asyncHandler(org.getOverview)); // before '/:id'
 router.post('/', validate({ body: org.createOrgSchema }), asyncHandler(org.createOrganization));
 router.get('/:id', validate({ params: org.orgIdParam }), asyncHandler(org.getOrganization));
 router.patch('/:id', validate({ params: org.orgIdParam, body: org.updateOrgSchema }), asyncHandler(org.updateOrganization));
+router.delete('/:id', validate({ params: org.orgIdParam }), asyncHandler(org.deleteOrganization));
 
 // Admins of an organization.
 router.get('/:id/admins', validate({ params: org.orgIdParam }), asyncHandler(org.listOrgAdmins));

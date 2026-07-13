@@ -20,6 +20,7 @@ import { UserRole } from '@/shared';
 export const NAV_BY_ROLE = {
   // Super admin managing tenants (not drilled into an org).
   [UserRole.SUPER_ADMIN]: [
+    { label: 'Dashboard', to: '/app', Icon: LayoutDashboard },
     { label: 'Organizations', to: '/app/organizations', Icon: Building2 },
   ],
   [UserRole.ADMIN]: [

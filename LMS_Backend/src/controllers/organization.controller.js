@@ -1,10 +1,19 @@
 import { z } from 'zod';
 import { UserRole, UserStatus } from '#shared';
-import { Batch, Module, Organization, User } from '../models/index.js';
+import * as models from '../models/index.js';
+import { Batch, Module, Organization, User, Assessment, Submission } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { audit } from '../services/audit.js';
 import { seedCurriculumForOrg } from '../services/orgSeed.js';
+
+// Every tenant collection that must be purged when an organization is deleted.
+const TENANT_MODELS = [
+  'User', 'Module', 'Batch', 'Assessment', 'QuestionBankItem', 'Resource', 'Submission',
+  'Attendance', 'Announcement', 'Doubt', 'Certificate', 'ExternalCertificate',
+  'ClassSchedule', 'ClassJoin', 'ClassRating', 'ModuleProgress', 'Project',
+  'Notification', 'AuditLog', 'Settings',
+];
 
 const objectId = z.string().length(24);
 export const orgIdParam = z.object({ id: objectId });
@@ -116,4 +125,54 @@ export async function createOrgAdmin(req, res) {
 export async function listOrgAdmins(req, res) {
   const admins = await User.find({ organization: req.params.id, role: UserRole.ADMIN }).sort({ createdAt: 1 });
   ok(res, admins.map((a) => a.toJSON()));
+}
+
+/**
+ * Super admin: permanently delete an organization AND everything inside it
+ * (users, batches, curriculum, assessments, submissions, resources, attendance,
+ * announcements, doubts, certificates, classes, progress, projects, notifications,
+ * audit, settings). Irreversible.
+ */
+export async function deleteOrganization(req, res) {
+  const org = await Organization.findById(req.params.id);
+  if (!org) throw ApiError.notFound('Organization not found');
+  const oid = org._id;
+
+  const removed = {};
+  for (const name of TENANT_MODELS) {
+    const Model = models[name];
+    if (!Model) continue;
+    const r = await Model.deleteMany({ organization: oid });
+    removed[name] = r.deletedCount ?? 0;
+  }
+  await org.deleteOne();
+  audit(req, 'organization.delete', { targetType: 'organization', targetId: req.params.id, meta: { code: org.code, removed } });
+  ok(res, { id: req.params.id, deleted: true, removed });
+}
+
+/** Super admin: global counts across all organizations (dashboard). */
+export async function getOverview(_req, res) {
+  const [organizations, activeOrgs, admins, trainers, students, batches, modules, assessments, submissions] = await Promise.all([
+    Organization.countDocuments(),
+    Organization.countDocuments({ status: 'active' }),
+    User.countDocuments({ role: UserRole.ADMIN }),
+    User.countDocuments({ role: UserRole.TRAINER }),
+    User.countDocuments({ role: UserRole.STUDENT }),
+    Batch.countDocuments(),
+    Module.countDocuments(),
+    Assessment.countDocuments(),
+    Submission.countDocuments(),
+  ]);
+  ok(res, {
+    organizations,
+    activeOrgs,
+    suspendedOrgs: organizations - activeOrgs,
+    admins,
+    trainers,
+    students,
+    batches,
+    modules,
+    assessments,
+    submissions,
+  });
 }

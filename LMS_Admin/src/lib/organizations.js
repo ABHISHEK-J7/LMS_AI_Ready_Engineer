@@ -3,12 +3,29 @@ import { api, unwrap } from './api';
 
 export const orgKeys = {
   all: ['organizations'],
+  overview: ['organizations', 'overview'],
   detail: (id) => ['organizations', id],
   admins: (id) => ['organizations', id, 'admins'],
 };
 
 export function useOrganizations() {
   return useQuery({ queryKey: orgKeys.all, queryFn: () => unwrap(api.get('/organizations')) });
+}
+
+/** Global counts across all orgs (super-admin dashboard). */
+export function useOverview() {
+  return useQuery({ queryKey: orgKeys.overview, queryFn: () => unwrap(api.get('/organizations/overview')) });
+}
+
+export function useDeleteOrganization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => unwrap(api.delete(`/organizations/${id}`)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: orgKeys.all });
+      qc.invalidateQueries({ queryKey: orgKeys.overview });
+    },
+  });
 }
 
 export function useOrganization(id) {

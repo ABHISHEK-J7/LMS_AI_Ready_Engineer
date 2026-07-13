@@ -52,6 +52,34 @@ test('a regular admin cannot access the super-admin organization APIs', async ()
   assert.equal((await req('POST', '/organizations', A, { name: 'X', code: 'X1' })).status, 403);
 });
 
+test('super admin overview returns global counts', async () => {
+  const { req } = ctx;
+  const o = await req('GET', '/organizations/overview', SA);
+  assert.equal(o.status, 200);
+  assert.ok(o.data.organizations >= 2, 'counts organizations');
+  assert.ok(typeof o.data.students === 'number' && typeof o.data.modules === 'number');
+});
+
+test('deleting an organization cascades: removes the org AND all its data', async () => {
+  const { req, models } = ctx;
+  // A throwaway org with an admin + a student + a batch.
+  const org = await req('POST', '/organizations', SA, { name: 'Doomed', code: 'DOOM', adminName: 'Doom Admin', adminEmail: 'da@doom.local', adminPassword: 'Passw0rd!' });
+  const orgId = org.data.id;
+  const DA = await ctx.login('da@doom.local');
+  await req('POST', '/batches', DA, { name: 'B', code: 'DB1', startDate: '2026-01-01', endDate: '2027-01-01' });
+  await models.User.create({ name: 'St', email: 'st@doom.local', role: 'student', organization: orgId });
+
+  assert.ok(await models.User.countDocuments({ organization: orgId }) >= 2);
+  assert.ok(await models.Module.countDocuments({ organization: orgId }) >= 10);
+
+  const res = await req('DELETE', `/organizations/${orgId}`, SA);
+  assert.equal(res.status, 200);
+  assert.equal(await models.Organization.findById(orgId), null, 'org gone');
+  assert.equal(await models.User.countDocuments({ organization: orgId }), 0, 'users gone');
+  assert.equal(await models.Module.countDocuments({ organization: orgId }), 0, 'modules gone');
+  assert.equal(await models.Batch.countDocuments({ organization: orgId }), 0, 'batches gone');
+});
+
 test('super admin adds another admin to an existing org', async () => {
   const { req, models } = ctx;
   const org = await req('POST', '/organizations', SA, { name: 'Gamma', code: 'GAMMA' });

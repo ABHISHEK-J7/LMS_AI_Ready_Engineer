@@ -25,6 +25,7 @@ export const NAV_BY_ROLE = {
     { label: 'Organizations', to: '/app/organizations', Icon: Building2 },
     { label: 'Master Curriculum', to: '/app/modules', Icon: BookOpen },
     { label: 'Question Bank', to: '/app/question-bank', Icon: Database },
+    { label: 'Settings', to: '/app/settings', Icon: Settings },
   ],
   [UserRole.ADMIN]: [
     { label: 'Dashboard', to: '/app', Icon: LayoutDashboard },

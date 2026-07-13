@@ -51,6 +51,15 @@ export function AppLayout() {
     qc.clear();
     navigate('/app/organizations', { replace: true });
   }
+
+  // Sign out, then send them to /login. Without the explicit navigate we'd stay on
+  // the current URL — and super-admin-only routes (e.g. /app/organizations) don't
+  // exist once logged out, so the router would fall through to a 404.
+  async function handleSignOut() {
+    await logout();
+    qc.clear();
+    navigate('/login', { replace: true });
+  }
   // Longest-prefix match so detail routes (/app/users/:id, etc.) resolve to their
   // section title instead of falling back to the first ("Dashboard") entry.
   const current =
@@ -128,7 +137,7 @@ export function AppLayout() {
                 <div className="user-chip__role">{ROLE_LABEL[user.role]}</div>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="topbar__signout" onClick={logout}>
+            <Button variant="outline" size="sm" className="topbar__signout" onClick={handleSignOut}>
               <LogOut size={15} strokeWidth={2} />
               <span className="topbar__signout-label">Sign out</span>
             </Button>

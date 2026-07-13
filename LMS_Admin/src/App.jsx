@@ -57,6 +57,7 @@ export default function App() {
           <Route path="modules" element={<ModulesPage />} />
           <Route path="modules/:id" element={<ModuleDetailPage />} />
           <Route path="question-bank" element={<Suspense fallback={<FullPageSpinner />}><QuestionBankPage /></Suspense>} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Route>
         <Route path="/" element={<Navigate to="/app" replace />} />
@@ -94,6 +95,8 @@ export default function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        {/* Unknown /app/* path (e.g. a super-admin-only route after exiting an org) → dashboard, not a 404. */}
+        <Route path="*" element={<Navigate to="/app" replace />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/app" replace />} />

@@ -20,7 +20,6 @@ export function SettingsPage() {
     if (data) setForm({
       passingScore: data.passingScore,
       minAttendance: data.minAttendance,
-      allowSelfRegistration: data.allowSelfRegistration,
       activeTheme: data.activeTheme,
     });
   }, [data]);
@@ -53,7 +52,6 @@ export function SettingsPage() {
       await update.mutateAsync({
         passingScore: Number(form.passingScore),
         minAttendance: Number(form.minAttendance),
-        allowSelfRegistration: form.allowSelfRegistration,
         activeTheme: form.activeTheme,
       });
       setTheme(form.activeTheme); // reflect the institutional theme immediately
@@ -104,20 +102,6 @@ export function SettingsPage() {
               { value: ThemeName.ORANGE, label: 'AI Ready Orange' },
             ]}
           />
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <input
-              type="checkbox"
-              checked={form.allowSelfRegistration}
-              onChange={(e) => setForm({ ...form, allowSelfRegistration: e.target.checked })}
-            />
-            <span>
-              Allow public student self-registration
-              <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
-                New sign-ups start as <strong>pending</strong> and require admin approval.
-              </div>
-            </span>
-          </label>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
             <Button type="submit" loading={update.isPending}>Save settings</Button>

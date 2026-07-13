@@ -60,8 +60,11 @@ test('the template org is hidden from the tenant list and overview counts', asyn
   assert.ok(!list.data.some((o) => o.code === 'TEMPLATE'), 'template not in the org list');
 
   const overview = await req('GET', '/organizations/overview', SA);
-  // Only the real orgs created in this file (CLONE, FROZEN) count — not TEMPLATE.
-  assert.equal(overview.data.organizations, 2, 'template excluded from org count');
+  // The count reflects real orgs (the default Test Org + CLONE + FROZEN) but NOT
+  // the template. Assert it matches the non-template orgs actually in the DB.
+  const realOrgs = await ctx.models.Organization.countDocuments({ isTemplate: { $ne: true } });
+  assert.equal(overview.data.organizations, realOrgs, 'count excludes the template org');
+  assert.ok(realOrgs >= 3, 'default org + the two created here');
 });
 
 test('the master template org cannot be deleted', async () => {

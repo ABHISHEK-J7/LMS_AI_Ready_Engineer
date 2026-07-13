@@ -4,7 +4,6 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { FullPageSpinner } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { LoginPage } from '@/pages/LoginPage';
-import { RegisterPage } from '@/pages/RegisterPage';
 import { NotFound } from '@/pages/NotFound';
 import { DashboardRouter } from '@/pages/dashboards/DashboardRouter';
 import { ModulesPage } from '@/pages/modules/ModulesPage';
@@ -42,7 +41,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      {/* Self-registration is disabled — org admins create all accounts. Any old
+          /register link redirects to login. */}
+      <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route path="/verify/:certificateId" element={<VerifyCertificatePage />} />
 
       {/* Immersive, full-screen live classroom (no sidebar/topbar chrome). */}

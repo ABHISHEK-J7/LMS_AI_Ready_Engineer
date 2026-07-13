@@ -5,6 +5,7 @@ import { Batch, Module, Organization, User, Assessment, Submission } from '../mo
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 import { audit } from '../services/audit.js';
+import { invalidateAuthUser } from '../services/authCache.js';
 import { seedCurriculumForOrg } from '../services/orgSeed.js';
 
 // Every tenant collection that must be purged when an organization is deleted.
@@ -103,9 +104,16 @@ export async function updateOrganization(req, res) {
   const org = await Organization.findById(req.params.id);
   if (!org) throw ApiError.notFound('Organization not found');
   const { name, status } = req.body;
+  const statusChanged = status !== undefined && status !== org.status;
   if (name !== undefined) org.name = name;
   if (status !== undefined) org.status = status;
   await org.save();
+  // Suspending/reactivating takes effect immediately: drop the cached auth facts
+  // of this org's members so the next request re-reads the new org status.
+  if (statusChanged) {
+    const members = await User.find({ organization: org._id }).select('_id');
+    for (const m of members) invalidateAuthUser(m._id.toString());
+  }
   audit(req, 'organization.update', { targetType: 'organization', targetId: org.id, meta: { name: org.name, status: org.status } });
   ok(res, org.toJSON());
 }

@@ -1,5 +1,5 @@
 import { UserRole, UserStatus } from '#shared';
-import { User } from '../models/index.js';
+import { User, Organization } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { verifyAccessToken } from '../utils/jwt.js';
 import { getAuthUser, setAuthUser } from '../services/authCache.js';
@@ -33,12 +33,19 @@ export async function authenticate(req, _res, next) {
     if (!info) {
       const user = await User.findById(payload.sub).select('tokenVersion status role name organization');
       if (!user) throw ApiError.unauthorized('Account no longer exists');
+      // The member's org status (cached with the rest). Super admin has no org.
+      let orgStatus = null;
+      if (user.organization) {
+        const org = await Organization.findById(user.organization).select('status');
+        orgStatus = org?.status ?? null;
+      }
       info = {
         tokenVersion: user.tokenVersion ?? 0,
         status: user.status,
         role: user.role,
         name: user.name,
         organization: user.organization ? user.organization.toString() : null,
+        orgStatus,
       };
       setAuthUser(payload.sub, info);
     }
@@ -48,6 +55,10 @@ export async function authenticate(req, _res, next) {
     }
     if (info.status === UserStatus.ARCHIVED || info.status === UserStatus.SUSPENDED) {
       throw ApiError.forbidden('Your account is not active. Contact your administrator.');
+    }
+    // A suspended organization locks out its members (super admin is exempt).
+    if (info.role !== UserRole.SUPER_ADMIN && info.orgStatus === 'suspended') {
+      throw ApiError.forbidden('Your organization is suspended. Contact your administrator.');
     }
 
     // Super-admin "drill in": when a super admin targets an org via the X-Org-Id

@@ -25,6 +25,14 @@ export async function startTestServer() {
   const server = createApp().listen(0);
   const base = `http://localhost:${server.address().port}/api`;
 
+  // A default organization every test user belongs to (matches production: real
+  // users always carry an org). Tests that exercise isolation pass their own org.
+  const defaultOrg = await models.Organization.create({ name: 'Test Org', code: 'TEST' });
+  // Stamp fixtures created via direct model calls (outside a request) with this org,
+  // so they're visible to the org-scoped API reads the tests then make.
+  const { setAmbientOrg } = await import('../src/services/tenantContext.js');
+  setAmbientOrg(defaultOrg._id);
+
   async function req(method, path, token, body) {
     const res = await fetch(base + path, {
       method,
@@ -36,7 +44,12 @@ export async function startTestServer() {
     return { status: res.status, data: json?.data, tokens: json?.data?.tokens };
   }
   async function mkUser(name, email, role, extra = {}) {
-    return models.User.create({ name, email, role, status: 'active', passwordHash: await bcrypt.hash('Passw0rd!', 4), ...extra });
+    // Non-super users belong to the default org unless the test overrides it;
+    // the super admin stays global (organization: null).
+    const organization = 'organization' in extra
+      ? extra.organization
+      : (role === 'super_admin' ? null : defaultOrg._id);
+    return models.User.create({ name, email, role, status: 'active', organization, passwordHash: await bcrypt.hash('Passw0rd!', 4), ...extra });
   }
   const login = async (email) => (await req('POST', '/auth/login', null, { email, password: 'Passw0rd!' })).tokens?.accessToken;
 
@@ -45,7 +58,7 @@ export async function startTestServer() {
     await new Promise((r) => server.close(r));
     await mongod.stop();
   }
-  return { base, req, mkUser, login, models, mongoose, stop };
+  return { base, req, mkUser, login, models, mongoose, stop, defaultOrg };
 }
 
 export const iso = (min) => new Date(Date.now() + min * 60000).toISOString();

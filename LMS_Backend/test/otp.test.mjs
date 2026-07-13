@@ -8,7 +8,7 @@ after(async () => { await ctx.stop(); });
 
 test('OTP onboarding: request → verify → set password → login works end to end', async () => {
   const { req, models } = ctx;
-  await models.User.create({ name: 'Otp', email: 'otp@x.local', role: 'student', status: 'pending' });
+  await models.User.create({ name: 'Otp', email: 'otp@x.local', role: 'student', status: 'active' });
 
   // Capture the dev-mailer console output to read the emailed 6-digit code.
   let captured = '';
@@ -39,7 +39,7 @@ test('OTP onboarding: request → verify → set password → login works end to
 
 test('OTP is case-insensitive on the email (mixed-case request + verify)', async () => {
   const { req, models } = ctx;
-  await models.User.create({ name: 'Case', email: 'case@x.local', role: 'student', status: 'pending' });
+  await models.User.create({ name: 'Case', email: 'case@x.local', role: 'student', status: 'active' });
   let captured = '';
   const orig = console.log;
   console.log = (...a) => { captured += a.join(' ') + '\n'; };

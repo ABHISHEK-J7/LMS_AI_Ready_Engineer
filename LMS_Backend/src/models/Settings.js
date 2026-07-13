@@ -4,12 +4,13 @@ import {
   DEFAULT_MIN_ATTENDANCE,
   DEFAULT_PASSING_SCORE,
   DEFAULT_THEME,
+  UserRole,
 } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
+import { currentTenant } from '../services/tenantContext.js';
 
 const settingsSchema = new Schema(
   {
-    key: { type: String, default: 'global', unique: true },
     passingScore: { type: Number, default: DEFAULT_PASSING_SCORE },
     minAttendance: { type: Number, default: DEFAULT_MIN_ATTENDANCE },
     allowSelfRegistration: { type: Boolean, default: DEFAULT_ALLOW_SELF_REGISTRATION },
@@ -26,35 +27,62 @@ const settingsSchema = new Schema(
     zoomAccountId: { type: String, select: false, default: '' },
     zoomClientId: { type: String, select: false, default: '' },
     zoomClientSecret: { type: String, select: false, default: '' },
-    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
+    // One settings doc per organization. The global-defaults doc has organization
+    // = null (edited by the super admin; served to unauthenticated screens).
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null },
   },
   baseSchemaOptions,
 );
 
+// Exactly one settings doc per org (and one global doc where organization is null).
+settingsSchema.index({ organization: 1 }, { unique: true });
+// The global settings doc legitimately has organization=null — never let the
+// test-only ambient org stamp it (see tenantPlugin.js).
+settingsSchema.$ambientExempt = true;
+
 const SettingsModel = mongoose.model('Settings', settingsSchema);
 
-/** Fetch the singleton settings doc, creating it with defaults on first call. */
+/**
+ * The org whose settings the current context should read/write:
+ *   - super admin / no context (seed, public screens) → null (global defaults doc)
+ *   - an org admin/trainer/student → their own organization
+ * The tenant plugin also auto-scopes these queries, but we pass `organization`
+ * explicitly so the intent is unambiguous and the null (global) case works.
+ */
+function settingsOrg() {
+  const ctx = currentTenant();
+  if (!ctx || ctx.role === UserRole.SUPER_ADMIN) return null;
+  return ctx.organization || null;
+}
+
+/** Fetch the settings doc for the current org, creating it with defaults on first call. */
 export async function getSettings() {
-  const existing = await SettingsModel.findOne({ key: 'global' });
+  const organization = settingsOrg();
+  const existing = await SettingsModel.findOne({ organization });
   if (existing) return existing;
-  return SettingsModel.create({ key: 'global' });
+  try {
+    return await SettingsModel.create({ organization });
+  } catch (err) {
+    if (err?.code === 11000) return SettingsModel.findOne({ organization }); // lost a create race
+    throw err;
+  }
 }
 
 /** Read the stored AI key (explicitly, since it is `select: false`). */
 export async function getStoredAiApiKey() {
-  const doc = await SettingsModel.findOne({ key: 'global' }).select('+aiApiKey');
+  const doc = await SettingsModel.findOne({ organization: settingsOrg() }).select('+aiApiKey');
   return doc?.aiApiKey || '';
 }
 
 /** Read the stored SEB Config Key (explicitly, since it is `select: false`). */
 export async function getStoredSebConfigKey() {
-  const doc = await SettingsModel.findOne({ key: 'global' }).select('+sebConfigKey');
+  const doc = await SettingsModel.findOne({ organization: settingsOrg() }).select('+sebConfigKey');
   return doc?.sebConfigKey || '';
 }
 
 /** Read the stored Zoom credentials (explicitly, since they are `select: false`). */
 export async function getStoredZoomCreds() {
-  const doc = await SettingsModel.findOne({ key: 'global' }).select(
+  const doc = await SettingsModel.findOne({ organization: settingsOrg() }).select(
     '+zoomAccountId +zoomClientId +zoomClientSecret',
   );
   return {

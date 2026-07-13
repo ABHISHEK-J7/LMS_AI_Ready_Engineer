@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { UserRole, UserStatus } from '#shared';
-import { User, getSettings } from '../models/index.js';
+import { User, Organization } from '../models/index.js';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
@@ -18,8 +18,10 @@ import { sendOtpEmail } from '../services/mailer.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
-// Statuses that may still complete OTP onboarding (suspended/archived may not).
-const ONBOARDABLE = [UserStatus.ACTIVE, UserStatus.PENDING];
+// Statuses that may complete OTP onboarding. PENDING is intentionally excluded:
+// only an admin (approveUser) may activate a PENDING account — otherwise a pending
+// user could self-activate through the OTP → set-password flow, bypassing approval.
+const ONBOARDABLE = [UserStatus.ACTIVE];
 
 export const loginSchema = z.object({
   email: z.string().email().max(160),
@@ -61,6 +63,14 @@ export async function login(req, res) {
   if (user.status === UserStatus.PENDING) {
     throw ApiError.forbidden('Your account is awaiting administrator approval.');
   }
+  // A suspended organization locks out all its members (the super admin, who has
+  // no organization, is exempt and can still sign in to manage/reactivate it).
+  if (user.organization) {
+    const org = await Organization.findById(user.organization).select('status');
+    if (org?.status === 'suspended') {
+      throw ApiError.forbidden('Your organization is suspended. Contact your administrator.');
+    }
+  }
 
   user.lastLoginAt = new Date();
   await user.save();
@@ -70,26 +80,14 @@ export async function login(req, res) {
   ok(res, body);
 }
 
-/** Public self-registration — only if the admin enabled it. New students start PENDING. */
-export async function register(req, res) {
-  const settings = await getSettings();
-  if (!settings.allowSelfRegistration) {
-    throw ApiError.forbidden('Self-registration is disabled. Contact your administrator.');
-  }
-  const { name, email, password } = req.body;
-
-  const existing = await User.findOne({ email });
-  if (existing) throw ApiError.conflict('An account with that email already exists');
-
-  const passwordHash = await User.setPassword(password);
-  const user = await User.create({
-    name,
-    email,
-    passwordHash,
-    role: UserRole.STUDENT,
-    status: UserStatus.PENDING,
-  });
-  ok(res, { user: toDTO(user) }, 201);
+/**
+ * Public self-registration is DISABLED in the multi-tenant model: a public signup
+ * has no organization to join, which would create an org-less account. Trainers and
+ * students are created by their organization's admin. Kept as an explicit 403 (not a
+ * removed route) so the intent is clear and any stale client gets a clear message.
+ */
+export async function register(_req, _res) {
+  throw ApiError.forbidden('Self-registration is disabled. Your organization administrator creates your account.');
 }
 
 export async function refresh(req, res) {
@@ -225,10 +223,11 @@ export async function setPasswordWithToken(req, res) {
     throw ApiError.unauthorized('This link has expired. Please request a new code.');
   }
   const user = await User.findById(payload.sub);
+  // PENDING is not onboardable — a pending account can't self-activate here; an
+  // admin must approve it first. Only ACTIVE accounts set their password via OTP.
   if (!user || !ONBOARDABLE.includes(user.status)) throw ApiError.notFound('Account not found');
 
   user.passwordHash = await User.setPassword(password);
-  if (user.status === UserStatus.PENDING) user.status = UserStatus.ACTIVE;
   user.otpHash = undefined;
   user.otpExpiresAt = undefined;
   user.otpAttempts = 0;

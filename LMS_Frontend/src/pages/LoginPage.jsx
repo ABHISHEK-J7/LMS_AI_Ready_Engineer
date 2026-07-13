@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button, Input } from '@/components/ui';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { apiErrorMessage } from '@/lib/api';
@@ -174,11 +174,7 @@ export function LoginPage() {
                   First time here, or forgot your password? Set it with an email code
                 </button>
                 <p className="lms-muted login__hint">
-                  {settings?.allowSelfRegistration ? (
-                    <>New here? <Link to="/register">Create an account</Link></>
-                  ) : (
-                    'Access is managed by your administrator. Contact them if you cannot sign in.'
-                  )}
+                  Access is managed by your administrator. Contact them if you cannot sign in.
                 </p>
               </div>
             )}

@@ -27,7 +27,10 @@ export const PROVIDER_LABEL = {
   [MeetingProvider.OTHER]: 'Other',
 };
 
-export const PROVIDER_OPTIONS = Object.values(MeetingProvider).map((v) => ({
+// Only two providers are supported: the in-app LiveKit classroom and Microsoft
+// Teams. (Older classes may still show another provider's label above; these are
+// just the options offered when scheduling.)
+export const PROVIDER_OPTIONS = [MeetingProvider.INTERNAL, MeetingProvider.MS_TEAMS].map((v) => ({
   value: v,
   label: PROVIDER_LABEL[v],
 }));

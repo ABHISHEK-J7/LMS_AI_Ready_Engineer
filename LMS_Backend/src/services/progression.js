@@ -39,7 +39,7 @@ export async function computeProgress(studentId) {
   const minAttendance = settings.minAttendance;
   const passingScore = settings.passingScore;
 
-  const student = await User.findById(studentId).select('batch');
+  const student = await User.findById(studentId).select('batch organization');
   if (!student?.batch) {
     return { hasBatch: false, minAttendance, passingScore, modules: [], completedCount: 0, total: 0, eligibleForCertificate: false };
   }
@@ -150,6 +150,9 @@ export async function computeProgress(studentId) {
               practiceTestsCompleted: e.practiceTestsCompleted,
               finalScore: e.finalScore,
               completedAt: e.completed ? new Date() : undefined,
+              // bulkWrite bypasses the tenant plugin — stamp the org explicitly so
+              // these snapshots aren't org-less (and thus invisible to scoped reads).
+              organization: student.organization ?? null,
             },
           },
           upsert: true,

@@ -26,7 +26,8 @@ export function useClassRoster(classId) {
 export function useSaveAttendance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ classId, records }) => unwrap(api.post(`/attendance/class/${classId}`, { records })),
+    mutationFn: ({ classId, records, bufferMinutes }) =>
+      unwrap(api.post(`/attendance/class/${classId}`, { records, ...(bufferMinutes != null ? { bufferMinutes } : {}) })),
     onSuccess: (_data, { classId }) => {
       qc.invalidateQueries({ queryKey: attendanceKeys.roster(classId) });
       qc.invalidateQueries({ queryKey: ['classes'] }); // attendanceMarked flag changed

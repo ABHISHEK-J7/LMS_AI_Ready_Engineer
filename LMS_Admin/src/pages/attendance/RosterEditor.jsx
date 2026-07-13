@@ -1,19 +1,26 @@
-import { useEffect, useState } from 'react';
-import { Check, Users } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, FileSpreadsheet, Users } from 'lucide-react';
 import { AttendanceStatus } from '@/shared';
 import { Button, Card, CardHeader, EmptyState, ErrorState, Input, Select, SkeletonTable } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useClassRoster, useSaveAttendance } from '@/lib/attendance';
+import { parseTeamsAttendance, startMinutesOf, classifyJoin } from '@/lib/teamsAttendance';
 import { ATT_OPTIONS } from './attendanceUi';
 import { formatDate } from '@/lib/format';
+import './attendance.css';
 
 /** Per-session attendance entry: one row per enrolled student. */
 export function RosterEditor({ classId, onSaved }) {
   const { data, isLoading, isError, error, refetch } = useClassRoster(classId);
   const save = useSaveAttendance();
   const [rows, setRows] = useState([]);
+  const [buffer, setBuffer] = useState(10);
+  const [teamsData, setTeamsData] = useState(null); // Map<email, joinMinutes> from the import
+  const [importInfo, setImportInfo] = useState(null);
+  const [importError, setImportError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saved, setSaved] = useState(false);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     if (!data) return;
@@ -27,6 +34,10 @@ export function RosterEditor({ classId, onSaved }) {
         remarks: r.remarks ?? '',
       })),
     );
+    setBuffer(data.class.bufferMinutes ?? 10);
+    setTeamsData(null);
+    setImportInfo(null);
+    setImportError('');
     setSaved(false);
   }, [data]);
 
@@ -37,11 +48,55 @@ export function RosterEditor({ classId, onSaved }) {
     setRows((rs) => rs.map((r) => ({ ...r, status })));
   }
 
+  /**
+   * Compute each student's status from the imported Teams join times against the
+   * class start + buffer: on time → Present, after the buffer → Late, not in the
+   * sheet → Absent. Runs on import and whenever the buffer changes.
+   */
+  function applyTeams(byEmail, bufferVal, currentRows) {
+    const startMin = startMinutesOf(data.class.startTime);
+    const counts = { present: 0, late: 0, absent: 0, matched: 0 };
+    const next = currentRows.map((r) => {
+      const join = r.email ? byEmail.get(r.email.toLowerCase()) : undefined;
+      const status = classifyJoin(join ?? null, startMin, bufferVal);
+      if (status === AttendanceStatus.ABSENT) counts.absent += 1;
+      else { counts.matched += 1; if (status === AttendanceStatus.PRESENT) counts.present += 1; else counts.late += 1; }
+      return { ...r, status };
+    });
+    setRows(next);
+    const rosterEmails = new Set(currentRows.map((r) => r.email?.toLowerCase()).filter(Boolean));
+    counts.unmatched = [...byEmail.keys()].filter((e) => !rosterEmails.has(e)).length;
+    setImportInfo(counts);
+  }
+
+  async function onTeamsFile(e) {
+    setImportError('');
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    try {
+      const { byEmail } = parseTeamsAttendance(await file.arrayBuffer());
+      setTeamsData(byEmail);
+      applyTeams(byEmail, buffer, rows);
+    } catch (err) {
+      setTeamsData(null);
+      setImportInfo(null);
+      setImportError(err.message || 'Could not read that file.');
+    }
+  }
+
+  function onBufferChange(v) {
+    const next = Math.max(0, Math.min(240, Number(v) || 0));
+    setBuffer(next);
+    if (teamsData) applyTeams(teamsData, next, rows); // re-grade against the new grace window
+  }
+
   async function submit() {
     setSaveError('');
     try {
       await save.mutateAsync({
         classId,
+        bufferMinutes: buffer,
         records: rows.map((r) => ({ student: r.student, status: r.status, remarks: r.remarks || undefined })),
       });
       setSaved(true);
@@ -58,7 +113,7 @@ export function RosterEditor({ classId, onSaved }) {
     <Card>
       <CardHeader
         title={`Attendance — ${data.class.title}`}
-        subtitle={`${formatDate(data.class.date)} · ${rows.length} students${data.class.attendanceMarked ? ' · already marked' : ''}`}
+        subtitle={`${formatDate(data.class.date)} · starts ${data.class.startTime} · ${rows.length} students${data.class.attendanceMarked ? ' · already marked' : ''}`}
       />
 
       {rows.length === 0 ? (
@@ -68,6 +123,45 @@ export function RosterEditor({ classId, onSaved }) {
         />
       ) : (
         <>
+          {/* Teams import: compute attendance from the meeting's participant sheet. */}
+          <div className="teams-import">
+            <div className="teams-import__row">
+              <div className="teams-import__buffer">
+                <label className="field__label" htmlFor="att-buffer">Grace period (minutes)</label>
+                <Input
+                  id="att-buffer"
+                  type="number"
+                  min="0"
+                  max="240"
+                  value={buffer}
+                  onChange={(e) => onBufferChange(e.target.value)}
+                  style={{ maxWidth: '7rem' }}
+                />
+              </div>
+              <div className="teams-import__action">
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onTeamsFile} style={{ display: 'none' }} />
+                <Button variant="outline" onClick={() => fileRef.current?.click()}>
+                  <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Import Teams attendance
+                </Button>
+              </div>
+            </div>
+            <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>
+              Upload the Microsoft Teams attendance export (email + join time). Students who joined within the grace
+              period count as <strong>Present</strong>, later joins as <strong>Late</strong>, and anyone not in the
+              sheet as <strong>Absent</strong>. You can adjust below before saving.
+            </p>
+            {importError && <span className="field__error">{importError}</span>}
+            {importInfo && (
+              <div className="teams-import__summary">
+                <Check size={15} strokeWidth={3} style={{ color: 'var(--color-success)' }} />
+                <span>
+                  {importInfo.present} present · {importInfo.late} late · {importInfo.absent} absent
+                  {importInfo.unmatched > 0 && ` · ${importInfo.unmatched} sheet email(s) didn’t match an enrolled student`}
+                </span>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
             <span className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)', alignSelf: 'center' }}>
               Quick set:

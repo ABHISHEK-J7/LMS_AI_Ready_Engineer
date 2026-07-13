@@ -118,6 +118,9 @@ export async function saveAttendance(req, res) {
             module: cls.module,
             markedBy: req.auth.userId,
             markedAt: now,
+            // bulkWrite bypasses the tenant plugin, so stamp the org explicitly —
+            // otherwise these records would be org-less and invisible to reports.
+            organization: cls.organization ?? null,
           },
         },
         upsert: true,

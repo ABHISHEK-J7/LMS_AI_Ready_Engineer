@@ -1,70 +1,103 @@
-import { useEffect, useState } from 'react';
-import { Check, Users } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, Input, SkeletonTable, EmptyState, ErrorState } from '@/components/ui';
+import { useEffect, useRef, useState } from 'react';
+import { Check, FileSpreadsheet, Users } from 'lucide-react';
+import { AttendanceStatus } from '@/shared';
+import { Button, Card, CardHeader, EmptyState, ErrorState, Input, Select, SkeletonTable } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useClassRoster, useSaveAttendance } from '@/lib/attendance';
-import { ATT_TONE, AUTO_LABEL, autoStatus, classStartMs } from './attendanceUi';
+import { parseTeamsAttendance, startMinutesOf, classifyJoin } from '@/lib/teamsAttendance';
+import { ATT_OPTIONS } from './attendanceUi';
 import { formatDate } from '@/lib/format';
+import './attendance.css';
 
-const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const entryTime = (iso) =>
-  iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
-
-/**
- * Automated per-session attendance. The trainer only sets a buffer window;
- * each student's status is derived from their entry time:
- *   joined by start+buffer → On time · later → Late · never joined → Absent.
- */
+/** Per-session attendance entry: one row per enrolled student. */
 export function RosterEditor({ classId, onSaved }) {
   const { data, isLoading, isError, error, refetch } = useClassRoster(classId);
   const save = useSaveAttendance();
   const [rows, setRows] = useState([]);
   const [buffer, setBuffer] = useState(10);
+  const [teamsData, setTeamsData] = useState(null); // Map<email, joinMinutes> from the import
+  const [importInfo, setImportInfo] = useState(null);
+  const [importError, setImportError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saved, setSaved] = useState(false);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     if (!data) return;
+    // Default unmarked students to Present so a trainer can save fast.
     setRows(
       data.roster.map((r) => ({
         student: r.student.id,
         name: r.student.name,
         email: r.student.email,
-        joinedAt: r.joinedAt ?? null,
+        status: r.status ?? AttendanceStatus.PRESENT,
         remarks: r.remarks ?? '',
       })),
     );
     setBuffer(data.class.bufferMinutes ?? 10);
+    setTeamsData(null);
+    setImportInfo(null);
+    setImportError('');
     setSaved(false);
   }, [data]);
 
-  function setRemark(id, remarks) {
-    setRows((rs) => rs.map((r) => (r.student === id ? { ...r, remarks } : r)));
+  function setRow(id, patch) {
+    setRows((rs) => rs.map((r) => (r.student === id ? { ...r, ...patch } : r)));
+  }
+  function setAll(status) {
+    setRows((rs) => rs.map((r) => ({ ...r, status })));
   }
 
-  if (isLoading && !data) return <Card><SkeletonTable rows={5} cols={4} /></Card>;
-  if (isError) return <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />;
+  /**
+   * Compute each student's status from the imported Teams join times against the
+   * class start + buffer: on time → Present, after the buffer → Late, not in the
+   * sheet → Absent. Runs on import and whenever the buffer changes.
+   */
+  function applyTeams(byEmail, bufferVal, currentRows) {
+    const startMin = startMinutesOf(data.class.startTime);
+    const counts = { present: 0, late: 0, absent: 0, matched: 0 };
+    const next = currentRows.map((r) => {
+      const join = r.email ? byEmail.get(r.email.toLowerCase()) : undefined;
+      const status = classifyJoin(join ?? null, startMin, bufferVal);
+      if (status === AttendanceStatus.ABSENT) counts.absent += 1;
+      else { counts.matched += 1; if (status === AttendanceStatus.PRESENT) counts.present += 1; else counts.late += 1; }
+      return { ...r, status };
+    });
+    setRows(next);
+    const rosterEmails = new Set(currentRows.map((r) => r.email?.toLowerCase()).filter(Boolean));
+    counts.unmatched = [...byEmail.keys()].filter((e) => !rosterEmails.has(e)).length;
+    setImportInfo(counts);
+  }
 
-  const cls = data.class;
-  const cutoffMs = classStartMs(cls.date, cls.startTime) + (Number(buffer) || 0) * 60000;
-  const statusOf = (r) => autoStatus(r.joinedAt, cls.date, cls.startTime, buffer);
-  const counts = rows.reduce((acc, r) => {
-    const s = statusOf(r);
-    acc[s] = (acc[s] ?? 0) + 1;
-    return acc;
-  }, {});
+  async function onTeamsFile(e) {
+    setImportError('');
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    try {
+      const { byEmail } = parseTeamsAttendance(await file.arrayBuffer());
+      setTeamsData(byEmail);
+      applyTeams(byEmail, buffer, rows);
+    } catch (err) {
+      setTeamsData(null);
+      setImportInfo(null);
+      setImportError(err.message || 'Could not read that file.');
+    }
+  }
+
+  function onBufferChange(v) {
+    const next = Math.max(0, Math.min(240, Number(v) || 0));
+    setBuffer(next);
+    if (teamsData) applyTeams(teamsData, next, rows); // re-grade against the new grace window
+  }
 
   async function submit() {
     setSaveError('');
     try {
       await save.mutateAsync({
         classId,
-        bufferMinutes: Number(buffer) || 0,
-        records: rows.map((r) => ({
-          student: r.student,
-          status: statusOf(r),
-          remarks: r.remarks || undefined,
-        })),
+        bufferMinutes: buffer,
+        records: rows.map((r) => ({ student: r.student, status: r.status, remarks: r.remarks || undefined })),
       });
       setSaved(true);
       onSaved?.();
@@ -73,50 +106,71 @@ export function RosterEditor({ classId, onSaved }) {
     }
   }
 
+  if (isLoading && !data) return <Card><SkeletonTable rows={5} cols={3} /></Card>;
+  if (isError) return <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />;
+
   return (
     <Card>
       <CardHeader
-        title={`Attendance — ${cls.title}`}
-        subtitle={`${formatDate(cls.date)} · starts ${cls.startTime} · ${rows.length} students${cls.attendanceMarked ? ' · already marked' : ''}`}
+        title={`Attendance — ${data.class.title}`}
+        subtitle={`${formatDate(data.class.date)} · starts ${data.class.startTime} · ${rows.length} students${data.class.attendanceMarked ? ' · already marked' : ''}`}
       />
 
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={26} />}
-          title="No students enrolled"
-          description="No students enrolled in this batch yet."
+          title="No students enrolled in this batch yet"
         />
       ) : (
         <>
-          {/* Buffer window — the only thing the trainer sets; status is automatic. */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-4)',
-              flexWrap: 'wrap',
-              marginBottom: 'var(--space-4)',
-              padding: 'var(--space-3) var(--space-4)',
-              background: 'var(--color-background)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span className="field__label">Buffer time (minutes)</span>
-              <Input
-                type="number"
-                min="0"
-                max="240"
-                value={buffer}
-                onChange={(e) => setBuffer(e.target.value)}
-                style={{ width: '7rem' }}
-              />
+          {/* Teams import: compute attendance from the meeting's participant sheet. */}
+          <div className="teams-import">
+            <div className="teams-import__row">
+              <div className="teams-import__buffer">
+                <label className="field__label" htmlFor="att-buffer">Grace period (minutes)</label>
+                <Input
+                  id="att-buffer"
+                  type="number"
+                  min="0"
+                  max="240"
+                  value={buffer}
+                  onChange={(e) => onBufferChange(e.target.value)}
+                  style={{ maxWidth: '7rem' }}
+                />
+              </div>
+              <div className="teams-import__action">
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onTeamsFile} style={{ display: 'none' }} />
+                <Button variant="outline" onClick={() => fileRef.current?.click()}>
+                  <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Import Teams attendance
+                </Button>
+              </div>
             </div>
-            <p className="lms-muted" style={{ margin: 0, fontSize: 'var(--font-size-sm)', flex: 1, minWidth: 0, lineHeight: 1.6 }}>
-              Joined by <strong>{fmtTime(cutoffMs)}</strong> (start {cls.startTime} + {Number(buffer) || 0} min) counts as{' '}
-              <strong>On time</strong>. Later → <strong>Late</strong>. No entry → <strong>Absent</strong>.
+            <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>
+              Upload the Microsoft Teams attendance export (email + join time). Students who joined within the grace
+              period count as <strong>Present</strong>, later joins as <strong>Late</strong>, and anyone not in the
+              sheet as <strong>Absent</strong>. You can adjust below before saving.
             </p>
+            {importError && <span className="field__error">{importError}</span>}
+            {importInfo && (
+              <div className="teams-import__summary">
+                <Check size={15} strokeWidth={3} style={{ color: 'var(--color-success)' }} />
+                <span>
+                  {importInfo.present} present · {importInfo.late} late · {importInfo.absent} absent
+                  {importInfo.unmatched > 0 && ` · ${importInfo.unmatched} sheet email(s) didn’t match an enrolled student`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+            <span className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)', alignSelf: 'center' }}>
+              Quick set:
+            </span>
+            {ATT_OPTIONS.map((o) => (
+              <Button key={o.value} size="sm" variant="outline" onClick={() => setAll(o.value)}>
+                All {o.label}
+              </Button>
+            ))}
           </div>
 
           <div className="table-wrap">
@@ -124,54 +178,38 @@ export function RosterEditor({ classId, onSaved }) {
               <thead>
                 <tr>
                   <th>Student</th>
-                  <th>Entry Time</th>
-                  <th>Status</th>
+                  <th style={{ width: 160 }}>Status</th>
                   <th>Remarks</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
-                  const status = statusOf(r);
-                  return (
-                    <tr key={r.student}>
-                      <td>
-                        {r.name}
-                        <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{r.email}</div>
-                      </td>
-                      <td>
-                        {entryTime(r.joinedAt) ? (
-                          <span style={{ fontWeight: 'var(--font-weight-semibold)', fontVariantNumeric: 'tabular-nums' }}>
-                            {entryTime(r.joinedAt)}
-                          </span>
-                        ) : (
-                          <span className="lms-muted" title="Did not join the video">—</span>
-                        )}
-                      </td>
-                      <td><Badge tone={ATT_TONE[status]}>{AUTO_LABEL[status]}</Badge></td>
-                      <td>
-                        <Input
-                          placeholder="Optional…"
-                          value={r.remarks}
-                          onChange={(e) => setRemark(r.student, e.target.value)}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {rows.map((r) => (
+                  <tr key={r.student}>
+                    <td>
+                      {r.name}
+                      <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{r.email}</div>
+                    </td>
+                    <td>
+                      <Select value={r.status} onChange={(e) => setRow(r.student, { status: e.target.value })} options={ATT_OPTIONS} />
+                    </td>
+                    <td>
+                      <Input
+                        placeholder="Optional…"
+                        value={r.remarks}
+                        onChange={(e) => setRow(r.student, { remarks: e.target.value })}
+                      />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button onClick={submit} loading={save.isPending}>Save attendance</Button>
-            <span className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)' }}>
-              {counts.present ?? 0} on time · {counts.late ?? 0} late · {counts.absent ?? 0} absent
-            </span>
-            {saved && (
-              <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Check size={15} strokeWidth={3} /> Saved
-              </span>
-            )}
+          <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+            <Button onClick={submit} loading={save.isPending}>
+              Save attendance
+            </Button>
+            {saved && <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={15} strokeWidth={3} /> Saved</span>}
             {saveError && <span className="field__error">{saveError}</span>}
           </div>
         </>

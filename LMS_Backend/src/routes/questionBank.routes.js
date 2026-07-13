@@ -15,6 +15,9 @@ router.use(adminOrTrainer);
 router.get('/', validate({ query: qb.listBankQuery }), asyncHandler(qb.listBankItems));
 router.post('/', validate({ body: qb.createBankItemSchema }), asyncHandler(qb.createBankItem));
 router.post('/bulk', validate({ body: qb.bulkBankSchema }), asyncHandler(qb.bulkAddBankItems));
+// Super admin only (enforced in the handler): copy master-bank questions into the
+// org they're currently drilled into.
+router.post('/import-from-template', validate({ body: qb.importFromTemplateSchema }), asyncHandler(qb.importFromTemplate));
 router.patch('/:itemId', validate({ params: qb.bankItemParam, body: qb.updateBankItemSchema }), asyncHandler(qb.updateBankItem));
 router.delete('/:itemId', validate({ params: qb.bankItemParam }), asyncHandler(qb.deleteBankItem));
 

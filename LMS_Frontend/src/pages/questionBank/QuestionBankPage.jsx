@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { AlertTriangle, CheckCircle2, Download, FileQuestion, Lock, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
-import { QuestionType, UserRole } from '@/shared';
+import { QuestionType, QuestionComplexity, UserRole } from '@/shared';
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Select, SkeletonTable, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
@@ -19,13 +19,18 @@ import '../modules/modules.css';
 
 const GENERAL = '__general__'; // sentinel for "no specific topic"
 
+const COMPLEXITY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+const COMPLEXITY_TONE = { easy: 'success', medium: 'warning', hard: 'danger' };
+const COMPLEXITY_OPTIONS = Object.values(QuestionComplexity).map((v) => ({ value: v, label: COMPLEXITY_LABEL[v] }));
+
 export function QuestionBankPage() {
   const role = useAuth((s) => s.user?.role);
   const confirm = useConfirm();
   const { data: modules } = useModules();
   const [moduleId, setModuleId] = useState('');
   const [topicFilter, setTopicFilter] = useState(''); // '' = all, GENERAL, or topicId
-  const { data: items, isLoading, isError, error, refetch } = useQuestionBank({ module: moduleId });
+  const [complexityFilter, setComplexityFilter] = useState(''); // '' = all
+  const { data: items, isLoading, isError, error, refetch } = useQuestionBank({ module: moduleId, complexity: complexityFilter });
 
   const moduleObj = useMemo(() => (modules ?? []).find((m) => m.id === moduleId), [modules, moduleId]);
   const topics = moduleObj?.topics ?? [];
@@ -82,6 +87,15 @@ export function QuestionBankPage() {
           </div>
         )}
         {moduleId && (
+          <div style={{ flex: '1 1 9rem', minWidth: 0, maxWidth: '12rem' }}>
+            <Select
+              value={complexityFilter}
+              onChange={(e) => setComplexityFilter(e.target.value)}
+              options={[{ value: '', label: 'All complexity' }, ...COMPLEXITY_OPTIONS]}
+            />
+          </div>
+        )}
+        {moduleId && (
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginLeft: 'auto' }}>
             <Button variant="outline" onClick={() => setImporting(true)}>
               <UploadCloud size={15} style={{ marginRight: 6 }} /> Import Excel
@@ -122,7 +136,7 @@ export function QuestionBankPage() {
             <div className="table-wrap">
               <table className="table">
                 <thead>
-                  <tr><th>#</th><th>Question</th><th>Type</th><th>Topic</th><th>Answer</th><th>Pts</th><th /></tr>
+                  <tr><th>#</th><th>Question</th><th>Type</th><th>Complexity</th><th>Topic</th><th>Answer</th><th>Pts</th><th /></tr>
                 </thead>
                 <tbody>
                   {filtered.map((q, i) => (
@@ -130,6 +144,7 @@ export function QuestionBankPage() {
                       <td>{i + 1}</td>
                       <td style={{ maxWidth: '24rem' }}>{q.prompt}</td>
                       <td><Badge tone="neutral">{QUESTION_TYPE_LABEL[q.type]}</Badge></td>
+                      <td><Badge tone={COMPLEXITY_TONE[q.complexity] ?? 'neutral'}>{COMPLEXITY_LABEL[q.complexity] ?? q.complexity ?? '—'}</Badge></td>
                       <td>{q.topicTitle ? <Badge tone="primary">{q.topicTitle}</Badge> : <span className="lms-muted">General</span>}</td>
                       <td className="lms-muted">
                         {q.type === QuestionType.MCQ && q.options?.[q.correctOption] != null ? q.options[q.correctOption] : '—'}
@@ -174,7 +189,7 @@ export function QuestionBankPage() {
 
 // ── Add / edit a single question ────────────────────────────────────────────────
 
-const BLANK_Q = { type: QuestionType.MCQ, prompt: '', options: ['', ''], correctOption: 0, referenceAnswer: '', points: 1, topic: '' };
+const BLANK_Q = { type: QuestionType.MCQ, complexity: QuestionComplexity.MEDIUM, prompt: '', options: ['', ''], correctOption: 0, referenceAnswer: '', points: 1, topic: '' };
 
 function BankQuestionModal({ moduleId, topics, question, onClose }) {
   const isEdit = Boolean(question);
@@ -189,6 +204,7 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
       question
         ? {
             type: question.type,
+            complexity: question.complexity ?? QuestionComplexity.MEDIUM,
             prompt: question.prompt,
             options: question.options?.length ? [...question.options] : ['', ''],
             correctOption: question.correctOption ?? 0,
@@ -214,6 +230,7 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
     setErr('');
     const payload = {
       type: form.type,
+      complexity: form.complexity,
       prompt: form.prompt,
       points: Number(form.points) || 1,
       topic: form.topic || null,
@@ -243,7 +260,14 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
       }
     >
       <form id="bank-q-form" onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={QUESTION_TYPE_OPTIONS} />
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 12rem' }}>
+            <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={QUESTION_TYPE_OPTIONS} />
+          </div>
+          <div style={{ flex: '1 1 10rem' }}>
+            <Select label="Complexity" value={form.complexity} onChange={(e) => setForm({ ...form, complexity: e.target.value })} options={COMPLEXITY_OPTIONS} />
+          </div>
+        </div>
         <Select
           label="Topic (optional)"
           value={form.topic}
@@ -304,7 +328,14 @@ function fieldFor(header) {
   if (k === 'correctanswer' || k === 'correct' || k === 'answer' || k === 'correctoption') return 'correct';
   if (k === 'expectedanswer' || k === 'modelanswer' || k === 'answerkey' || k === 'rubric' || k === 'gradingnotes' || k === 'guidance') return 'reference';
   if (k === 'points' || k === 'marks' || k === 'point') return 'points';
+  if (k === 'complexity' || k === 'difficulty') return 'complexity';
   return null;
+}
+function normalizeComplexity(v) {
+  const c = String(v ?? '').trim().toLowerCase();
+  if (c === 'easy' || c === 'e') return 'easy';
+  if (c === 'hard' || c === 'h' || c === 'difficult') return 'hard';
+  return 'medium';
 }
 function normalizeRows(raw) {
   return raw.map((row) => {
@@ -328,16 +359,17 @@ function resolveCorrect(correctRaw, options) {
 function rowToQuestion(row, type) {
   if (!row.prompt) return null;
   const points = Math.max(1, Math.min(100, Math.round(Number(row.points) || 1)));
-  if (type !== QuestionType.MCQ) return { type, prompt: row.prompt, points, referenceAnswer: row.reference || '' };
+  const complexity = normalizeComplexity(row.complexity);
+  if (type !== QuestionType.MCQ) return { type, complexity, prompt: row.prompt, points, referenceAnswer: row.reference || '' };
   const options = [row.opt1, row.opt2, row.opt3, row.opt4].filter((o) => o && o.trim() !== '');
   if (options.length < 2) return null;
   const correctOption = resolveCorrect(row.correct, options);
   if (correctOption < 0) return null;
-  return { type, prompt: row.prompt, options, correctOption, points };
+  return { type, complexity, prompt: row.prompt, options, correctOption, points };
 }
 
-const MCQ_HEADERS = ['question', 'option 1', 'option 2', 'option 3', 'option 4', 'correct answer', 'points'];
-const TEXT_HEADERS = ['question', 'expected answer', 'points'];
+const MCQ_HEADERS = ['question', 'complexity', 'option 1', 'option 2', 'option 3', 'option 4', 'correct answer', 'points'];
+const TEXT_HEADERS = ['question', 'complexity', 'expected answer', 'points'];
 
 function BankExcelImport({ moduleId, topics, onClose }) {
   const [type, setType] = useState(QuestionType.MCQ);
@@ -375,8 +407,8 @@ function BankExcelImport({ moduleId, topics, onClose }) {
   function downloadTemplate() {
     const headers = isMcq ? MCQ_HEADERS : TEXT_HEADERS;
     const example = isMcq
-      ? ['What does LLM stand for?', 'Large Language Model', 'Low Level Machine', 'Linear Logic Map', 'Long Lived Memory', 'Large Language Model', 1]
-      : ['Describe how you would design a RAG pipeline for a support chatbot.', 'Should cover: chunking strategy, embeddings + vector store, retrieval, and grounding the LLM answer in retrieved context.', 5];
+      ? ['What does LLM stand for?', 'easy', 'Large Language Model', 'Low Level Machine', 'Linear Logic Map', 'Long Lived Memory', 'Large Language Model', 1]
+      : ['Describe how you would design a RAG pipeline for a support chatbot.', 'hard', 'Should cover: chunking strategy, embeddings + vector store, retrieval, and grounding the LLM answer in retrieved context.', 5];
     const ws = XLSX.utils.aoa_to_sheet([headers, example]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Questions');
@@ -424,9 +456,9 @@ function BankExcelImport({ moduleId, topics, onClose }) {
 
       <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>
         {isMcq ? (
-          <>Columns: <strong>question</strong>, <strong>option 1–4</strong>, <strong>correct answer</strong> (option text, or 1–4, or A–D), optional <strong>points</strong>.</>
+          <>Columns: <strong>question</strong>, <strong>complexity</strong> (easy / medium / hard), <strong>option 1–4</strong>, <strong>correct answer</strong> (option text, or 1–4, or A–D), optional <strong>points</strong>.</>
         ) : (
-          <>Columns: a <strong>question</strong> column (the scenario / prompt / repo task), an optional <strong>expected answer</strong> (model answer or rubric — improves grading accuracy, never shown to students), and optional <strong>points</strong>.</>
+          <>Columns: a <strong>question</strong> column (the scenario / prompt / repo task), <strong>complexity</strong> (easy / medium / hard), an optional <strong>expected answer</strong> (model answer or rubric — improves grading accuracy, never shown to students), and optional <strong>points</strong>.</>
         )}
       </p>
 

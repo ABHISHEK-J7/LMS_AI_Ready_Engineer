@@ -33,10 +33,10 @@ export async function startTestServer() {
   const { setAmbientOrg } = await import('../src/services/tenantContext.js');
   setAmbientOrg(defaultOrg._id);
 
-  async function req(method, path, token, body) {
+  async function req(method, path, token, body, headers = {}) {
     const res = await fetch(base + path, {
       method,
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
     });
     let json = null;

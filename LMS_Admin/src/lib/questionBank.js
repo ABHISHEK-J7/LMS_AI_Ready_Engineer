@@ -37,3 +37,8 @@ export function useDeleteBankQuestion() {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: (id) => unwrap(api.delete(`/question-bank/${id}`)), onSuccess: invalidate });
 }
+/** Super admin (drilled into an org): copy master-bank questions into this org. */
+export function useImportFromMaster() {
+  const invalidate = useInvalidate();
+  return useMutation({ mutationFn: (body) => unwrap(api.post('/question-bank/import-from-template', body)), onSuccess: invalidate });
+}

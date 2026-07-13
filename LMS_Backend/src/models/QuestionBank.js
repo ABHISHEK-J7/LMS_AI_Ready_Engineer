@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { QuestionType } from '#shared';
+import { QuestionType, QuestionComplexity } from '#shared';
 import { baseSchemaOptions } from './baseSchema.js';
 
 /**
@@ -16,6 +16,9 @@ const questionBankSchema = new Schema(
     topic: { type: Schema.Types.ObjectId, default: null, index: true },
     topicTitle: { type: String, trim: true, default: '' },
     type: { type: String, enum: Object.values(QuestionType), default: QuestionType.MCQ },
+    // Difficulty tag (easy / medium / hard) — used to filter and to bulk-import
+    // a specific difficulty from the master bank into an organization.
+    complexity: { type: String, enum: Object.values(QuestionComplexity), default: QuestionComplexity.MEDIUM, index: true },
     prompt: { type: String, required: true, trim: true },
     options: { type: [String], default: [] },
     correctOption: { type: Number },

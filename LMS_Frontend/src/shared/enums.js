@@ -61,6 +61,13 @@ export const QuestionType = {
   CODING: 'coding',
 };
 
+/** Difficulty tag on a question-bank item (used for filtering & import). */
+export const QuestionComplexity = {
+  EASY: 'easy',
+  MEDIUM: 'medium',
+  HARD: 'hard',
+};
+
 /** Locked until the trainer opens it after finishing the matching syllabus section. */
 export const AssessmentAvailability = {
   LOCKED: 'locked',

@@ -1,8 +1,9 @@
-import { UserStatus } from '#shared';
+import { UserRole, UserStatus } from '#shared';
 import { User } from '../models/index.js';
 import { ApiError } from '../utils/ApiError.js';
 import { verifyAccessToken } from '../utils/jwt.js';
 import { getAuthUser, setAuthUser } from '../services/authCache.js';
+import { tenantStore } from '../services/tenantContext.js';
 
 /**
  * Require a valid access token; attaches `req.auth`. Beyond signature/expiry,
@@ -49,8 +50,24 @@ export async function authenticate(req, _res, next) {
       throw ApiError.forbidden('Your account is not active. Contact your administrator.');
     }
 
-    req.auth = { userId: payload.sub, role: info.role, name: info.name, organization: info.organization ?? null };
-    next();
+    // Super-admin "drill in": when a super admin targets an org via the X-Org-Id
+    // header, they ACT AS an admin of that org — reusing all admin logic + scoping,
+    // with no per-controller changes. Without the header they stay the global super
+    // admin (only the /organizations routes apply).
+    let effectiveRole = info.role;
+    let effectiveOrg = info.organization ?? null;
+    if (info.role === UserRole.SUPER_ADMIN) {
+      const target = req.headers['x-org-id'];
+      if (target && /^[0-9a-fA-F]{24}$/.test(target)) {
+        effectiveRole = UserRole.ADMIN;
+        effectiveOrg = target;
+      }
+    }
+
+    req.auth = { userId: payload.sub, role: effectiveRole, name: info.name, organization: effectiveOrg, isSuperAdmin: info.role === UserRole.SUPER_ADMIN };
+    // Run the rest of the request inside the tenant context so every DB query is
+    // auto-scoped to this org (see models/tenantPlugin.js).
+    tenantStore.run({ role: effectiveRole, organization: effectiveOrg }, () => next());
   } catch (err) {
     next(err);
   }
@@ -60,9 +77,11 @@ export async function authenticate(req, _res, next) {
 export function requireRole(...roles) {
   return (req, _res, next) => {
     if (!req.auth) throw ApiError.unauthorized();
-    if (!roles.includes(req.auth.role)) {
-      throw ApiError.forbidden(`Requires role: ${roles.join(' or ')}`);
+    // The super admin has full oversight — allowed on every role-guarded route
+    // (except where a route explicitly restricts to SUPER_ADMIN only, which lists it).
+    if (req.auth.role === UserRole.SUPER_ADMIN || roles.includes(req.auth.role)) {
+      return next();
     }
-    next();
+    throw ApiError.forbidden(`Requires role: ${roles.join(' or ')}`);
   };
 }

@@ -1,3 +1,4 @@
+import './registerPlugins.js'; // must run before any model compiles
 export { User } from './User.js';
 export { Organization } from './Organization.js';
 export { Module } from './Module.js';

@@ -27,12 +27,17 @@ function initials(name) {
 export function AppLayout() {
   const { user, logout } = useAuth();
   const orgView = useAuth((s) => s.orgView);
+  const templateMissing = useAuth((s) => s.templateMissing);
   const clearOrgView = useAuth((s) => s.clearOrgView);
   const location = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { navRef, indicatorRef } = useSidebarMotion(location.pathname);
-  const badges = useNavBadges();
+  // A super admin managing tenants (not drilled in) works against the master
+  // template — it has no announcements/certs/projects/notifications, so skip those
+  // queries entirely (avoids marking the template's notifications read, etc.).
+  const superManaging = user?.role === UserRole.SUPER_ADMIN && !orgView;
+  const badges = useNavBadges(!superManaging);
   const [navOpen, setNavOpen] = useState(false);
 
   // Close the mobile drawer whenever the route changes.
@@ -42,7 +47,6 @@ export function AppLayout() {
 
   // A super admin managing tenants gets the org nav; once drilled into an org they
   // act as its admin (admin nav).
-  const superManaging = user.role === UserRole.SUPER_ADMIN && !orgView;
   const navRole = superManaging ? UserRole.SUPER_ADMIN : UserRole.ADMIN;
   const nav = NAV_BY_ROLE[navRole];
 
@@ -122,7 +126,8 @@ export function AppLayout() {
             <div className="topbar__title">{current.label}</div>
           </div>
           <div className="topbar__right">
-            <NotificationsBell />
+            {/* Notifications are per-org; a managing super admin has no org context. */}
+            {!superManaging && <NotificationsBell />}
             <ThemeSwitcher />
             <div className="user-chip">
               <div className="user-chip__avatar">
@@ -150,6 +155,13 @@ export function AppLayout() {
               <Building2 size={16} />
               <span>Viewing organization <strong>{orgView.name}</strong> — you're acting as its admin.</span>
               <button type="button" className="org-banner__exit" onClick={exitOrg}>Exit to organizations</button>
+            </div>
+          )}
+          {superManaging && templateMissing && (
+            <div className="org-banner org-banner--warn">
+              <Building2 size={16} />
+              <span>The master template isn't set up, so <strong>Master Curriculum</strong> and{' '}
+              <strong>Question Bank</strong> can't be edited. Run the seed to create it.</span>
             </div>
           )}
           <PageTransition>

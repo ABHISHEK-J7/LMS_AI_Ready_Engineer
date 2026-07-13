@@ -10,11 +10,11 @@ import { useProjectReviews } from './projects';
  *
  * @returns {Record<string, number>}
  */
-export function useNavBadges() {
+export function useNavBadges(enabled = true) {
   const location = useLocation();
-  const { data: announcements } = useAnnouncements();
-  const { data: certReviews } = useCertReviews(); // admins always review
-  const { data: projectReviews } = useProjectReviews();
+  const { data: announcements } = useAnnouncements({ enabled });
+  const { data: certReviews } = useCertReviews(enabled); // admins always review
+  const { data: projectReviews } = useProjectReviews(enabled);
   const [annSeen, setAnnSeen] = useState(getAnnouncementsSeenAt());
 
   useEffect(() => {

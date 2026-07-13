@@ -96,10 +96,19 @@ export async function getUser(req, res) {
 }
 
 /** Admin: onboard a user (student/trainer/admin). */
+// Email is a GLOBAL identity: sign-in is by email alone, so it must be unique across
+// the WHOLE platform, even between organizations (a person can't hold two accounts).
+// The `organization: { $exists: true }` filter opts out of tenant scoping (every user
+// has that field), so this checks ALL orgs — otherwise a cross-org duplicate slips
+// past the in-org check and hits the unique index as a raw duplicate-key 500.
+function emailExistsGlobally(email) {
+  return User.exists({ email, organization: { $exists: true } });
+}
+
 export async function createUser(req, res) {
   const { name, email, password, role, phone } = req.body;
-  if (await User.findOne({ email })) {
-    throw ApiError.conflict('An account with that email already exists');
+  if (await emailExistsGlobally(email)) {
+    throw ApiError.conflict('An account with that email already exists (emails are unique across all organizations).');
   }
   const passwordHash = await User.setPassword(password);
   const user = await User.create({
@@ -142,10 +151,16 @@ export async function bulkCreateUsers(req, res) {
     if (seen.has(email)) { skipped.push({ email, reason: 'Duplicate row' }); continue; }
     seen.add(email);
 
-    const existing = await User.findOne({ email });
+    const existing = await User.findOne({ email }); // same-org match (tenant-scoped)
     if (existing) {
       skipped.push({ email, reason: 'Already exists' });
       if (batch && existing.role === UserRole.STUDENT) enrollIds.push(existing.id);
+      continue;
+    }
+    // Guard the global email identity: an email used in ANOTHER org can't be
+    // re-created here (it would hit the unique index) — skip it cleanly.
+    if (await emailExistsGlobally(email)) {
+      skipped.push({ email, reason: 'Email is in use in another organization' });
       continue;
     }
     // No passwordHash: user sets it later via the OTP onboarding flow.

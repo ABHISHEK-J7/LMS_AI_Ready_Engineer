@@ -41,6 +41,12 @@ export const orgViewStore = {
   clear() { localStorage.removeItem(ORGVIEW_KEY); },
 };
 
+// Whether the CURRENT session is the super admin. Only a super-admin session may
+// attach the X-Org-Id scoping header — so a stale `lms.orgView` in localStorage can
+// never make a plain admin's requests carry an org header. Set by the auth store.
+let superAdminSession = false;
+export function setSuperAdminSession(value) { superAdminSession = Boolean(value); }
+
 // The super admin's Master-Template org id (fetched at login). Curriculum pages in
 // super-admin "managing" mode scope to it, so the modules the super admin edits ARE
 // the template that seeds new orgs.
@@ -76,19 +82,16 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = tokenStore.access;
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  // Super-admin scoping via X-Org-Id:
+  // Super-admin scoping via X-Org-Id (only ever attached for a super-admin session):
   //  - drilled into an org  -> that org (acts as its admin)
-  //  - otherwise (global)   -> the master template org, so curriculum pages edit
-  //    the template. The /organizations endpoints are super-admin-only and must
-  //    keep the global (no-header) context, so we never scope those.
+  //  - otherwise (global)   -> the master template org, so curriculum pages edit it.
+  // The /organizations endpoints are super-admin-only and MUST keep the global
+  // (no-header) context, so they are never scoped — regardless of drill-in state.
   const url = config.url || '';
   const isOrgAdminApi = url.startsWith('/organizations');
-  const ov = orgViewStore.get();
-  if (ov?.id) {
-    config.headers['X-Org-Id'] = ov.id;
-  } else if (!isOrgAdminApi) {
-    const tpl = templateOrgStore.get();
-    if (tpl?.id) config.headers['X-Org-Id'] = tpl.id;
+  if (superAdminSession && !isOrgAdminApi) {
+    const orgId = orgViewStore.get()?.id ?? templateOrgStore.get()?.id;
+    if (orgId) config.headers['X-Org-Id'] = orgId;
   }
   return config;
 });
@@ -127,7 +130,12 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       }
+      // Refresh failed → the session is dead. Clear it and send them to login
+      // instead of stranding them on a half-broken, error-filled page.
       tokenStore.clear();
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login');
+      }
     }
     return Promise.reject(error);
   },

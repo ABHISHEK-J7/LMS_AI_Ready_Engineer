@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import { UserRole } from '@/shared';
 import { api, tokenStore, unwrap } from './api';
 
-/** The main app serves students & trainers. Administrators use the separate Admin portal. */
+/** The main app serves students & trainers. Administrators and the super admin
+ *  use the separate Admin portal (a super admin here would see broken cross-org UI). */
 function rejectAdmin(user) {
-  if (user?.role === UserRole.ADMIN) {
+  if (user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN) {
     const err = new Error('Administrators sign in through the Admin portal.');
     err.code = 'IS_ADMIN';
     throw err;

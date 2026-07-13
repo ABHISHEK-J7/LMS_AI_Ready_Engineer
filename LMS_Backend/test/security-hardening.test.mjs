@@ -72,6 +72,21 @@ test('H1: each organization has its own settings; a second org admin does not 50
   assert.notEqual(bSettings.data.passingScore, 55, "org B keeps its own passing score");
 });
 
+// ── M4: email is a global identity — cross-org reuse is a clean 409, not a 500 ─
+test('M4: an admin cannot create a user whose email exists in another org (clean 409)', async () => {
+  const { req } = ctx;
+  await req('POST', '/organizations', SA, { name: 'Org C', code: 'ORGC', adminName: 'C Admin', adminEmail: 'c@orgc.local', adminPassword: 'Passw0rd!' });
+  await req('POST', '/organizations', SA, { name: 'Org D', code: 'ORGD', adminName: 'D Admin', adminEmail: 'd@orgd.local', adminPassword: 'Passw0rd!' });
+  const C = await ctx.login('c@orgc.local');
+  const D = await ctx.login('d@orgd.local');
+
+  const first = await req('POST', '/users', C, { name: 'Shared', email: 'shared@x.local', password: 'Passw0rd!', role: 'student' });
+  assert.equal(first.status, 201);
+  // Org D reusing the same email → 409 (not a raw duplicate-key 500).
+  const dup = await req('POST', '/users', D, { name: 'Shared Two', email: 'shared@x.local', password: 'Passw0rd!', role: 'student' });
+  assert.equal(dup.status, 409);
+});
+
 // ── H2: a suspended organization locks out its members (super admin exempt) ────
 test('H2: suspending an org blocks its users at login and mid-session; reactivating restores', async () => {
   const { req } = ctx;

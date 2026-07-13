@@ -6,6 +6,9 @@ import { baseSchemaOptions } from './baseSchema.js';
 const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
+    // Email is a GLOBAL identity, unique across the WHOLE platform (not per-org):
+    // sign-in is by email alone with no org selector, so it must be unambiguous. A
+    // person therefore cannot hold accounts in two organizations under one email.
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
     // Optional: bulk-imported users have no password until they set one through
     // the email-OTP onboarding flow.

@@ -83,7 +83,12 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       }
+      // Refresh failed → session is dead. Clear it and go to login rather than
+      // leaving the user stranded on a broken page.
       tokenStore.clear();
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login');
+      }
     }
     return Promise.reject(error);
   },

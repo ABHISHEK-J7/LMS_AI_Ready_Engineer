@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { UserRole } from '@/shared';
-import { api, tokenStore, orgViewStore, templateOrgStore, unwrap } from './api';
+import { api, tokenStore, orgViewStore, templateOrgStore, setSuperAdminSession, unwrap } from './api';
 
 const PORTAL_ROLES = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
 
@@ -15,15 +15,22 @@ function assertPortalUser(user) {
 
 /**
  * For the super admin, remember the master-template org id so curriculum pages
- * (Modules / Question Bank) scope to it via X-Org-Id. Best-effort: a missing
- * template just leaves the super admin's curriculum pages empty.
+ * (Modules / Question Bank) scope to it via X-Org-Id, and mark this a super-admin
+ * session (gates the X-Org-Id header). Returns whether the template is missing so
+ * the UI can warn instead of silently editing nothing.
  */
 async function syncTemplateOrg(user) {
-  if (user?.role !== UserRole.SUPER_ADMIN) { templateOrgStore.clear(); return; }
+  const isSuper = user?.role === UserRole.SUPER_ADMIN;
+  setSuperAdminSession(isSuper);
+  if (!isSuper) { templateOrgStore.clear(); return { templateMissing: false }; }
   try {
     const org = await unwrap(api.get('/organizations/template'));
     templateOrgStore.set({ id: org.id, name: org.name });
-  } catch { templateOrgStore.clear(); }
+    return { templateMissing: false };
+  } catch {
+    templateOrgStore.clear();
+    return { templateMissing: true };
+  }
 }
 
 export const useAuth = create((set) => ({
@@ -31,6 +38,8 @@ export const useAuth = create((set) => ({
   status: 'loading',
   // Which org a super admin is currently drilled into (null = managing organizations).
   orgView: orgViewStore.get(),
+  // True when the super admin's master-template org couldn't be resolved (warn in UI).
+  templateMissing: false,
 
   async login(email, password) {
     const result = await unwrap(api.post('/auth/login', { email, password }));
@@ -42,8 +51,8 @@ export const useAuth = create((set) => ({
     }
     tokenStore.set(result.tokens);
     orgViewStore.clear();
-    await syncTemplateOrg(result.user);
-    set({ user: result.user, status: 'authenticated', orgView: null });
+    const { templateMissing } = await syncTemplateOrg(result.user);
+    set({ user: result.user, status: 'authenticated', orgView: null, templateMissing });
     return result.user;
   },
 
@@ -62,7 +71,8 @@ export const useAuth = create((set) => ({
     tokenStore.clear();
     orgViewStore.clear();
     templateOrgStore.clear();
-    set({ user: null, status: 'unauthenticated', orgView: null });
+    setSuperAdminSession(false);
+    set({ user: null, status: 'unauthenticated', orgView: null, templateMissing: false });
   },
 
   async bootstrap() {
@@ -73,13 +83,14 @@ export const useAuth = create((set) => ({
     try {
       const { user } = await unwrap(api.get('/auth/me'));
       assertPortalUser(user);
-      await syncTemplateOrg(user);
-      set({ user, status: 'authenticated', orgView: orgViewStore.get() });
+      const { templateMissing } = await syncTemplateOrg(user);
+      set({ user, status: 'authenticated', orgView: orgViewStore.get(), templateMissing });
     } catch {
       tokenStore.clear();
       orgViewStore.clear();
       templateOrgStore.clear();
-      set({ user: null, status: 'unauthenticated', orgView: null });
+      setSuperAdminSession(false);
+      set({ user: null, status: 'unauthenticated', orgView: null, templateMissing: false });
     }
   },
 }));

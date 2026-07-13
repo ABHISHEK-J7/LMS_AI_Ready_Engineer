@@ -21,6 +21,23 @@ export function useUsersByRole(role, { enabled = true, pageSize = 200 } = {}) {
 export const useStudents = (opts) => useUsersByRole('student', opts);
 export const useTrainers = (opts) => useUsersByRole('trainer', opts);
 
+/**
+ * Server-side search for users of a role by name OR email. Scales to large user
+ * bases (unlike loading every user into a dropdown). Disabled until there's a query.
+ */
+export function useSearchUsers(role, query, { limit = 20 } = {}) {
+  const q = (query ?? '').trim();
+  return useQuery({
+    queryKey: ['users', 'search', role, q, limit],
+    enabled: q.length >= 1,
+    queryFn: async () => {
+      const page = await unwrap(api.get('/users', { params: { role, search: q, pageSize: limit } }));
+      return page.items;
+    },
+    placeholderData: (prev) => prev, // avoid flicker between keystrokes
+  });
+}
+
 /** Admin: paginated, filterable directory. Returns { items, page, pageSize, total }. */
 export function useUsers(filters = {}) {
   const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v != null));

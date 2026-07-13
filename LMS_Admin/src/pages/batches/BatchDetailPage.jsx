@@ -15,9 +15,11 @@ import {
   Select,
   Skeleton,
   SkeletonText,
+  useToast,
 } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { BulkUploadUsers } from '@/components/BulkUploadUsers';
+import { UserSearchSelect } from '@/components/UserSearchSelect';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import {
@@ -30,7 +32,7 @@ import {
   useUpdateBatch,
 } from '@/lib/batches';
 import { formatDateRange, toDateInput } from '@/lib/format';
-import { useStudents, useTrainers } from '@/lib/users';
+import { useTrainers } from '@/lib/users';
 import { useModules } from '@/lib/modules';
 import '../modules/modules.css';
 
@@ -108,20 +110,23 @@ function diff(all, assigned) {
 }
 
 function StudentsPanel({ batch, isAdmin }) {
-  const { data: students, isLoading } = useStudents();
   const assign = useAssignStudents();
   const remove = useRemoveStudent();
   const qc = useQueryClient();
+  const toast = useToast();
   const [bulk, setBulk] = useState(false);
-  const [pick, setPick] = useState('');
 
   const enrolled = batch.students ?? [];
-  const available = diff(students, enrolled);
-  const noneText = isLoading
-    ? 'Loading…'
-    : (students?.length ?? 0) === 0
-      ? 'No students yet — add them in Users'
-      : 'All students already enrolled';
+  const enrolledIds = enrolled.map((s) => s.id);
+
+  async function addStudent(user) {
+    try {
+      await assign.mutateAsync({ id: batch.id, ids: [user.id] });
+      toast.success(`${user.name} added to the batch.`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
 
   return (
     <>
@@ -129,25 +134,16 @@ function StudentsPanel({ batch, isAdmin }) {
         <div className="panel-head">
           <CardHeader title={`Students (${enrolled.length})`} subtitle="Each student belongs to exactly one batch" />
           {isAdmin && (
-            <div className="add-inline">
-              <Select
-                value={pick}
-                onChange={(e) => setPick(e.target.value)}
-                options={[
-                  { value: '', label: available.length ? 'Add a student…' : noneText },
-                  ...available.map((s) => ({ value: s.id, label: s.name })),
-                ]}
+            // A search box (by name or email) instead of a dropdown — scales to
+            // thousands of students without an unusable, mile-long list.
+            <div className="add-inline" style={{ flex: '1 1 18rem' }}>
+              <UserSearchSelect
+                role="student"
+                excludeIds={enrolledIds}
+                disabled={assign.isPending}
+                placeholder="Search students by name or email…"
+                onPick={addStudent}
               />
-              <Button
-                disabled={!pick}
-                loading={assign.isPending}
-                onClick={async () => {
-                  await assign.mutateAsync({ id: batch.id, ids: [pick] });
-                  setPick('');
-                }}
-              >
-                Add
-              </Button>
             </div>
           )}
           {isAdmin && (

@@ -30,6 +30,25 @@ test('final-test violation limit is stored, editable, and cleared when unproctor
   assert.equal(off.data.violationLimit, 0);
 });
 
+// ── External certificates: students can delete pending/rejected, not approved ───
+test('a student can delete a pending external certificate but not an approved one', async () => {
+  const { req } = ctx;
+  await ctx.mkUser('CertStud', 'cs@x.local', 'student');
+  const S = await ctx.login('cs@x.local');
+
+  const a = await req('POST', '/external-certificates', S, { title: 'Cert A', url: 'https://issuer.example/a' });
+  const b = await req('POST', '/external-certificates', S, { title: 'Cert B', url: 'https://issuer.example/b' });
+  assert.equal(a.status, 201); assert.equal(b.status, 201);
+
+  // Admin approves A.
+  const rev = await req('PATCH', `/external-certificates/${a.data.id}/review`, A, { decision: 'approve' });
+  assert.equal(rev.status, 200);
+
+  // Pending B can be removed; approved A cannot.
+  assert.equal((await req('DELETE', `/external-certificates/${b.data.id}`, S)).status, 200);
+  assert.equal((await req('DELETE', `/external-certificates/${a.data.id}`, S)).status, 403);
+});
+
 // ── Doubts: auto-close, rate-anytime, average excludes unrated ──────────────────
 test('doubts: rate-anytime after an unrated resolve, and auto-close after 24h', async () => {
   const { req, models } = ctx;

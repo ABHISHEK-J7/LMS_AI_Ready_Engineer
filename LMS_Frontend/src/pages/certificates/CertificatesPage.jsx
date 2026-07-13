@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Award, ExternalLink, FileText, Share2, Upload } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Skeleton, SkeletonCards } from '@/components/ui';
+import { Award, ExternalLink, FileText, Share2, Trash2, Upload } from 'lucide-react';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Skeleton, SkeletonCards, useConfirm } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useMyCertificates } from '@/lib/certificates';
 import {
   useAddExternalCertificate,
+  useDeleteExternalCertificate,
   useMyExternalCertificates,
 } from '@/lib/externalCertificates';
 import { formatDate } from '@/lib/format';
@@ -133,8 +134,10 @@ function StudentCertificates() {
 const BLANK = { title: '', issuer: '', url: '', file: null, mode: 'link' };
 
 function ExternalCertificates() {
+  const confirm = useConfirm();
   const { data: items, isLoading, isError, error, refetch } = useMyExternalCertificates();
   const add = useAddExternalCertificate();
+  const del = useDeleteExternalCertificate();
   const [form, setForm] = useState(BLANK);
   const [err, setErr] = useState('');
 
@@ -211,6 +214,18 @@ function ExternalCertificates() {
                     onClick={() => shareLink(c.url, `${c.title}${c.issuer ? ` — ${c.issuer}` : ''}`)}
                   >
                     <Share2 size={13} />
+                  </button>
+                )}
+                {/* Approved certificates are locked; only pending/rejected can be removed. */}
+                {c.status !== 'approved' && (
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--danger"
+                    aria-label={`Remove ${c.title}`}
+                    title="Remove"
+                    onClick={async () => { if (await confirm({ title: 'Remove this certificate?', tone: 'danger', confirmLabel: 'Remove' })) del.mutate(c.id); }}
+                  >
+                    <Trash2 size={13} />
                   </button>
                 )}
               </div>

@@ -66,6 +66,11 @@ export async function create(req, res) {
 export async function remove(req, res) {
   const cert = await ExternalCertificate.findOne({ _id: req.params.id, student: req.auth.userId });
   if (!cert) throw ApiError.notFound('Certificate not found');
+  // Approved certificates are locked — a student can only remove ones still
+  // pending or rejected (e.g. added by mistake).
+  if (cert.status === ExternalCertStatus.APPROVED) {
+    throw ApiError.forbidden('An approved certificate cannot be removed.');
+  }
 
   // Best-effort cleanup of an uploaded file.
   await deleteByUrl(cert.url);

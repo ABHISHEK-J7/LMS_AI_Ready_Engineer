@@ -24,6 +24,7 @@ const questionBankSchema = new Schema(
     referenceAnswer: { type: String, default: '' },
     points: { type: Number, default: 1, min: 1, max: 100 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

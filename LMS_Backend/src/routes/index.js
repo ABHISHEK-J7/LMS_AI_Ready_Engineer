@@ -2,6 +2,7 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { ok } from '../utils/http.js';
 import authRoutes from './auth.routes.js';
+import organizationRoutes from './organization.routes.js';
 import userRoutes from './user.routes.js';
 import moduleRoutes from './module.routes.js';
 import batchRoutes from './batch.routes.js';
@@ -35,6 +36,7 @@ router.get('/health', (_req, res) => {
 });
 
 router.use('/auth', authRoutes);
+router.use('/organizations', organizationRoutes);
 router.use('/users', userRoutes);
 router.use('/modules', moduleRoutes);
 router.use('/batches', batchRoutes);

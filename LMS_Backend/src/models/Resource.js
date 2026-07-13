@@ -13,6 +13,7 @@ const resourceSchema = new Schema(
     // For article resources: the markdown body (rendered for students). Empty otherwise.
     content: { type: String, default: '' },
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

@@ -13,6 +13,7 @@ const classRatingSchema = new Schema(
     trainer: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     rating: { type: Number, required: true, min: 1, max: 5 },
     comment: { type: String, trim: true },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

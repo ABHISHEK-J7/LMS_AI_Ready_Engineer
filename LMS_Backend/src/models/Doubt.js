@@ -31,6 +31,7 @@ const doubtSchema = new Schema(
     answeredBy: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     // 1–5 star rating the student gives the trainer when they close the doubt.
     rating: { type: Number, min: 1, max: 5 },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

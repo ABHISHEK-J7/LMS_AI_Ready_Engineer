@@ -30,9 +30,15 @@ export async function authenticate(req, _res, next) {
     // logout/password-change/archive/suspend; 60s TTL otherwise).
     let info = getAuthUser(payload.sub);
     if (!info) {
-      const user = await User.findById(payload.sub).select('tokenVersion status role name');
+      const user = await User.findById(payload.sub).select('tokenVersion status role name organization');
       if (!user) throw ApiError.unauthorized('Account no longer exists');
-      info = { tokenVersion: user.tokenVersion ?? 0, status: user.status, role: user.role, name: user.name };
+      info = {
+        tokenVersion: user.tokenVersion ?? 0,
+        status: user.status,
+        role: user.role,
+        name: user.name,
+        organization: user.organization ? user.organization.toString() : null,
+      };
       setAuthUser(payload.sub, info);
     }
 
@@ -43,7 +49,7 @@ export async function authenticate(req, _res, next) {
       throw ApiError.forbidden('Your account is not active. Contact your administrator.');
     }
 
-    req.auth = { userId: payload.sub, role: info.role, name: info.name };
+    req.auth = { userId: payload.sub, role: info.role, name: info.name, organization: info.organization ?? null };
     next();
   } catch (err) {
     next(err);

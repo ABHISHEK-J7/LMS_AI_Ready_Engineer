@@ -14,8 +14,6 @@ const subtopicSchema = new Schema(
   subSchemaOptions,
 );
 
-// A topic groups its subtopics (a numbered list of concepts). `contentDeliverables`
-// is one shared block describing what's delivered for the whole topic.
 const topicSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -23,8 +21,6 @@ const topicSchema = new Schema(
     order: { type: Number, required: true, default: 0 },
     completed: { type: Boolean, default: false },
     subtopics: { type: [subtopicSchema], default: [] },
-    // One shared "content deliverables" block for the whole topic (same for all subtopics).
-    contentDeliverables: { type: String, trim: true, default: '' },
   },
   subSchemaOptions,
 );
@@ -32,7 +28,7 @@ const topicSchema = new Schema(
 const moduleSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
-    code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    code: { type: String, required: true, uppercase: true, trim: true },
     description: String,
     order: { type: Number, required: true, default: 0, index: true },
     level: { type: String, enum: Object.values(SkillLevel), default: SkillLevel.BEGINNER },
@@ -40,8 +36,12 @@ const moduleSchema = new Schema(
     topics: { type: [topicSchema], default: [] },
     assignedTrainers: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
     archived: { type: Boolean, default: false, index: true },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );
+
+// Module code is unique WITHIN an organization (each org has its own curriculum).
+moduleSchema.index({ organization: 1, code: 1 }, { unique: true });
 
 export const Module = mongoose.model('Module', moduleSchema);

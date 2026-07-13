@@ -15,6 +15,7 @@ const moduleProgressSchema = new Schema(
     practiceTestsCompleted: { type: Number, default: 0 },
     finalScore: Number,
     completedAt: Date,
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

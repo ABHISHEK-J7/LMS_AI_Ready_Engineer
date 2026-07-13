@@ -23,7 +23,7 @@ const taughtTopicsSchema = new Schema(
 const batchSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
-    code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    code: { type: String, required: true, uppercase: true, trim: true },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     students: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
@@ -36,8 +36,12 @@ const batchSchema = new Schema(
     // Which syllabus topics have been taught, per module, in this batch.
     taughtTopics: [taughtTopicsSchema],
     archived: { type: Boolean, default: false, index: true },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );
+
+// Batch code is unique WITHIN an organization.
+batchSchema.index({ organization: 1, code: 1 }, { unique: true });
 
 export const Batch = mongoose.model('Batch', batchSchema);

@@ -23,6 +23,7 @@ const externalCertificateSchema = new Schema(
     reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: { type: Date },
     note: { type: String, trim: true }, // optional reviewer note (e.g. rejection reason)
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

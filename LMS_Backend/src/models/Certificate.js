@@ -10,6 +10,7 @@ const certificateSchema = new Schema(
     issuedAt: { type: Date, default: () => new Date() },
     verifyUrl: { type: String, required: true },
     qrDataUrl: String,
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

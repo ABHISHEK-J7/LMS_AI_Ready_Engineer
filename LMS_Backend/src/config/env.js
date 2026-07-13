@@ -89,4 +89,10 @@ export const env = {
     email: process.env.SEED_ADMIN_EMAIL ?? 'admin@aiready.local',
     password: process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!',
   },
+  // The global super admin (no organization) — creates orgs + their admins.
+  seedSuperAdmin: {
+    name: process.env.SEED_SUPERADMIN_NAME ?? 'Super Admin',
+    email: process.env.SEED_SUPERADMIN_EMAIL ?? 'superadmin@aiready.local',
+    password: process.env.SEED_SUPERADMIN_PASSWORD ?? process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!',
+  },
 };

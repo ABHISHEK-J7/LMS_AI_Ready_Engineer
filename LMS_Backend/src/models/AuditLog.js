@@ -15,6 +15,7 @@ const auditLogSchema = new Schema(
     targetId: { type: String, default: '' },
     meta: { type: Schema.Types.Mixed },
     ip: { type: String, default: '' },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

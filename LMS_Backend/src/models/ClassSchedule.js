@@ -25,6 +25,7 @@ const classScheduleSchema = new Schema(
     // Grace window (minutes after startTime) within which a join counts as
     // on-time. Beyond it → late. Drives the automated attendance status.
     attendanceBufferMinutes: { type: Number, default: 10, min: 0, max: 240 },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

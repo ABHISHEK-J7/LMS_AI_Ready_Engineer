@@ -34,6 +34,7 @@ const submissionSchema = new Schema(
     // Proctoring warnings (blocked shortcuts / leaving the exam). Counted for staff review.
     warnings: { type: Number, default: 0 },
     warningLog: { type: [{ _id: false, reason: String, at: Date }], default: [] },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

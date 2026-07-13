@@ -13,6 +13,7 @@ const notificationSchema = new Schema(
     body: { type: String, trim: true, default: '' },
     link: { type: String, default: '' },
     read: { type: Boolean, default: false },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

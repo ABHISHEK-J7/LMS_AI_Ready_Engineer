@@ -141,9 +141,11 @@ export function BulkUploadUsers({ batchId = null, lockRole = false, onClose, onU
         {batchId ? ' Imported students are enrolled into this batch.' : ''}
       </p>
 
-      <button type="button" className="btn btn--ghost btn--sm" style={{ alignSelf: 'flex-start' }} onClick={downloadTemplate}>
-        <Download size={15} style={{ marginRight: 6 }} /> Download template
-      </button>
+      <div style={{ alignSelf: 'flex-start' }}>
+        <Button type="button" variant="outline" onClick={downloadTemplate}>
+          <Download size={15} style={{ marginRight: 6 }} /> Download template
+        </Button>
+      </div>
 
       {!lockRole && (
         <Select

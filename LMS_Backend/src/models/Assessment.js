@@ -70,6 +70,7 @@ const assessmentSchema = new Schema(
     passingScore: { type: Number, default: DEFAULT_PASSING_SCORE },
     questions: { type: [questionSchema], default: [] },
     unlockedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

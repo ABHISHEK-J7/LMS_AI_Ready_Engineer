@@ -11,6 +11,7 @@ const classJoinSchema = new Schema(
     classSession: { type: Schema.Types.ObjectId, ref: 'ClassSchedule', required: true, index: true },
     student: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     joinedAt: { type: Date, required: true },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

@@ -1,4 +1,5 @@
 export { User } from './User.js';
+export { Organization } from './Organization.js';
 export { Module } from './Module.js';
 export { Batch } from './Batch.js';
 export { ClassSchedule } from './ClassSchedule.js';

@@ -15,6 +15,8 @@ const userSchema = new Schema(
     otpExpiresAt: { type: Date, select: false },
     otpAttempts: { type: Number, default: 0, select: false },
     role: { type: String, enum: Object.values(UserRole), required: true, index: true },
+    // The tenant this user belongs to. Null ONLY for the super admin (who is global).
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
     status: {
       type: String,
       enum: Object.values(UserStatus),

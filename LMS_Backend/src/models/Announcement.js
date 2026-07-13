@@ -16,6 +16,7 @@ const announcementSchema = new Schema(
     batch: { type: Schema.Types.ObjectId, ref: 'Batch', index: true },
     module: { type: Schema.Types.ObjectId, ref: 'Module', index: true },
     isGlobal: { type: Boolean, default: false, index: true },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

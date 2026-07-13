@@ -26,6 +26,7 @@ const settingsSchema = new Schema(
     zoomAccountId: { type: String, select: false, default: '' },
     zoomClientId: { type: String, select: false, default: '' },
     zoomClientSecret: { type: String, select: false, default: '' },
+    organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,
 );

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { GraduationCap, LogOut, Menu, X } from 'lucide-react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { Building2, GraduationCap, LogOut, Menu, X } from 'lucide-react';
+import { UserRole } from '@/shared';
 import { Button } from '@/components/ui';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
@@ -24,7 +26,11 @@ function initials(name) {
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const orgView = useAuth((s) => s.orgView);
+  const clearOrgView = useAuth((s) => s.clearOrgView);
   const location = useLocation();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const { navRef, indicatorRef } = useSidebarMotion(location.pathname);
   const badges = useNavBadges();
   const [navOpen, setNavOpen] = useState(false);
@@ -34,7 +40,17 @@ export function AppLayout() {
 
   if (!user) return null;
 
-  const nav = NAV_BY_ROLE[user.role];
+  // A super admin managing tenants gets the org nav; once drilled into an org they
+  // act as its admin (admin nav).
+  const superManaging = user.role === UserRole.SUPER_ADMIN && !orgView;
+  const navRole = superManaging ? UserRole.SUPER_ADMIN : UserRole.ADMIN;
+  const nav = NAV_BY_ROLE[navRole];
+
+  function exitOrg() {
+    clearOrgView();
+    qc.clear();
+    navigate('/app/organizations', { replace: true });
+  }
   // Longest-prefix match so detail routes (/app/users/:id, etc.) resolve to their
   // section title instead of falling back to the first ("Dashboard") entry.
   const current =
@@ -120,6 +136,13 @@ export function AppLayout() {
         </header>
 
         <main className="content">
+          {orgView && (
+            <div className="org-banner">
+              <Building2 size={16} />
+              <span>Viewing organization <strong>{orgView.name}</strong> — you're acting as its admin.</span>
+              <button type="button" className="org-banner__exit" onClick={exitOrg}>Exit to organizations</button>
+            </div>
+          )}
           <PageTransition>
             <Outlet />
           </PageTransition>

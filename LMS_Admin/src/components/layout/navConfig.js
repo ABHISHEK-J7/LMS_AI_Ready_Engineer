@@ -12,11 +12,16 @@ import {
   Settings,
   Database,
   ScrollText,
+  Building2,
 } from 'lucide-react';
 import { UserRole } from '@/shared';
 
-/** Admin portal navigation. Only administrators use this app. Icons are Lucide components. */
+/** Admin portal navigation. Icons are Lucide components. */
 export const NAV_BY_ROLE = {
+  // Super admin managing tenants (not drilled into an org).
+  [UserRole.SUPER_ADMIN]: [
+    { label: 'Organizations', to: '/app/organizations', Icon: Building2 },
+  ],
   [UserRole.ADMIN]: [
     { label: 'Dashboard', to: '/app', Icon: LayoutDashboard },
     { label: 'Users', to: '/app/users', Icon: Users },
@@ -35,5 +40,6 @@ export const NAV_BY_ROLE = {
 };
 
 export const ROLE_LABEL = {
+  [UserRole.SUPER_ADMIN]: 'Super Admin',
   [UserRole.ADMIN]: 'Administrator',
 };

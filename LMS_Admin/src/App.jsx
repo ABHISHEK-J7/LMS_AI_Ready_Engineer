@@ -1,9 +1,12 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { UserRole } from '@/shared';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FullPageSpinner } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { LoginPage } from '@/pages/LoginPage';
+import { OrganizationsPage } from '@/pages/organizations/OrganizationsPage';
+import { OrganizationDetailPage } from '@/pages/organizations/OrganizationDetailPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
 import { UsersPage } from '@/pages/users/UsersPage';
 import { StudentDetailPage } from '@/pages/students/StudentDetailPage';
@@ -25,15 +28,37 @@ import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage';
 import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
-/** Standalone ADMIN portal — every route is admin-only (login also rejects non-admins). */
+/** ADMIN portal — admins manage their org; the super admin manages organizations
+ *  and can "enter" any org to act as its admin. */
 export default function App() {
-  const { status, bootstrap } = useAuth();
+  const status = useAuth((s) => s.status);
+  const user = useAuth((s) => s.user);
+  const orgView = useAuth((s) => s.orgView);
+  const bootstrap = useAuth((s) => s.bootstrap);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
 
   if (status === 'loading') return <FullPageSpinner />;
+
+  // Super admin who hasn't drilled into an org → organization-management app only.
+  const superManaging = user?.role === UserRole.SUPER_ADMIN && !orgView;
+  if (superManaging) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="/app/organizations" replace />} />
+          <Route path="organizations" element={<OrganizationsPage />} />
+          <Route path="organizations/:id" element={<OrganizationDetailPage />} />
+          <Route path="*" element={<Navigate to="/app/organizations" replace />} />
+        </Route>
+        <Route path="/" element={<Navigate to="/app" replace />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>

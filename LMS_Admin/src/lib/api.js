@@ -26,6 +26,21 @@ export const tokenStore = {
   },
 };
 
+// Which organization a SUPER ADMIN is currently "drilled into". When set, the API
+// sends X-Org-Id so the backend scopes every request to that org (the super admin
+// acts as its admin). Ignored by the backend for non-super-admins.
+const ORGVIEW_KEY = 'lms.orgView';
+export const orgViewStore = {
+  get() {
+    try { return JSON.parse(localStorage.getItem(ORGVIEW_KEY)) || null; } catch { return null; }
+  },
+  set(org) {
+    if (org?.id) localStorage.setItem(ORGVIEW_KEY, JSON.stringify({ id: org.id, name: org.name }));
+    else localStorage.removeItem(ORGVIEW_KEY);
+  },
+  clear() { localStorage.removeItem(ORGVIEW_KEY); },
+};
+
 /**
  * Resolve a stored-file URL (`/api/uploads/...`) into a `<img>/<video>/<a>`-safe
  * src by appending the file-access token (browsers can't send the Authorization
@@ -46,6 +61,9 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = tokenStore.access;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Super-admin drill-in: scope the request to the selected organization.
+  const ov = orgViewStore.get();
+  if (ov?.id) config.headers['X-Org-Id'] = ov.id;
   return config;
 });
 

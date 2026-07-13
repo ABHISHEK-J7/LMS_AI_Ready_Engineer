@@ -33,9 +33,13 @@ import './modules.css';
 export function ModuleDetailPage() {
   const { id } = useParams();
   const user = useAuth((s) => s.user);
+  const orgView = useAuth((s) => s.orgView);
   // The super admin edits the master-template curriculum here, so they get the
   // same authoring powers as an org admin (topics, subtopics, details, etc.).
   const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN;
+  // …but a super admin editing the TEMPLATE (not drilled into an org) never assigns
+  // trainers — trainers are per-org and assigned by that org's admin. Hide the panel.
+  const editingTemplate = user?.role === UserRole.SUPER_ADMIN && !orgView;
 
   const { data: module, isLoading, isError, error, refetch } = useModule(id);
 
@@ -105,12 +109,12 @@ export function ModuleDetailPage() {
         </Card>
       )}
 
-      <div className="detail-grid">
+      <div className={`detail-grid${editingTemplate ? ' detail-grid--full' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
           <SyllabusBoard module={module} canEdit={canEdit} />
           <ObjectivesEditor module={module} canEdit={canEdit} />
         </div>
-        <TrainersPanel module={module} isAdmin={isAdmin} />
+        {!editingTemplate && <TrainersPanel module={module} isAdmin={isAdmin} />}
       </div>
     </>
   );

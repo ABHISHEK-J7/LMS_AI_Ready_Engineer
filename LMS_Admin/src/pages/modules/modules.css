@@ -242,6 +242,10 @@
   gap: var(--space-6);
   align-items: start;
 }
+/* Single column when there's no side panel (e.g. super-admin template editing). */
+.detail-grid--full {
+  grid-template-columns: 1fr;
+}
 .topic-row {
   display: flex;
   align-items: center;

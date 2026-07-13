@@ -4,7 +4,7 @@ import { ResourceType, UserRole } from '@/shared';
 import { Button, Input, Modal, Select, SkeletonText, useConfirm } from '@/components/ui';
 import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { Markdown } from '@/components/Markdown';
+import { ArticleReader } from '@/components/ArticleReader';
 import { ArticleEditor } from '@/components/ArticleEditor';
 import { useAddResource, useDeleteResource, useResources, useUpdateResource } from '@/lib/resources';
 
@@ -230,9 +230,9 @@ export function TopicResources({ module, topic, canEdit, view = 'grid' }) {
         </form>
       )}
 
-      {/* Read an article (exactly how it renders for students). */}
+      {/* Read an article (exactly how it renders for students), with a contents nav. */}
       <Modal open={Boolean(viewing)} title={viewing?.title ?? 'Article'} size="lg" onClose={() => setViewing(null)}>
-        {viewing && <Markdown source={viewing.content} />}
+        {viewing && <ArticleReader source={viewing.content} />}
       </Modal>
 
       {editing && <EditArticleModal resource={editing} moduleId={module.id} onClose={() => setEditing(null)} />}

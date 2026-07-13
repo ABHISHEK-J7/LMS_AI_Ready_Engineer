@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useAssessments, useAssignTemplate, useCreateAssessment, useDeleteAssessment, useSetAvailability } from '@/lib/assessments';
 import { useModules } from '@/lib/modules';
 import { useBatches } from '@/lib/batches';
-import { assessmentLabel, ASSESSMENT_TYPE_LABEL, ASSESSMENT_TYPE_TONE, PROCTORING_LABEL, PROCTORING_OPTIONS, submissionBadge } from './assessmentsUi';
+import { assessmentLabel, ASSESSMENT_TYPE_LABEL, ASSESSMENT_TYPE_TONE, PROCTORING_LABEL, PROCTORING_OPTIONS, VIOLATION_OPTIONS, submissionBadge } from './assessmentsUi';
 import { combineDateTime, validateExamWindow } from './examWindow';
 import '../modules/modules.css';
 
@@ -143,7 +143,7 @@ function ModuleBar({ moduleObj, onBack, children }) {
 
 // ── Admin: author ready-made test templates ─────────────────────────────────────
 
-const BLANK_TEMPLATE = { title: '', description: '', type: AssessmentType.PRACTICE, proctoring: ProctoringMode.NONE, durationMinutes: '', passingScore: '' };
+const BLANK_TEMPLATE = { title: '', description: '', type: AssessmentType.PRACTICE, proctoring: ProctoringMode.NONE, durationMinutes: '', passingScore: '', violationLimit: '0' };
 
 function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   const navigate = useNavigate();
@@ -170,6 +170,7 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
         type: form.type,
         proctoring: form.proctoring,
         ...(timed && form.durationMinutes ? { durationMinutes: Number(form.durationMinutes) } : {}),
+        ...(timed ? { violationLimit: Number(form.violationLimit) || 0 } : {}),
         ...(form.passingScore ? { passingScore: Number(form.passingScore) } : {}),
       });
       setCreating(false);
@@ -247,6 +248,9 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
           <Select label="Proctoring / format" value={form.proctoring} onChange={(e) => setForm({ ...form, proctoring: e.target.value })} options={PROCTORING_OPTIONS} />
           {timed && (
             <Input label="Duration (minutes per student)" type="number" min="1" max="600" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} placeholder="e.g. 30" />
+          )}
+          {timed && (
+            <Select label="Auto-submit after violations" value={form.violationLimit} onChange={(e) => setForm({ ...form, violationLimit: e.target.value })} options={VIOLATION_OPTIONS} />
           )}
           <Input label="Passing score % (optional)" type="number" min="0" max="100" value={form.passingScore} onChange={(e) => setForm({ ...form, passingScore: e.target.value })} placeholder="Defaults to platform setting (70)" />
           <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>

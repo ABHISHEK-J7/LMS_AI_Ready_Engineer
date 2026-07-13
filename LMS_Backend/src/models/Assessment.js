@@ -67,6 +67,10 @@ const assessmentSchema = new Schema(
     proctored: { type: Boolean, default: false },
     durationMinutes: { type: Number, min: 1 },
     requireSeb: { type: Boolean, default: false },
+    // Proctoring violation allowance (final/proctored tests). The admin sets how
+    // many warnings a student may accrue before the exam auto-submits. 0 = no cap
+    // (warnings are still logged, but the exam never auto-ends).
+    violationLimit: { type: Number, default: 0, min: 0, max: 50 },
     passingScore: { type: Number, default: DEFAULT_PASSING_SCORE },
     questions: { type: [questionSchema], default: [] },
     unlockedBy: { type: Schema.Types.ObjectId, ref: 'User' },

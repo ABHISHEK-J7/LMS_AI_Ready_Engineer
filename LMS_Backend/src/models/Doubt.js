@@ -29,8 +29,11 @@ const doubtSchema = new Schema(
     messages: { type: [messageSchema], default: [] },
     // The trainer who answered — the one the student rates on close.
     answeredBy: { type: Schema.Types.ObjectId, ref: 'User', index: true },
-    // 1–5 star rating the student gives the trainer when they close the doubt.
-    rating: { type: Number, min: 1, max: 5 },
+    // When the doubt was last answered — starts the 24h auto-close clock.
+    answeredAt: { type: Date, index: true },
+    // 1–5 star rating the student gives the trainer. Stays null if the student
+    // never rated (including auto-closed doubts) — null is excluded from averages.
+    rating: { type: Number, min: 1, max: 5, default: null },
     organization: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   baseSchemaOptions,

@@ -40,6 +40,8 @@ export const createAssessmentSchema = z.object({
   passingScore: z.number().int().min(0).max(100).optional(),
   durationMinutes: z.number().int().min(1).max(600).optional(),
   proctoring: z.nativeEnum(ProctoringMode).optional(),
+  // Max proctoring warnings before the exam auto-submits (0 = no cap).
+  violationLimit: z.number().int().min(0).max(50).optional(),
   questionIds: z.array(objectId).optional(),
 });
 
@@ -75,6 +77,7 @@ export const updateAssessmentSchema = z
     deadline: z.coerce.date().optional().nullable(),
     durationMinutes: z.number().int().min(1).max(600).optional().nullable(),
     proctoring: z.nativeEnum(ProctoringMode).optional(),
+    violationLimit: z.number().int().min(0).max(50).optional(),
   })
   .superRefine((d, ctx) => validateWindow(d, ctx));
 
@@ -378,6 +381,8 @@ export async function createAssessment(req, res) {
     proctored,
     requireSeb,
     durationMinutes: proctored ? data.durationMinutes : undefined,
+    // Only proctored tests can auto-submit on violations.
+    violationLimit: proctored ? (data.violationLimit ?? 0) : 0,
     questions,
     availability: AssessmentAvailability.LOCKED,
   });
@@ -439,6 +444,7 @@ export async function assignTemplate(req, res) {
     proctored: template.proctored,
     requireSeb: template.requireSeb,
     durationMinutes: template.durationMinutes,
+    violationLimit: template.violationLimit ?? 0,
     // Deep-copy the question snapshots so later template edits never change a live test.
     questions: template.questions.map((q) => ({
       type: q.type, prompt: q.prompt, options: q.options, correctOption: q.correctOption,
@@ -453,18 +459,19 @@ export async function assignTemplate(req, res) {
 
 export async function updateAssessment(req, res) {
   const assessment = await loadAssessmentForManage(req);
-  const { title, description, passingScore, availableFrom, deadline, durationMinutes, proctoring } = req.body;
+  const { title, description, passingScore, availableFrom, deadline, durationMinutes, proctoring, violationLimit } = req.body;
   if (title !== undefined) assessment.title = title;
   if (description !== undefined) assessment.description = description;
   if (passingScore !== undefined) assessment.passingScore = passingScore;
   if (availableFrom !== undefined) assessment.availableFrom = availableFrom ?? undefined;
   if (deadline !== undefined) assessment.deadline = deadline ?? undefined;
   if (durationMinutes !== undefined) assessment.durationMinutes = durationMinutes ?? undefined;
+  if (violationLimit !== undefined) assessment.violationLimit = violationLimit;
   if (proctoring !== undefined) {
     assessment.proctoring = proctoring;
     assessment.proctored = proctoring !== ProctoringMode.NONE;
     assessment.requireSeb = proctoring === ProctoringMode.SEB;
-    if (!assessment.proctored) assessment.durationMinutes = undefined;
+    if (!assessment.proctored) { assessment.durationMinutes = undefined; assessment.violationLimit = 0; }
   }
   await assessment.save();
   ok(res, assessment.toJSON());

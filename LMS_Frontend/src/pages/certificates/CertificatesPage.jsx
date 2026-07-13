@@ -1,19 +1,30 @@
 import { useState } from 'react';
-import { Award, ExternalLink, FileText, Trash2, Upload } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Skeleton, SkeletonCards, useConfirm } from '@/components/ui';
+import { Award, ExternalLink, FileText, Share2, Upload } from 'lucide-react';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Input, Modal, Skeleton, SkeletonCards } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage, fileSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useMyCertificates } from '@/lib/certificates';
 import {
   useAddExternalCertificate,
-  useDeleteExternalCertificate,
   useMyExternalCertificates,
 } from '@/lib/externalCertificates';
 import { formatDate } from '@/lib/format';
 import { Certificate } from './Certificate';
 import './certificates.css';
 import '../modules/modules.css';
+
+// Share a certificate link — the native share sheet (any app) when available,
+// otherwise a LinkedIn share dialog.
+function shareLink(url, title) {
+  if (navigator.share) {
+    navigator.share({ title, url }).catch(() => { /* user cancelled */ });
+  } else {
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, '_blank', 'noopener,noreferrer');
+  }
+}
+// An absolute external URL we can safely share (not a private in-app upload).
+const isShareable = (u = '') => /^https?:\/\//i.test(u) && !u.includes('/api/uploads/') && !u.startsWith('/uploads/');
 
 export function CertificatesPage() {
   return <StudentCertificates />;
@@ -74,7 +85,17 @@ function StudentCertificates() {
                       {formatDate(c.issuedAt)} · {c.certificateId}
                     </div>
                   </div>
-                  <Button size="sm" onClick={() => setView(c)}>View</Button>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', flex: 'none' }}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Share on LinkedIn"
+                      onClick={() => shareLink(`${window.location.origin}/verify/${c.certificateId}`, `${certTitle(c)} — AI Ready Engineer certificate`)}
+                    >
+                      <Share2 size={14} style={{ marginRight: 4 }} /> Share
+                    </Button>
+                    <Button size="sm" onClick={() => setView(c)}>View</Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -112,10 +133,8 @@ function StudentCertificates() {
 const BLANK = { title: '', issuer: '', url: '', file: null, mode: 'link' };
 
 function ExternalCertificates() {
-  const confirm = useConfirm();
   const { data: items, isLoading, isError, error, refetch } = useMyExternalCertificates();
   const add = useAddExternalCertificate();
-  const del = useDeleteExternalCertificate();
   const [form, setForm] = useState(BLANK);
   const [err, setErr] = useState('');
 
@@ -183,14 +202,17 @@ function ExternalCertificates() {
                 <a href={fileSrc(c.url)} target="_blank" rel="noreferrer" className="ext-cert__open">
                   <ExternalLink size={13} /> Open
                 </a>
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--danger"
-                  aria-label={`Delete ${c.title}`}
-                  onClick={async () => { if (await confirm({ title: 'Remove this certificate?', tone: 'danger', confirmLabel: 'Remove' })) del.mutate(c.id); }}
-                >
-                  <Trash2 size={13} />
-                </button>
+                {isShareable(c.url) && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Share ${c.title}`}
+                    title="Share on LinkedIn"
+                    onClick={() => shareLink(c.url, `${c.title}${c.issuer ? ` — ${c.issuer}` : ''}`)}
+                  >
+                    <Share2 size={13} />
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -1,0 +1,102 @@
+.article-reader {
+  position: relative;
+  display: flex;
+  gap: var(--space-4);
+}
+.article-reader__toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 120ms ease-out;
+}
+.article-reader__toggle:hover {
+  background: var(--color-surface-2);
+}
+.article-reader__toc {
+  flex: 0 0 13rem;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  max-height: 68vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-border);
+  padding-right: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.article-reader__toc-title {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+.article-toc__link {
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1.35;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.article-toc__link:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+/* Bigger for top-level headings, smaller + indented for sub-headings. */
+.article-toc__link--h1 {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.article-toc__link--h2 {
+  font-size: var(--font-size-xs);
+  padding-left: 16px;
+}
+.article-toc__link--h3 {
+  font-size: var(--font-size-xs);
+  padding-left: 28px;
+  color: var(--color-text-muted);
+}
+.article-reader__body {
+  flex: 1;
+  min-width: 0;
+  max-height: 68vh;
+  overflow-y: auto;
+  padding: 4px var(--space-2) 0 0;
+}
+.article-reader__body :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 8px;
+}
+
+/* On small screens the contents float over the article as a dismissible panel. */
+@media (max-width: 720px) {
+  .article-reader__toc {
+    position: absolute;
+    top: 42px;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    max-height: 50vh;
+    box-shadow: var(--shadow-lg);
+  }
+}

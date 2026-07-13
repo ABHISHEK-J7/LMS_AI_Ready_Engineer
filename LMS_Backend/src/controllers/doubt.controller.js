@@ -16,7 +16,26 @@ export const createDoubtSchema = z.object({
 
 export const replySchema = z.object({ body: z.string().min(1).max(4000) });
 
-export const closeSchema = z.object({ rating: z.number().int().min(1).max(5) });
+// Resolving a doubt: an optional star rating. Skipping it closes the doubt unrated
+// (the student can still rate it later via the rate endpoint).
+export const closeSchema = z.object({ rating: z.number().int().min(1).max(5).optional() });
+export const rateSchema = z.object({ rating: z.number().int().min(1).max(5) });
+
+// A student has this long after a doubt is answered to resolve/rate it before it
+// auto-closes (unrated).
+const AUTO_CLOSE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Close any doubt that was answered more than 24h ago and never resolved — as an
+ * unrated close. Runs lazily whenever doubts are listed (org-scoped via the tenant
+ * plugin), so no separate scheduler is required.
+ */
+async function sweepStaleAnsweredDoubts() {
+  await Doubt.updateMany(
+    { status: DoubtStatus.ANSWERED, answeredAt: { $lt: new Date(Date.now() - AUTO_CLOSE_MS) } },
+    { $set: { status: DoubtStatus.CLOSED, open: false } }, // rating stays null (unrated)
+  );
+}
 
 export const listDoubtsQuery = z.object({
   status: z.nativeEnum(DoubtStatus).optional(),
@@ -69,6 +88,7 @@ export async function createDoubt(req, res) {
 // ── Listing (role-aware) ──────────────────────────────────────────────────────
 
 export async function listDoubts(req, res) {
+  await sweepStaleAnsweredDoubts(); // auto-close 24h-stale answered doubts (unrated)
   const { role, userId } = req.auth;
   const filter = {};
   if (req.query.status) filter.status = req.query.status;
@@ -130,6 +150,7 @@ export async function addReply(req, res) {
     if (doubt.status === DoubtStatus.ANSWERED) doubt.status = DoubtStatus.OPEN;
   } else if (doubt.status !== DoubtStatus.CLOSED) {
     doubt.status = DoubtStatus.ANSWERED;
+    doubt.answeredAt = new Date(); // (re)starts the 24h auto-close clock
     if (role === UserRole.TRAINER) doubt.answeredBy = userId; // who the student will rate
   }
   await doubt.save();
@@ -146,9 +167,12 @@ export async function addReply(req, res) {
   ok(res, populated.toJSON());
 }
 
-// ── Close + rate (STUDENT only) ────────────────────────────────────────────────
+// ── Resolve + rate (STUDENT only) ──────────────────────────────────────────────
 
-/** The owning student closes the doubt and rates the trainer (required). */
+/**
+ * The owning student marks the doubt resolved. A star rating is OPTIONAL — if the
+ * student skips it, the doubt closes unrated and they can rate it later.
+ */
 export async function closeDoubt(req, res) {
   const doubt = await Doubt.findById(req.params.id);
   if (!doubt) throw ApiError.notFound('Doubt not found');
@@ -160,7 +184,26 @@ export async function closeDoubt(req, res) {
 
   doubt.status = DoubtStatus.CLOSED;
   doubt.open = false; // leaves the partial-unique index → a new doubt in this module is allowed
+  if (req.body.rating !== undefined) doubt.rating = req.body.rating;
+  await doubt.save();
+  ok(res, (await Doubt.findById(doubt._id).populate(POP)).toJSON());
+}
+
+/**
+ * The owning student rates the doubt AT ANY TIME (the "rate later" button). Works
+ * while the doubt is answered or after it auto-closed — as long as it isn't already
+ * rated. Rating an answered doubt also resolves it.
+ */
+export async function rateDoubt(req, res) {
+  const doubt = await Doubt.findById(req.params.id);
+  if (!doubt) throw ApiError.notFound('Doubt not found');
+  if (doubt.student.toString() !== req.auth.userId) throw ApiError.forbidden('Not your doubt');
+  if (doubt.rating != null) throw ApiError.badRequest('You have already rated this doubt.');
+  if (doubt.status === DoubtStatus.OPEN) {
+    throw ApiError.badRequest('You can rate a doubt only after a trainer has answered it.');
+  }
   doubt.rating = req.body.rating;
+  if (doubt.status === DoubtStatus.ANSWERED) { doubt.status = DoubtStatus.CLOSED; doubt.open = false; }
   await doubt.save();
   ok(res, (await Doubt.findById(doubt._id).populate(POP)).toJSON());
 }
@@ -169,6 +212,7 @@ export async function closeDoubt(req, res) {
 
 /** Doubts this trainer has answered + the average star rating they received. */
 export async function myDoubtStats(req, res) {
+  await sweepStaleAnsweredDoubts();
   const trainerId = req.auth.userId;
   const answered = await Doubt.countDocuments({ answeredBy: trainerId });
   const resolved = await Doubt.countDocuments({ answeredBy: trainerId, status: DoubtStatus.CLOSED });

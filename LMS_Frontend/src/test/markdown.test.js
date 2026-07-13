@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { renderMarkdown } from '@/lib/markdown';
+import { renderMarkdown, tocFromMarkdown } from '@/lib/markdown';
 
 describe('renderMarkdown', () => {
-  it('renders headings', () => {
-    expect(renderMarkdown('# Title')).toBe('<h1>Title</h1>');
-    expect(renderMarkdown('### Small')).toBe('<h3>Small</h3>');
+  it('renders headings with slug ids', () => {
+    expect(renderMarkdown('# Title')).toBe('<h1 id="title">Title</h1>');
+    expect(renderMarkdown('### Small')).toBe('<h3 id="small">Small</h3>');
   });
 
   it('renders bold and italic', () => {
@@ -45,5 +45,33 @@ describe('renderMarkdown', () => {
     expect(renderMarkdown('')).toBe('');
     expect(renderMarkdown(null)).toBe('');
     expect(renderMarkdown(undefined)).toBe('');
+  });
+});
+
+describe('tocFromMarkdown', () => {
+  it('extracts the heading outline with levels and ids', () => {
+    const md = '# Intro\nsome text\n## Setup\n### Details\n## Wrap up';
+    const toc = tocFromMarkdown(md);
+    expect(toc).toEqual([
+      { level: 1, text: 'Intro', id: 'intro' },
+      { level: 2, text: 'Setup', id: 'setup' },
+      { level: 3, text: 'Details', id: 'details' },
+      { level: 2, text: 'Wrap up', id: 'wrap-up' },
+    ]);
+  });
+
+  it('de-duplicates repeated headings, matching the rendered ids', () => {
+    const md = '## Notes\n## Notes';
+    const toc = tocFromMarkdown(md);
+    expect(toc.map((h) => h.id)).toEqual(['notes', 'notes-2']);
+    const html = renderMarkdown(md);
+    expect(html).toContain('id="notes"');
+    expect(html).toContain('id="notes-2"');
+  });
+
+  it('ignores headings inside code fences and strips inline markdown from the text', () => {
+    const md = '# Real **bold** heading\n```\n# not a heading\n```';
+    const toc = tocFromMarkdown(md);
+    expect(toc).toEqual([{ level: 1, text: 'Real bold heading', id: 'real-bold-heading' }]);
   });
 });

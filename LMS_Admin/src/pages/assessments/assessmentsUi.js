@@ -1,6 +1,16 @@
 import { AssessmentType, ProctoringMode, QuestionType } from '@/shared';
 
 /** Invigilation modes shown in the "Proctoring" select when authoring a test. */
+// How many proctoring violations a student may accrue before the exam auto-submits.
+export const VIOLATION_OPTIONS = [
+  { value: '0', label: 'No limit (warn only)' },
+  { value: '1', label: '1 violation' },
+  { value: '2', label: '2 violations' },
+  { value: '3', label: '3 violations' },
+  { value: '5', label: '5 violations' },
+  { value: '10', label: '10 violations' },
+];
+
 export const PROCTORING_OPTIONS = [
   { value: ProctoringMode.NONE, label: 'No proctoring — open browser' },
   { value: ProctoringMode.APP, label: 'Built-in full-screen (camera + lockdown)' },

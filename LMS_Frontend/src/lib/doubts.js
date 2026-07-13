@@ -45,11 +45,20 @@ export function useReplyDoubt() {
   });
 }
 
-/** Student closes their doubt and rates the trainer (1–5). */
+/** Student resolves their doubt; the rating (1–5) is optional. */
 export function useCloseDoubt() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: ({ id, rating }) => unwrap(api.post(`/doubts/${id}/close`, { rating })),
+    mutationFn: ({ id, rating }) => unwrap(api.post(`/doubts/${id}/close`, rating != null ? { rating } : {})),
+    onSuccess: invalidate,
+  });
+}
+
+/** Student rates a doubt at any time (incl. after it auto-closed unrated). */
+export function useRateDoubt() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, rating }) => unwrap(api.post(`/doubts/${id}/rate`, { rating })),
     onSuccess: invalidate,
   });
 }

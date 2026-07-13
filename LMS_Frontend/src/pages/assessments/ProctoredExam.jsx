@@ -115,6 +115,9 @@ function ExamIntro({ a, onStarted }) {
           <li><Maximize size={15} /> The test runs in full screen and must stay there the whole time.</li>
           <li><Copy size={15} /> Copy, cut, paste, right-click and shortcuts like Ctrl+C / Ctrl+V / Ctrl+P / F12 are <strong>disabled</strong>.</li>
           <li><AlertTriangle size={15} /> Switching tabs, minimising, leaving full screen, or attempting a blocked shortcut shows a <strong>warning</strong> — every warning is <strong>counted and your trainer can see it</strong>.</li>
+          {Number(a.violationLimit) > 0 && (
+            <li><AlertTriangle size={15} /> After <strong>{a.violationLimit} violation{Number(a.violationLimit) === 1 ? '' : 's'}</strong>, the test is <strong>submitted automatically</strong> and you can't continue.</li>
+          )}
           <li><Clock size={15} /> Only <strong>Finish test</strong> ends the exam; when time runs out it submits automatically with your current answers.</li>
         </ul>
 
@@ -238,6 +241,10 @@ function TimedExam({ assessment, questions, endsAt, serverNow, initialStream }) 
     releaseStream();
     exitFullscreen();
   }, [assessment.id, buildPayload, releaseStream]);
+  const doSubmitRef = useRef(doSubmit); doSubmitRef.current = doSubmit;
+
+  // Admin-set violation cap: after this many warnings the exam auto-submits. 0 = off.
+  const violationLimit = Number(assessment.violationLimit) || 0;
 
   // Record a proctoring warning (blocked shortcut or leaving the exam). Shows a
   // toast, bumps the counter, logs it server-side, and (for "leave" events) grabs
@@ -247,13 +254,25 @@ function TimedExam({ assessment, questions, endsAt, serverNow, initialStream }) 
     const now = Date.now();
     if (now - lastWarnRef.current < 600) return; // throttle floods (held keys / rapid events)
     lastWarnRef.current = now;
-    setWarnings((n) => n + 1);
-    setWarnToast(reason);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setWarnToast(''), 2600);
+    let reached = false;
+    setWarnings((n) => {
+      const next = n + 1;
+      // Auto-submit once the admin-set violation limit is hit.
+      if (violationLimit > 0 && next >= violationLimit) reached = true;
+      return next;
+    });
     warnMutRef.current.mutate({ id: assessment.id, reason });
     if (snapshot) uploadShot();
-  }, [assessment.id, uploadShot]);
+    if (reached) {
+      setWarnToast('Violation limit reached — your test is being submitted.');
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setTimeout(() => doSubmitRef.current(), 400); // let the toast paint first
+    } else {
+      setWarnToast(reason);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setWarnToast(''), 2600);
+    }
+  }, [assessment.id, uploadShot, violationLimit]);
 
   // Countdown — ticks every second; auto-submits at zero.
   useEffect(() => {
@@ -358,7 +377,7 @@ function TimedExam({ assessment, questions, endsAt, serverNow, initialStream }) 
         <span className="exam-bar__title">{assessmentLabel(assessment)}</span>
         <Badge tone="neutral">{answeredCount}/{questions.length} answered</Badge>
         <Badge tone="primary"><ShieldCheck size={13} /> Proctored</Badge>
-        {warnings > 0 && <Badge tone="warning"><AlertTriangle size={13} /> {warnings} warning{warnings === 1 ? '' : 's'}</Badge>}
+        {warnings > 0 && <Badge tone="warning"><AlertTriangle size={13} /> {warnings}{violationLimit > 0 ? `/${violationLimit}` : ''} warning{warnings === 1 ? '' : 's'}</Badge>}
         <span className="exam-bar__spacer" />
         <span className={`exam-timer${lowTime ? ' exam-timer--danger' : midTime ? ' exam-timer--warn' : ''}`}>
           <Clock size={18} /> {fmtClock(remaining)}

@@ -34,6 +34,63 @@ function sanitizeUrl(url) {
   return /^(https?:\/\/|mailto:|\/|#)/i.test(u) ? u : '#';
 }
 
+/** Strip markdown inline markers to plain text (for heading ids + the contents list). */
+function plainText(s) {
+  return String(s)
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .trim();
+}
+
+/** A URL-safe slug for a heading. */
+function slugify(s) {
+  return (
+    plainText(s).toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'section'
+  );
+}
+
+/** De-duplicate a slug against a Set (Heading, Heading-2, Heading-3, …). */
+function uniqueId(base, used) {
+  let id = base;
+  let n = 2;
+  while (used.has(id)) id = `${base}-${n++}`;
+  used.add(id);
+  return id;
+}
+
+/**
+ * Extract the heading outline for a "Contents" navigation. Returns
+ * [{ level, text, id }] in document order, with ids that MATCH the ones
+ * renderMarkdown emits (same slug + de-dup order), so a click can jump to them.
+ * Headings inside fenced code blocks are ignored (as in the renderer).
+ */
+export function tocFromMarkdown(md) {
+  if (!md) return [];
+  const lines = String(md).replace(/\r\n/g, '\n').split('\n');
+  const used = new Set();
+  const toc = [];
+  let inFence = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^```/.test(trimmed)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    const h = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      const text = plainText(h[2]);
+      toc.push({ level: h[1].length, text, id: uniqueId(slugify(h[2]), used) });
+    }
+  }
+  return toc;
+}
+
 /** Inline formatting. Input is RAW text; we escape first, then add whitelisted tags. */
 function inline(text) {
   let t = escapeHtml(text);
@@ -55,6 +112,7 @@ export function renderMarkdown(md) {
   if (!md) return '';
   const lines = String(md).replace(/\r\n/g, '\n').split('\n');
   const out = [];
+  const usedIds = new Set(); // heading ids (kept in sync with tocFromMarkdown)
   let listType = null; // 'ul' | 'ol' | null
   let para = [];
   const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(' '))}</p>`); para = []; } };
@@ -81,7 +139,7 @@ export function renderMarkdown(md) {
     if (/^(---|\*\*\*|___)$/.test(trimmed)) { flushPara(); closeList(); out.push('<hr />'); i += 1; continue; }
 
     const h = trimmed.match(/^(#{1,6})\s+(.*)$/);
-    if (h) { flushPara(); closeList(); const lvl = h[1].length; out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`); i += 1; continue; }
+    if (h) { flushPara(); closeList(); const lvl = h[1].length; const id = uniqueId(slugify(h[2]), usedIds); out.push(`<h${lvl} id="${id}">${inline(h[2])}</h${lvl}>`); i += 1; continue; }
 
     if (/^>\s?/.test(trimmed)) {
       flushPara(); closeList();

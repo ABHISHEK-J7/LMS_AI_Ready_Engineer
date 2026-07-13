@@ -14,12 +14,19 @@ router.get('/my-stats', requireRole(UserRole.ADMIN, UserRole.TRAINER), asyncHand
 router.post('/', requireRole(UserRole.STUDENT), validate({ body: doubts.createDoubtSchema }), asyncHandler(doubts.createDoubt));
 router.get('/:id', validate({ params: doubts.doubtIdParam }), asyncHandler(doubts.getDoubt));
 router.post('/:id/replies', validate({ params: doubts.doubtIdParam, body: doubts.replySchema }), asyncHandler(doubts.addReply));
-// Closing + rating is STUDENT-only — the trainer just answers.
+// Resolving + rating is STUDENT-only — the trainer just answers.
 router.post(
   '/:id/close',
   requireRole(UserRole.STUDENT),
   validate({ params: doubts.doubtIdParam, body: doubts.closeSchema }),
   asyncHandler(doubts.closeDoubt),
+);
+// Rate at any time (incl. after an auto-close) while the doubt is still unrated.
+router.post(
+  '/:id/rate',
+  requireRole(UserRole.STUDENT),
+  validate({ params: doubts.doubtIdParam, body: doubts.rateSchema }),
+  asyncHandler(doubts.rateDoubt),
 );
 
 export default router;

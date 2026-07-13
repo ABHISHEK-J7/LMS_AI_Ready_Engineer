@@ -13,6 +13,7 @@ import {
   useDoubt,
   useDoubts,
   useMyDoubtStats,
+  useRateDoubt,
   useReplyDoubt,
 } from '@/lib/doubts';
 import { useModules } from '@/lib/modules';
@@ -149,11 +150,13 @@ export function DoubtsPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flex: 'none' }}>
-                  {d.status === DoubtStatus.CLOSED && d.rating ? (
+                  {d.status === DoubtStatus.CLOSED && (d.rating ? (
                     <span title={`Rated ${d.rating}/5`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--color-rating-star)', fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-sm)' }}>
                       <Star size={15} fill="var(--color-rating-star)" strokeWidth={0} /> {d.rating}
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="lms-muted" title="Not rated" style={{ fontSize: 'var(--font-size-sm)' }}>—</span>
+                  ))}
                   {unread > 0 && (
                     <span className="doubt-unread" title={`${unread} new message${unread === 1 ? '' : 's'}`} aria-label={`${unread} new messages`}>
                       {unread > 9 ? '9+' : unread}
@@ -215,18 +218,28 @@ function DoubtThread({ id, role, onClose }) {
   }, [doubt]);
   const reply = useReplyDoubt();
   const close = useCloseDoubt();
+  const rate = useRateDoubt();
   const [body, setBody] = useState('');
   const [rating, setRating] = useState(0);
   const [rateOpen, setRateOpen] = useState(false);
   const isStudent = role === UserRole.STUDENT;
+  const isClosed = doubt?.status === DoubtStatus.CLOSED;
+  // A student can still rate an unrated doubt at any time — even after it auto-closed.
+  const canRateLater = isStudent && isClosed && doubt?.rating == null;
+  const saving = close.isPending || rate.isPending;
 
   // Reset the rating panel whenever a different thread opens.
   useEffect(() => { setRateOpen(false); setRating(0); }, [id]);
 
-  async function submitClose() {
-    if (!rating) return;
+  // Resolve (answered → closed, rating optional) OR rate an already-closed doubt.
+  async function submitResolve(ratingValue) {
     try {
-      await close.mutateAsync({ id, rating });
+      if (isClosed) {
+        if (!ratingValue) return; // rating a closed doubt requires a star
+        await rate.mutateAsync({ id, rating: ratingValue });
+      } else {
+        await close.mutateAsync({ id, rating: ratingValue }); // ratingValue may be undefined
+      }
       setRateOpen(false);
     } catch { /* toast handled globally */ }
   }
@@ -254,21 +267,28 @@ function DoubtThread({ id, role, onClose }) {
       title={doubt?.title ?? 'Doubt'}
       onClose={() => { setBody(''); onClose(); }}
       footer={
-        doubt && doubt.status !== DoubtStatus.CLOSED ? (
-          rateOpen ? (
-            <>
-              <Button variant="outline" onClick={() => setRateOpen(false)}>Cancel</Button>
-              <Button disabled={!rating} loading={close.isPending} onClick={submitClose}>Close doubt</Button>
-            </>
-          ) : (
-            <>
-              {isStudent && (
-                <Button variant="outline" onClick={() => setRateOpen(true)}>Resolve &amp; rate</Button>
-              )}
-              <Button form="reply-form" type="submit" loading={reply.isPending}>Send reply</Button>
-            </>
-          )
-        ) : null
+        !doubt ? null : rateOpen ? (
+          <>
+            <Button variant="outline" onClick={() => setRateOpen(false)}>Cancel</Button>
+            {!isClosed && (
+              <Button variant="ghost" loading={saving} onClick={() => submitResolve(undefined)}>Close without rating</Button>
+            )}
+            <Button disabled={!rating} loading={saving} onClick={() => submitResolve(rating)}>
+              {isClosed ? 'Submit rating' : 'Resolve with rating'}
+            </Button>
+          </>
+        ) : isClosed ? (
+          canRateLater ? (
+            <Button variant="outline" onClick={() => setRateOpen(true)}><Star size={15} style={{ marginRight: 6 }} /> Rate this doubt</Button>
+          ) : null
+        ) : (
+          <>
+            {isStudent && (
+              <Button variant="outline" onClick={() => setRateOpen(true)}>Resolve</Button>
+            )}
+            <Button form="reply-form" type="submit" loading={reply.isPending}>Send reply</Button>
+          </>
+        )
       }
     >
       {isLoading || !doubt ? (
@@ -310,7 +330,17 @@ function DoubtThread({ id, role, onClose }) {
               );
             })}
           </div>
-          {doubt.status === DoubtStatus.CLOSED ? (
+          {rateOpen ? (
+            <div style={{ textAlign: 'center', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-4)' }}>
+              <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-1)' }}>
+                Rate {doubt.answeredBy?.name ?? 'your trainer'}
+              </p>
+              <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
+                {isClosed ? 'You can rate this resolved doubt at any time.' : 'Optionally rate your trainer — or close it without a rating.'}
+              </p>
+              <StarRating value={rating} onChange={setRating} size={32} />
+            </div>
+          ) : doubt.status === DoubtStatus.CLOSED ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-4) 0' }}>
               <p className="lms-muted" style={{ marginBottom: 'var(--space-2)' }}>
                 This doubt is resolved and closed.
@@ -322,17 +352,11 @@ function DoubtThread({ id, role, onClose }) {
                     You rated {doubt.answeredBy?.name ?? 'your trainer'} {doubt.rating}/5
                   </p>
                 </>
-              ) : null}
-            </div>
-          ) : rateOpen ? (
-            <div style={{ textAlign: 'center', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-4)' }}>
-              <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-1)' }}>
-                Rate {doubt.answeredBy?.name ?? 'your trainer'}
-              </p>
-              <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
-                Give a rating to close this doubt.
-              </p>
-              <StarRating value={rating} onChange={setRating} size={32} />
+              ) : (
+                <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)' }}>
+                  Not rated{isStudent ? ' — you can still rate it using the button below.' : '.'}
+                </p>
+              )}
             </div>
           ) : (
             <form id="reply-form" onSubmit={send}>

@@ -22,6 +22,7 @@ import {
   PROCTORING_OPTIONS,
   PROCTORING_TONE,
   QUESTION_TYPE_LABEL,
+  VIOLATION_OPTIONS,
 } from './assessmentsUi';
 import { combineDateTime, splitDateTime, validateExamWindow } from './examWindow';
 import { BankPicker } from './BankPicker';
@@ -260,6 +261,7 @@ function ProctoringCard({ a, isTemplate }) {
     windowStart: init.time,
     windowEnd: end.time,
     durationMinutes: a.durationMinutes ?? '',
+    violationLimit: String(a.violationLimit ?? 0),
   });
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -272,6 +274,7 @@ function ProctoringCard({ a, isTemplate }) {
         id: a.id,
         proctoring: form.proctoring,
         durationMinutes: timed && form.durationMinutes ? Number(form.durationMinutes) : null,
+        violationLimit: timed ? Number(form.violationLimit) || 0 : 0,
       });
       setMsg('Saved.');
     } catch (e) { setErr(apiErrorMessage(e)); }
@@ -304,6 +307,11 @@ function ProctoringCard({ a, isTemplate }) {
           </div>
           {timed && (
             <Input label="Duration (minutes per student)" type="number" min="1" max="600" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} style={{ maxWidth: '16rem' }} />
+          )}
+          {timed && (
+            <div style={{ maxWidth: '24rem' }}>
+              <Select label="Auto-submit after violations" value={form.violationLimit} onChange={(e) => setForm({ ...form, violationLimit: e.target.value })} options={VIOLATION_OPTIONS} />
+            </div>
           )}
           {form.proctoring === ProctoringMode.SEB && (
             <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>Set the global SEB Config Key in Settings.</span>

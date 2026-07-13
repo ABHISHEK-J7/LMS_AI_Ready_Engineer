@@ -35,20 +35,23 @@ export const NAV_BY_ROLE = {
     { label: 'Certificates', to: '/app/certificates', Icon: Award },
     { label: 'Profile', to: '/app/profile', Icon: UserCircle },
   ],
+  // Same master order as the Admin portal, with trainer-only items (Class
+  // Schedule, Doubts, Profile) slotted in and items trainers lack omitted.
   [UserRole.TRAINER]: [
     { label: 'Dashboard', to: '/app', Icon: LayoutDashboard },
+    { label: 'Announcements', to: '/app/announcements', Icon: Megaphone },
     { label: 'My Modules', to: '/app/modules', Icon: BookOpen },
     { label: 'My Batches', to: '/app/batches', Icon: UsersRound },
     { label: 'Class Schedule', to: '/app/schedule', Icon: CalendarDays },
-    { label: 'Attendance Entry', to: '/app/attendance', Icon: CalendarClock },
     { label: 'Question Bank', to: '/app/question-bank', Icon: Database },
     { label: 'Assessments', to: '/app/assessments', Icon: Unlock },
-    { label: 'Announcements', to: '/app/announcements', Icon: Megaphone },
     { label: 'Doubts', to: '/app/doubts', Icon: HelpCircle },
-    { label: 'Approvals', to: '/app/approvals', Icon: BadgeCheck },
+    { label: 'Attendance Entry', to: '/app/attendance', Icon: CalendarClock },
     { label: 'Analytics', to: '/app/analytics', Icon: BarChart3 },
+    { label: 'Approvals', to: '/app/approvals', Icon: BadgeCheck },
     { label: 'Profile', to: '/app/profile', Icon: UserCircle },
   ],
+
 };
 
 export const ROLE_LABEL = {

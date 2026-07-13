@@ -4,7 +4,7 @@ import { AttendanceStatus } from '@/shared';
 import { Button, Card, CardHeader, EmptyState, ErrorState, Input, Select, SkeletonTable } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useClassRoster, useSaveAttendance } from '@/lib/attendance';
-import { parseTeamsAttendance, startMinutesOf, classifyJoin } from '@/lib/teamsAttendance';
+import { parseTeamsAttendance, classStartMs, classifyJoin } from '@/lib/teamsAttendance';
 import { ATT_OPTIONS } from './attendanceUi';
 import { formatDate } from '@/lib/format';
 import './attendance.css';
@@ -54,11 +54,11 @@ export function RosterEditor({ classId, onSaved }) {
    * sheet → Absent. Runs on import and whenever the buffer changes.
    */
   function applyTeams(byEmail, bufferVal, currentRows) {
-    const startMin = startMinutesOf(data.class.startTime);
+    const startMs = classStartMs(data.class.date, data.class.startTime);
     const counts = { present: 0, late: 0, absent: 0, matched: 0 };
     const next = currentRows.map((r) => {
       const join = r.email ? byEmail.get(r.email.toLowerCase()) : undefined;
-      const status = classifyJoin(join ?? null, startMin, bufferVal);
+      const status = classifyJoin(join ?? null, startMs, bufferVal);
       if (status === AttendanceStatus.ABSENT) counts.absent += 1;
       else { counts.matched += 1; if (status === AttendanceStatus.PRESENT) counts.present += 1; else counts.late += 1; }
       return { ...r, status };
@@ -75,7 +75,8 @@ export function RosterEditor({ classId, onSaved }) {
     if (fileRef.current) fileRef.current.value = ''; // allow re-selecting the same file
     if (!file) return;
     try {
-      const { byEmail } = parseTeamsAttendance(await file.arrayBuffer());
+      const classDayIso = new Date(data.class.date).toISOString().slice(0, 10);
+      const { byEmail } = parseTeamsAttendance(await file.arrayBuffer(), classDayIso);
       setTeamsData(byEmail);
       applyTeams(byEmail, buffer, rows);
     } catch (err) {

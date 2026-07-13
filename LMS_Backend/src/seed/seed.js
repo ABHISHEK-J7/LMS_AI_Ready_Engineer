@@ -48,6 +48,23 @@ async function seed() {
     console.log(`[seed] super admin exists: ${superAdmin.email}`);
   }
 
+  // 2b. Master-Template org (the super admin's master curriculum; seeds new orgs)
+  let template = await Organization.findOne({ isTemplate: true });
+  if (!template) {
+    template = await Organization.create({ name: 'Master Template', code: 'TEMPLATE', isTemplate: true, createdBy: superAdmin._id });
+    console.log('[seed] created Master Template organization');
+  }
+  for (const m of DEFAULT_CURRICULUM) {
+    if (await Module.findOne({ organization: template._id, code: m.code })) continue;
+    await Module.create({
+      organization: template._id,
+      name: m.name, code: m.code, order: m.order, level: m.level,
+      learningObjectives: [],
+      topics: m.topics.map((title, i) => ({ title, order: i, completed: false })),
+      assignedTrainers: [], archived: false,
+    });
+  }
+
   // 3. Default organization (owns all legacy data)
   let org = await Organization.findOne({ code: 'DEFAULT' });
   if (!org) {

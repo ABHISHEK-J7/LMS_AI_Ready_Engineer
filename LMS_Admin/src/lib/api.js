@@ -41,6 +41,21 @@ export const orgViewStore = {
   clear() { localStorage.removeItem(ORGVIEW_KEY); },
 };
 
+// The super admin's Master-Template org id (fetched at login). Curriculum pages in
+// super-admin "managing" mode scope to it, so the modules the super admin edits ARE
+// the template that seeds new orgs.
+const TEMPLATE_KEY = 'lms.templateOrg';
+export const templateOrgStore = {
+  get() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || null; } catch { return null; }
+  },
+  set(org) {
+    if (org?.id) localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ id: org.id, name: org.name }));
+    else localStorage.removeItem(TEMPLATE_KEY);
+  },
+  clear() { localStorage.removeItem(TEMPLATE_KEY); },
+};
+
 /**
  * Resolve a stored-file URL (`/api/uploads/...`) into a `<img>/<video>/<a>`-safe
  * src by appending the file-access token (browsers can't send the Authorization
@@ -61,9 +76,20 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = tokenStore.access;
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  // Super-admin drill-in: scope the request to the selected organization.
+  // Super-admin scoping via X-Org-Id:
+  //  - drilled into an org  -> that org (acts as its admin)
+  //  - otherwise (global)   -> the master template org, so curriculum pages edit
+  //    the template. The /organizations endpoints are super-admin-only and must
+  //    keep the global (no-header) context, so we never scope those.
+  const url = config.url || '';
+  const isOrgAdminApi = url.startsWith('/organizations');
   const ov = orgViewStore.get();
-  if (ov?.id) config.headers['X-Org-Id'] = ov.id;
+  if (ov?.id) {
+    config.headers['X-Org-Id'] = ov.id;
+  } else if (!isOrgAdminApi) {
+    const tpl = templateOrgStore.get();
+    if (tpl?.id) config.headers['X-Org-Id'] = tpl.id;
+  }
   return config;
 });
 

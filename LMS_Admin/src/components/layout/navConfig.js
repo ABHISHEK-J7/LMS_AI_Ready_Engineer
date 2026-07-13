@@ -18,10 +18,13 @@ import { UserRole } from '@/shared';
 
 /** Admin portal navigation. Icons are Lucide components. */
 export const NAV_BY_ROLE = {
-  // Super admin managing tenants (not drilled into an org).
+  // Super admin managing tenants (not drilled into an org). The Modules &
+  // Question Bank here edit the MASTER TEMPLATE that seeds every new org.
   [UserRole.SUPER_ADMIN]: [
     { label: 'Dashboard', to: '/app', Icon: LayoutDashboard },
     { label: 'Organizations', to: '/app/organizations', Icon: Building2 },
+    { label: 'Master Curriculum', to: '/app/modules', Icon: BookOpen },
+    { label: 'Question Bank', to: '/app/question-bank', Icon: Database },
   ],
   [UserRole.ADMIN]: [
     { label: 'Dashboard', to: '/app', Icon: LayoutDashboard },

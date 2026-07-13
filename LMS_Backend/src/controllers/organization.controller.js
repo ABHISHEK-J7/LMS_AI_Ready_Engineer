@@ -38,9 +38,16 @@ export const createOrgAdminSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
-/** Super admin: list organizations with headline counts. */
+/** Super admin: the reserved Master-Template org (curriculum that seeds new orgs). */
+export async function getTemplate(_req, res) {
+  const org = await Organization.findOne({ isTemplate: true });
+  if (!org) throw ApiError.notFound('Master template is not set up yet. Run the seed.');
+  ok(res, org.toJSON());
+}
+
+/** Super admin: list real organizations (the template org is hidden) with counts. */
 export async function listOrganizations(_req, res) {
-  const orgs = await Organization.find().sort({ createdAt: -1 });
+  const orgs = await Organization.find({ isTemplate: { $ne: true } }).sort({ createdAt: -1 });
   const items = await Promise.all(
     orgs.map(async (o) => {
       const [admins, trainers, students, batches, modules] = await Promise.all([
@@ -136,6 +143,7 @@ export async function listOrgAdmins(req, res) {
 export async function deleteOrganization(req, res) {
   const org = await Organization.findById(req.params.id);
   if (!org) throw ApiError.notFound('Organization not found');
+  if (org.isTemplate) throw ApiError.badRequest('The master template organization can’t be deleted.');
   const oid = org._id;
 
   const removed = {};
@@ -150,16 +158,18 @@ export async function deleteOrganization(req, res) {
   ok(res, { id: req.params.id, deleted: true, removed });
 }
 
-/** Super admin: global counts across all organizations (dashboard). */
+/** Super admin: global counts across all real organizations (dashboard). */
 export async function getOverview(_req, res) {
+  const template = await Organization.findOne({ isTemplate: true }).select('_id');
+  const notTemplate = template ? { organization: { $ne: template._id } } : {};
   const [organizations, activeOrgs, admins, trainers, students, batches, modules, assessments, submissions] = await Promise.all([
-    Organization.countDocuments(),
-    Organization.countDocuments({ status: 'active' }),
+    Organization.countDocuments({ isTemplate: { $ne: true } }),
+    Organization.countDocuments({ isTemplate: { $ne: true }, status: 'active' }),
     User.countDocuments({ role: UserRole.ADMIN }),
     User.countDocuments({ role: UserRole.TRAINER }),
     User.countDocuments({ role: UserRole.STUDENT }),
     Batch.countDocuments(),
-    Module.countDocuments(),
+    Module.countDocuments(notTemplate), // exclude the template's modules
     Assessment.countDocuments(),
     Submission.countDocuments(),
   ]);

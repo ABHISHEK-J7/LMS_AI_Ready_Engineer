@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { UserRole } from '@/shared';
-import { api, tokenStore, orgViewStore, unwrap } from './api';
+import { api, tokenStore, orgViewStore, templateOrgStore, unwrap } from './api';
 
 const PORTAL_ROLES = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
 
@@ -11,6 +11,19 @@ function assertPortalUser(user) {
     err.code = 'NOT_ADMIN';
     throw err;
   }
+}
+
+/**
+ * For the super admin, remember the master-template org id so curriculum pages
+ * (Modules / Question Bank) scope to it via X-Org-Id. Best-effort: a missing
+ * template just leaves the super admin's curriculum pages empty.
+ */
+async function syncTemplateOrg(user) {
+  if (user?.role !== UserRole.SUPER_ADMIN) { templateOrgStore.clear(); return; }
+  try {
+    const org = await unwrap(api.get('/organizations/template'));
+    templateOrgStore.set({ id: org.id, name: org.name });
+  } catch { templateOrgStore.clear(); }
 }
 
 export const useAuth = create((set) => ({
@@ -29,6 +42,7 @@ export const useAuth = create((set) => ({
     }
     tokenStore.set(result.tokens);
     orgViewStore.clear();
+    await syncTemplateOrg(result.user);
     set({ user: result.user, status: 'authenticated', orgView: null });
     return result.user;
   },
@@ -47,6 +61,7 @@ export const useAuth = create((set) => ({
     try { await api.post('/auth/logout'); } catch { /* best-effort */ }
     tokenStore.clear();
     orgViewStore.clear();
+    templateOrgStore.clear();
     set({ user: null, status: 'unauthenticated', orgView: null });
   },
 
@@ -58,10 +73,12 @@ export const useAuth = create((set) => ({
     try {
       const { user } = await unwrap(api.get('/auth/me'));
       assertPortalUser(user);
+      await syncTemplateOrg(user);
       set({ user, status: 'authenticated', orgView: orgViewStore.get() });
     } catch {
       tokenStore.clear();
       orgViewStore.clear();
+      templateOrgStore.clear();
       set({ user: null, status: 'unauthenticated', orgView: null });
     }
   },

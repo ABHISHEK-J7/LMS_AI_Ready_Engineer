@@ -53,6 +53,10 @@ export default function App() {
           <Route index element={<SuperAdminDashboard />} />
           <Route path="organizations" element={<OrganizationsPage />} />
           <Route path="organizations/:id" element={<OrganizationDetailPage />} />
+          {/* Master curriculum — these edit the reserved template org (X-Org-Id set by the API layer). */}
+          <Route path="modules" element={<ModulesPage />} />
+          <Route path="modules/:id" element={<ModuleDetailPage />} />
+          <Route path="question-bank" element={<Suspense fallback={<FullPageSpinner />}><QuestionBankPage /></Suspense>} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Route>
         <Route path="/" element={<Navigate to="/app" replace />} />

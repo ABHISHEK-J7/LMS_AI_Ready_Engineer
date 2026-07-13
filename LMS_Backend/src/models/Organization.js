@@ -12,6 +12,9 @@ const organizationSchema = new Schema(
     // Short unique code (e.g. "ACME") — handy for display + support.
     code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     status: { type: String, enum: ['active', 'suspended'], default: 'active', index: true },
+    // The single reserved "Master Template" org the super admin edits. Its modules
+    // seed every NEW organization. Hidden from the tenant list.
+    isTemplate: { type: Boolean, default: false, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   baseSchemaOptions,

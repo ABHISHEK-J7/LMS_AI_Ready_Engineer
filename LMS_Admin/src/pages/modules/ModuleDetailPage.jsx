@@ -33,7 +33,9 @@ import './modules.css';
 export function ModuleDetailPage() {
   const { id } = useParams();
   const user = useAuth((s) => s.user);
-  const isAdmin = user?.role === UserRole.ADMIN;
+  // The super admin edits the master-template curriculum here, so they get the
+  // same authoring powers as an org admin (topics, subtopics, details, etc.).
+  const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN;
 
   const { data: module, isLoading, isError, error, refetch } = useModule(id);
 

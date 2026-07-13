@@ -14,7 +14,9 @@ const EMPTY = { name: '', code: '', level: 'beginner', description: '' };
 
 export function ModulesPage() {
   const role = useAuth((s) => s.user?.role);
-  const isAdmin = role === UserRole.ADMIN;
+  const isSuper = role === UserRole.SUPER_ADMIN;
+  // The super admin authors the master template with full admin powers.
+  const isAdmin = role === UserRole.ADMIN || isSuper;
   const navigate = useNavigate();
 
   const [showArchived, setShowArchived] = useState(false);
@@ -32,6 +34,7 @@ export function ModulesPage() {
   const toast = useToast();
 
   const subtitle = {
+    [UserRole.SUPER_ADMIN]: 'The master curriculum. Topics & subtopics you add here seed every new organization.',
     [UserRole.ADMIN]: 'Create and manage the AI Ready Engineer curriculum.',
     [UserRole.TRAINER]: 'Modules assigned to you. Manage their syllabus and resources.',
     [UserRole.STUDENT]: 'Your structured learning path from Beginner to Expert.',
@@ -97,7 +100,7 @@ export function ModulesPage() {
 
   return (
     <>
-      <PageHeader title={isAdmin ? 'Modules' : 'My Modules'} subtitle={subtitle} />
+      <PageHeader title={isSuper ? 'Master Curriculum' : isAdmin ? 'Modules' : 'My Modules'} subtitle={subtitle} />
 
       <div className="toolbar">
         {isAdmin && (
@@ -124,7 +127,7 @@ export function ModulesPage() {
           title={isAdmin ? 'No modules yet' : 'No modules assigned'}
           description={
             isAdmin
-              ? 'No modules yet. Create one, or run the seed script to load the default 10-module curriculum.'
+              ? 'No modules yet. Create one, or run the seed script to load the default 21-module curriculum.'
               : 'No modules are assigned to you yet.'
           }
           action={isAdmin ? <Button onClick={() => setCreating(true)}>+ New Module</Button> : undefined}

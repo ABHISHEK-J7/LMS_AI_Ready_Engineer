@@ -100,7 +100,8 @@ export function SyllabusRequestsOrgPage() {
   const requests = useMemo(
     () => (data ?? [])
       .filter((r) => orgIdOf(r) === String(orgId))
-      .sort((a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt))),
+      // Pending first, then oldest-first (FIFO) so the earliest request leads.
+      .sort((a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || (new Date(a.createdAt) - new Date(b.createdAt))),
     [data, orgId],
   );
   const org = requests[0]?.organization;

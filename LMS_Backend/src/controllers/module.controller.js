@@ -281,13 +281,13 @@ export async function listSyllabusRequests(req, res) {
   // requests raised by other organizations.
   const items = await runUnscoped(async () => {
     const reqs = await SyllabusImportRequest.find({})
-      .sort({ status: 1, createdAt: -1 })
+      .sort({ status: 1, createdAt: 1 })
       .populate('organization', 'name code')
       .populate('requestedBy', 'name email')
       .lean();
-    // Rank pending first, then newest.
+    // Rank pending first, then oldest-first (FIFO) so the earliest request leads.
     const rank = { pending: 0, approved: 1, rejected: 2 };
-    reqs.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
+    reqs.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(a.createdAt) - new Date(b.createdAt)));
 
     return Promise.all(reqs.map(async (r) => {
       const src = await templateModuleForCode(r.moduleCode);

@@ -27,6 +27,7 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
   const [addSyllabusOpen, setAddSyllabusOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const addTopic = useAddTopic();
   const updateTopic = useUpdateTopic();
   const deleteTopic = useDeleteTopic();
@@ -78,9 +79,14 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
             </Button>
           )}
           {canRequestFromMaster && (
-            <Button variant="outline" onClick={() => setRequestOpen(true)}>
-              <Library size={15} style={{ marginRight: 6 }} /> Request from Master
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setViewOpen(true)}>
+                <BookOpen size={15} style={{ marginRight: 6 }} /> View from Master
+              </Button>
+              <Button variant="outline" onClick={() => setRequestOpen(true)}>
+                <Library size={15} style={{ marginRight: 6 }} /> Request from Master
+              </Button>
+            </>
           )}
           {canEdit && (
             <Button onClick={() => setAddSyllabusOpen(true)}>
@@ -191,6 +197,11 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
         <MasterSyllabusPreviewModal moduleId={module.id} onClose={() => setPreviewOpen(false)} />
       )}
 
+      {/* Org admin: view the master syllabus first, then request it if it looks good. */}
+      {viewOpen && (
+        <ViewMasterSyllabusModal moduleId={module.id} onClose={() => setViewOpen(false)} onRequest={() => setRequestOpen(true)} />
+      )}
+
       {/* Org admin: request the master syllabus (super admin approves it). */}
       {requestOpen && (
         <RequestMasterSyllabusModal moduleId={module.id} moduleName={module.name} onClose={() => setRequestOpen(false)} />
@@ -264,13 +275,60 @@ function RequestMasterSyllabusModal({ moduleId, moduleName, onClose }) {
   );
 }
 
-// ── Master syllabus: preview, then import ────────────────────────────────────────
+// ── Master syllabus: view / preview + import ─────────────────────────────────────
 
-/**
- * Shows exactly what the master syllabus contains for this module — topic titles +
- * descriptions, subtopic titles + descriptions, and counts — before the super admin
- * confirms the import (which REPLACES the module's current syllabus).
- */
+/** Presentational: the master syllabus (description, objectives, topics, subtopics). */
+function SyllabusPreview({ data }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {data.description && (
+        <div>
+          <div className="field__label">Module description</div>
+          <p className="lms-secondary-text" style={{ margin: 0 }}>{data.description}</p>
+        </div>
+      )}
+      {data.learningObjectives?.length > 0 && (
+        <div>
+          <div className="field__label">Learning objectives ({data.learningObjectives.length})</div>
+          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+            {data.learningObjectives.map((o, i) => <li key={i} className="lms-secondary-text">{o}</li>)}
+          </ul>
+        </div>
+      )}
+      {data.topics.length === 0 ? (
+        <p className="lms-muted">The master syllabus for this module is empty.</p>
+      ) : (
+        <div className="syllabus-preview">
+          {data.topics.map((t, i) => (
+            <div key={i} className="syllabus-preview__topic">
+              <div className="syllabus-preview__topic-title">
+                <BookOpen size={15} /> <strong>{i + 1}. {t.title}</strong>
+                {t.subtopics.length > 0 && (
+                  <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+                    · {t.subtopics.length} subtopic{t.subtopics.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              {t.description && <div className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: '2px 0 0 22px' }}>{t.description}</div>}
+              {t.subtopics.length > 0 && (
+                <ul className="syllabus-preview__subs">
+                  {t.subtopics.map((s, j) => (
+                    <li key={j}>
+                      <ChevronRight size={13} style={{ color: 'var(--color-primary)', flex: 'none' }} />
+                      <span>{s.title}{s.description ? <span className="lms-muted"> — {s.description}</span> : null}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Super admin (drilled in): preview the master syllabus, then import (replaces). */
 function MasterSyllabusPreviewModal({ moduleId, onClose }) {
   const { data, isLoading, isError, error, refetch } = useMasterSyllabusPreview(moduleId, true);
   const importSyllabus = useImportSyllabusFromMaster();
@@ -301,63 +359,46 @@ function MasterSyllabusPreviewModal({ moduleId, onClose }) {
         </>
       }
     >
-      {isLoading ? (
-        <SkeletonText lines={6} />
-      ) : isError ? (
-        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
-      ) : data ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <p className="lms-secondary-text" style={{ margin: 0 }}>
+      {isLoading ? <SkeletonText lines={6} /> : isError ? <ErrorState message={apiErrorMessage(error)} onRetry={refetch} /> : data ? (
+        <>
+          <p className="lms-secondary-text" style={{ margin: '0 0 var(--space-4)' }}>
             The master has <strong>{data.topicCount}</strong> topic{data.topicCount === 1 ? '' : 's'} and{' '}
             <strong>{data.subtopicCount}</strong> subtopic{data.subtopicCount === 1 ? '' : 's'}. Importing{' '}
             <strong>replaces this module’s current syllabus</strong> with the one below.
           </p>
+          <SyllabusPreview data={data} />
+        </>
+      ) : null}
+    </Modal>
+  );
+}
 
-          {data.description && (
-            <div>
-              <div className="field__label">Module description</div>
-              <p className="lms-secondary-text" style={{ margin: 0 }}>{data.description}</p>
-            </div>
-          )}
-          {data.learningObjectives?.length > 0 && (
-            <div>
-              <div className="field__label">Learning objectives ({data.learningObjectives.length})</div>
-              <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-                {data.learningObjectives.map((o, i) => <li key={i} className="lms-secondary-text">{o}</li>)}
-              </ul>
-            </div>
-          )}
-
-          {data.topics.length === 0 ? (
-            <p className="lms-muted">The master syllabus for this module is empty.</p>
-          ) : (
-            <div className="syllabus-preview">
-              {data.topics.map((t, i) => (
-                <div key={i} className="syllabus-preview__topic">
-                  <div className="syllabus-preview__topic-title">
-                    <BookOpen size={15} /> <strong>{i + 1}. {t.title}</strong>
-                    {t.subtopics.length > 0 && (
-                      <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
-                        · {t.subtopics.length} subtopic{t.subtopics.length === 1 ? '' : 's'}
-                      </span>
-                    )}
-                  </div>
-                  {t.description && <div className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: '2px 0 0 22px' }}>{t.description}</div>}
-                  {t.subtopics.length > 0 && (
-                    <ul className="syllabus-preview__subs">
-                      {t.subtopics.map((s, j) => (
-                        <li key={j}>
-                          <ChevronRight size={13} style={{ color: 'var(--color-primary)', flex: 'none' }} />
-                          <span>{s.title}{s.description ? <span className="lms-muted"> — {s.description}</span> : null}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+/** Org admin: VIEW the master syllabus first; if it looks good, request it. */
+function ViewMasterSyllabusModal({ moduleId, onClose, onRequest }) {
+  const { data, isLoading, isError, error, refetch } = useMasterSyllabusPreview(moduleId, true);
+  return (
+    <Modal
+      open
+      title="Master syllabus"
+      size="lg"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button disabled={isLoading || isError || !data} onClick={() => { onClose(); onRequest(); }}>
+            <Library size={15} style={{ marginRight: 6 }} /> Request from Master
+          </Button>
+        </>
+      }
+    >
+      {isLoading ? <SkeletonText lines={6} /> : isError ? <ErrorState message={apiErrorMessage(error)} onRetry={refetch} /> : data ? (
+        <>
+          <p className="lms-secondary-text" style={{ margin: '0 0 var(--space-4)' }}>
+            This is the master syllabus for this module — <strong>{data.topicCount}</strong> topic{data.topicCount === 1 ? '' : 's'} and{' '}
+            <strong>{data.subtopicCount}</strong> subtopic{data.subtopicCount === 1 ? '' : 's'}. If it looks good, request it and the super admin can import it here.
+          </p>
+          <SyllabusPreview data={data} />
+        </>
       ) : null}
     </Modal>
   );

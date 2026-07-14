@@ -135,19 +135,15 @@ export async function getModule(req, res) {
 }
 
 /**
- * Resolve the master-template module that matches this org module (by code), for
- * the syllabus preview/import. Super-admin-only, while drilled into an org.
- * Returns { target: <org module doc>, src: <template module, lean> }.
+ * Resolve the master-template module that matches this (org) module by code.
+ * Returns { target: <this module doc>, src: <template module, lean> }. No role
+ * check — previewing is allowed for any admin; the destructive import guards itself.
  */
-async function resolveMasterModule(req) {
-  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Only the super admin can use the master syllabus.');
-  const targetOrg = req.auth.organization;
-  if (!targetOrg) throw ApiError.badRequest('Enter an organization first.');
-  const template = await getTemplateOrg();
-  if (!template) throw ApiError.badRequest('The master template is not set up.');
-  if (String(template._id) === String(targetOrg)) throw ApiError.badRequest('You are already editing the master syllabus.');
+async function resolveTargetAndMaster(req) {
   const target = await Module.findById(req.params.id);
   if (!target) throw ApiError.notFound('Module not found');
+  const template = await getTemplateOrg();
+  if (!template) throw ApiError.badRequest('The master template is not set up.');
   // Reading the template bypasses tenant scoping via an explicit `organization`.
   const src = await Module.findOne({ organization: template._id, code: target.code }).lean();
   if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
@@ -191,11 +187,11 @@ function copyMasterSyllabus(target, src) {
 }
 
 /**
- * SUPER ADMIN ONLY: a read-only PREVIEW of the master syllabus that would be
- * imported onto this org module. Applies nothing.
+ * Read-only PREVIEW of the master syllabus for this module — any admin (an org
+ * admin uses it to "view from master" before requesting). Applies nothing.
  */
 export async function getMasterSyllabusPreview(req, res) {
-  const { src } = await resolveMasterModule(req);
+  const { src } = await resolveTargetAndMaster(req);
   ok(res, syllabusPreview(src));
 }
 
@@ -204,7 +200,8 @@ export async function getMasterSyllabusPreview(req, res) {
  * for this module onto the org's module, replacing its current syllabus.
  */
 export async function importSyllabusFromTemplate(req, res) {
-  const { target, src } = await resolveMasterModule(req);
+  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Only the super admin can import the master syllabus directly.');
+  const { target, src } = await resolveTargetAndMaster(req);
   copyMasterSyllabus(target, src);
   await target.save();
   ok(res, target.toJSON());

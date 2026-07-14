@@ -74,6 +74,16 @@ test('super admin (drilled in) imports the master syllabus onto an org module', 
   assert.equal(t1.subtopics[0].description, 'S1 desc');
 });
 
+test('a plain org admin CAN view (preview) the master syllabus for their module', async () => {
+  const { req, models } = ctx;
+  const A = await ctx.login('admin@acme.local');
+  const mod = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  const res = await req('GET', `/modules/${mod._id}/master-syllabus-preview`, A);
+  assert.equal(res.status, 200, 'org admin can preview before requesting');
+  assert.ok(res.data.topicCount >= 2);
+  assert.ok(Array.isArray(res.data.topics));
+});
+
 test('a plain org admin cannot import the master syllabus (super-admin only)', async () => {
   const { req, models } = ctx;
   const A = await ctx.login('admin@acme.local');

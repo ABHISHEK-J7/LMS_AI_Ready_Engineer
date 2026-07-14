@@ -1,9 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ListChecks, Plus, Save, Trash2 } from 'lucide-react';
-import { Button, Input, Textarea } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
 
 const toInput = (v) => (v ? String(v).slice(0, 10) : ''); // ISO → yyyy-mm-dd
 const fmtDate = (v) => (v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+
+/** A textarea that grows to fit its content, so all the text is visible while typing. */
+function AutoTextarea({ value, onChange, placeholder }) {
+  const ref = useRef(null);
+  const fit = (el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } };
+  useEffect(() => { fit(ref.current); }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className="input subtopic-grow"
+      rows={1}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => { onChange(e); fit(e.target); }}
+    />
+  );
+}
 
 /** Inclusive day span between two yyyy-mm-dd dates (or null). */
 function daySpan(from, to) {
@@ -65,7 +82,7 @@ export function SubtopicsTable({ subtopics = [], canEdit = false, onSave, saving
                 <tr key={s.id ?? i}>
                   <td className="lms-muted">{i + 1}</td>
                   <td className="subtopics-table__name">{s.title || '—'}</td>
-                  <td>{s.description || '—'}</td>
+                  <td className="subtopics-table__desc">{s.description || '—'}</td>
                   <td className="lms-muted">{fmtDate(s.fromDate) || '—'}</td>
                   <td className="lms-muted">{fmtDate(s.toDate) || '—'}</td>
                   <td>{span ? <span className="day-pill">{span} day{span === 1 ? '' : 's'}</span> : <span className="lms-muted">—</span>}</td>
@@ -102,8 +119,8 @@ export function SubtopicsTable({ subtopics = [], canEdit = false, onSave, saving
                 return (
                   <tr key={i}>
                     <td className="lms-muted">{i + 1}</td>
-                    <td><Input placeholder="e.g. Embeddings" value={r.title} onChange={(e) => setAt(i, { title: e.target.value })} /></td>
-                    <td><Textarea rows={2} placeholder="What the trainer delivers in class…" value={r.description} onChange={(e) => setAt(i, { description: e.target.value })} /></td>
+                    <td><AutoTextarea placeholder="e.g. Embeddings" value={r.title} onChange={(e) => setAt(i, { title: e.target.value })} /></td>
+                    <td><AutoTextarea placeholder="What the trainer delivers in class…" value={r.description} onChange={(e) => setAt(i, { description: e.target.value })} /></td>
                     <td><Input type="date" value={r.fromDate} onChange={(e) => setAt(i, { fromDate: e.target.value })} /></td>
                     <td>
                       <Input type="date" value={r.toDate} min={r.fromDate || undefined} onChange={(e) => setAt(i, { toDate: e.target.value })} />

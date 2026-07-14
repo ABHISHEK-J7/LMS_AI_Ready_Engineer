@@ -1,9 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ListChecks, Plus, Save, Trash2 } from 'lucide-react';
 import { Button, Input, Textarea } from '@/components/ui';
 
 const toInput = (v) => (v ? String(v).slice(0, 10) : ''); // ISO → yyyy-mm-dd
 const fmtDate = (v) => (v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+
+/** A textarea that grows to fit its content, so all the text is visible while typing. */
+function AutoTextarea({ value, onChange, placeholder }) {
+  const ref = useRef(null);
+  const fit = (el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } };
+  useEffect(() => { fit(ref.current); }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className="input subtopic-grow"
+      rows={1}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => { onChange(e); fit(e.target); }}
+    />
+  );
+}
 
 /** Inclusive day span between two yyyy-mm-dd dates (or null). */
 function daySpan(from, to) {
@@ -121,7 +138,7 @@ export function SubtopicsTable({ subtopics = [], contentDeliverables = '', canEd
                 return (
                   <tr key={i}>
                     <td className="lms-muted">{i + 1}</td>
-                    <td><Input placeholder="e.g. Firefly" value={r.title} onChange={(e) => setAt(i, { title: e.target.value })} /></td>
+                    <td><AutoTextarea placeholder="e.g. Firefly" value={r.title} onChange={(e) => setAt(i, { title: e.target.value })} /></td>
                     <td><Input type="date" value={r.fromDate} onChange={(e) => setAt(i, { fromDate: e.target.value })} /></td>
                     <td>
                       <Input type="date" value={r.toDate} min={r.fromDate || undefined} onChange={(e) => setAt(i, { toDate: e.target.value })} />

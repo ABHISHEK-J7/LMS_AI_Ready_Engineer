@@ -602,6 +602,20 @@
 .subtopics-table td .input,
 .subtopics-table td .textarea { width: 100%; margin: 0; }
 .subtopics-table td .textarea { min-height: 2.6rem; line-height: 1.45; resize: vertical; }
+/* Auto-growing textarea for the subtopic title: expands to fit the text so all
+   the content is visible while editing (no inner scrollbar). */
+.subtopic-grow {
+  width: 100%;
+  margin: 0;
+  resize: none;
+  overflow: hidden;
+  min-height: 2.6rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Read-only view: show the full text, don't clip. */
+.subtopics-table__name { white-space: pre-wrap; word-break: break-word; }
 .subtopics-table__name { font-weight: var(--font-weight-medium); }
 .subtopics-table__span { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px; }
 .day-pill {

@@ -72,35 +72,43 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
           title="Syllabus"
           subtitle="Click a topic to add its concepts, videos, documents, presentations & links"
         />
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)' }}>
-          {canImportFromMaster && (
-            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
-              <Library size={15} style={{ marginRight: 6 }} /> Import from Master
-            </Button>
-          )}
-          {canRequestFromMaster && (
-            <>
-              <Button variant="outline" onClick={() => setViewOpen(true)}>
-                <BookOpen size={15} style={{ marginRight: 6 }} /> View from Master
-              </Button>
-              <Button variant="outline" onClick={() => setRequestOpen(true)}>
-                <Library size={15} style={{ marginRight: 6 }} /> Request from Master
-              </Button>
-            </>
-          )}
-          {canEdit && (
-            <Button onClick={() => setAddSyllabusOpen(true)}>
-              <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Add syllabus
-            </Button>
-          )}
-        </div>
+        {/* Bulk import sits up top, beside the title. */}
+        {canEdit && (
+          <Button onClick={() => setAddSyllabusOpen(true)} style={{ marginLeft: 'auto' }}>
+            <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Add syllabus
+          </Button>
+        )}
       </div>
 
-      {canEdit && (
-        <form className="add-inline" onSubmit={add} style={{ marginBottom: 'var(--space-5)', justifyContent: 'flex-start', flex: '0 0 auto' }}>
-          <Input placeholder="New topic…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-          <Button type="submit" variant="outline" loading={addTopic.isPending}>Add topic</Button>
-        </form>
+      {/* One tidy toolbar row: add a topic on the left, master actions on the right. */}
+      {(canEdit || canImportFromMaster || canRequestFromMaster) && (
+        <div className="syllabus-toolbar">
+          {canEdit && (
+            <form className="add-inline" onSubmit={add}>
+              <Input placeholder="New topic…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+              <Button type="submit" variant="outline" loading={addTopic.isPending}>Add topic</Button>
+            </form>
+          )}
+          {(canImportFromMaster || canRequestFromMaster) && (
+            <div className="syllabus-toolbar__master">
+              {canImportFromMaster && (
+                <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+                  <Library size={15} style={{ marginRight: 6 }} /> Import from Master
+                </Button>
+              )}
+              {canRequestFromMaster && (
+                <>
+                  <Button variant="outline" onClick={() => setViewOpen(true)}>
+                    <BookOpen size={15} style={{ marginRight: 6 }} /> View from Master
+                  </Button>
+                  <Button variant="outline" onClick={() => setRequestOpen(true)}>
+                    <Library size={15} style={{ marginRight: 6 }} /> Request from Master
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {module.topics.length === 0 ? (

@@ -3,18 +3,23 @@ import { useLocation } from 'react-router-dom';
 import { getAnnouncementsSeenAt, markAnnouncementsSeen, useAnnouncements } from './announcements';
 import { useCertReviews } from './externalCertificates';
 import { useProjectReviews } from './projects';
+import { useSyllabusRequests } from './modules';
 
 /**
- * Unread counts for admin sidebar nav items, keyed by route. "Unread" =
- * announcements newer than the last visit to the Announcements tab.
+ * Unread/pending counts for admin sidebar nav items, keyed by route.
+ *  - Org admin: announcement + approval counts.
+ *  - Managing super admin: pending master-syllabus requests awaiting approval.
  *
+ * @param {{ superManaging?: boolean }} opts
  * @returns {Record<string, number>}
  */
-export function useNavBadges(enabled = true) {
+export function useNavBadges({ superManaging = false } = {}) {
   const location = useLocation();
-  const { data: announcements } = useAnnouncements({ enabled });
-  const { data: certReviews } = useCertReviews(enabled); // admins always review
-  const { data: projectReviews } = useProjectReviews(enabled);
+  const adminEnabled = !superManaging; // org-admin-only queries
+  const { data: announcements } = useAnnouncements({ enabled: adminEnabled });
+  const { data: certReviews } = useCertReviews(adminEnabled); // admins always review
+  const { data: projectReviews } = useProjectReviews(adminEnabled);
+  const { data: syllabusRequests } = useSyllabusRequests(superManaging);
   const [annSeen, setAnnSeen] = useState(getAnnouncementsSeenAt());
 
   useEffect(() => {
@@ -32,5 +37,11 @@ export function useNavBadges(enabled = true) {
     (certReviews ?? []).filter((c) => c.status === 'pending').length +
     (projectReviews ?? []).filter((p) => p.status === 'pending').length;
 
-  return { '/app/announcements': annCount, '/app/approvals': approvalsCount };
+  const syllabusPending = (syllabusRequests ?? []).filter((r) => r.status === 'pending').length;
+
+  return {
+    '/app/announcements': annCount,
+    '/app/approvals': approvalsCount,
+    '/app/syllabus-requests': syllabusPending,
+  };
 }

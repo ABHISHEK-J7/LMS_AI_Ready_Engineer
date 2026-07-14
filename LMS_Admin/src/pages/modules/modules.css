@@ -608,3 +608,57 @@
 .syllabus-preview__topic-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .syllabus-preview__subs { list-style: none; margin: var(--space-2) 0 0 22px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .syllabus-preview__subs li { display: flex; align-items: flex-start; gap: 6px; font-size: var(--font-size-sm); }
+/* Inside a request card the preview stays compact so cards keep an even height. */
+.syllabus-preview--card { max-height: 15rem; }
+
+/* ── Syllabus-request approvals (org cards → per-org request grid) ───────────── */
+
+/* Back link above the per-org page. */
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; padding: 0; margin: 0 0 var(--space-3);
+  color: var(--color-text-muted); font: inherit; font-size: var(--font-size-sm);
+  cursor: pointer; transition: color 160ms ease-out;
+}
+.back-link:hover { color: var(--color-primary); }
+.back-link:active { transform: translateX(-2px); }
+
+/* Clickable organization card on the approvals landing. The <button> is a bare
+   wrapper; the visual card is the inner <Card>. */
+.org-req-card {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; padding: 0; cursor: pointer;
+}
+.org-req-card__inner {
+  height: 100%;
+  transition: transform 160ms ease-out, border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.org-req-card:hover .org-req-card__inner {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.08));
+  transform: translateY(-2px);
+}
+.org-req-card:active .org-req-card__inner { transform: translateY(0) scale(0.99); }
+.org-req-card__head { display: flex; align-items: center; gap: var(--space-3); }
+.org-req-card__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none; border-radius: var(--radius-md);
+  background: var(--color-primary-soft, rgba(99, 102, 241, 0.12)); color: var(--color-primary);
+}
+.org-req-card__titles { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.org-req-card__name { font-weight: var(--font-weight-semibold); }
+.org-req-card__code { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.org-req-card__chevron { color: var(--color-text-muted); flex: none; }
+.org-req-card__foot {
+  display: flex; align-items: center; gap: var(--space-3);
+  margin-top: var(--space-4); padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border); flex-wrap: wrap;
+}
+.org-req-card__count { display: flex; flex-direction: column; line-height: 1.1; margin-right: auto; }
+.org-req-card__count-num { font-size: var(--font-size-2xl, 1.5rem); font-weight: var(--font-weight-bold); }
+.org-req-card__count-label { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.org-req-card__total { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* Request card in the per-org grid: a full-height column with actions pinned bottom. */
+.req-card { display: flex; flex-direction: column; height: 100%; }
+.req-card__actions { display: flex; gap: var(--space-2); margin-top: auto; padding-top: var(--space-4); }

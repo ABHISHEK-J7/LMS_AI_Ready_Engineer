@@ -102,6 +102,12 @@ test('org admin requests the master syllabus → super admin approves → it app
   // Org admin files a request.
   const request = await req('POST', `/modules/${mod._id}/master-syllabus-request`, A, { note: 'please share' });
   assert.equal(request.status, 201);
+
+  // The super admin is notified of the new request (drives the bell + nav badge).
+  const supers = await models.User.find({ role: 'super_admin' }).select('_id').lean();
+  const alert = await models.Notification.findOne({ user: supers[0]._id, type: 'syllabus', title: /Syllabus request/ }).sort({ createdAt: -1 });
+  assert.ok(alert, 'super admin received a new-request notification');
+  assert.equal(alert.link, '/app/syllabus-requests');
   // A second pending request for the same module is refused.
   assert.equal((await req('POST', `/modules/${mod._id}/master-syllabus-request`, A, {})).status, 409);
 

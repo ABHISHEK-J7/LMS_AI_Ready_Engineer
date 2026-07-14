@@ -6,13 +6,14 @@ import {
   Certificate,
   Module,
   ModuleProgress,
+  Organization,
   QuestionBankItem,
   SyllabusImportRequest,
   User,
 } from '../models/index.js';
 import { RequestStatus } from '../models/SyllabusImportRequest.js';
 import { getTemplateOrg } from '../services/orgSeed.js';
-import { notify } from '../services/notify.js';
+import { notify, notifyMany } from '../services/notify.js';
 import { runUnscoped, runAsOrg } from '../services/tenantContext.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
@@ -225,6 +226,27 @@ async function templateModuleForCode(code) {
 }
 
 /**
+ * Alert every super admin that a new master-syllabus request is awaiting approval.
+ * Runs unscoped so it can see the (global, org-less) super admins and stamp their
+ * notifications globally — regardless of the requesting org's context. Best-effort.
+ */
+async function notifySuperAdminsOfRequest(request) {
+  await runUnscoped(async () => {
+    const [supers, org] = await Promise.all([
+      User.find({ role: UserRole.SUPER_ADMIN }).select('_id').lean(),
+      Organization.findById(request.organization).select('name').lean(),
+    ]);
+    const orgName = org?.name ?? 'An organization';
+    await notifyMany(supers.map((u) => u._id), {
+      type: 'syllabus',
+      title: `Syllabus request: ${request.moduleName || request.moduleCode}`,
+      body: `${orgName} requested the master syllabus for this module.${request.note ? ` "${request.note}"` : ''}`,
+      link: '/app/syllabus-requests',
+    });
+  });
+}
+
+/**
  * ORG ADMIN: request that the master syllabus for this module be imported. The super
  * admin approves it in their Approvals area. Only ONE pending request per module.
  */
@@ -244,6 +266,7 @@ export async function requestMasterSyllabus(req, res) {
     requestedBy: req.auth.userId,
     note: req.body.note ?? '',
   });
+  await notifySuperAdminsOfRequest(request);
   ok(res, request.toJSON(), 201);
 }
 

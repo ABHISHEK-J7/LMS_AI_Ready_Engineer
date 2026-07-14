@@ -83,10 +83,11 @@ export function useRequestMasterSyllabus() {
 }
 
 /** Super admin: pending + decided master-syllabus import requests (with previews). */
-export function useSyllabusRequests() {
+export function useSyllabusRequests(enabled = true) {
   return useQuery({
     queryKey: ['syllabus-requests'],
     queryFn: () => unwrap(api.get('/modules/master-syllabus-requests')),
+    enabled,
   });
 }
 

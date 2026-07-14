@@ -37,7 +37,7 @@ export function AppLayout() {
   // template — it has no announcements/certs/projects/notifications, so skip those
   // queries entirely (avoids marking the template's notifications read, etc.).
   const superManaging = user?.role === UserRole.SUPER_ADMIN && !orgView;
-  const badges = useNavBadges(!superManaging);
+  const badges = useNavBadges({ superManaging });
   const [navOpen, setNavOpen] = useState(false);
 
   // Close the mobile drawer whenever the route changes.
@@ -126,8 +126,9 @@ export function AppLayout() {
             <div className="topbar__title">{current.label}</div>
           </div>
           <div className="topbar__right">
-            {/* Notifications are per-org; a managing super admin has no org context. */}
-            {!superManaging && <NotificationsBell />}
+            {/* Notifications are keyed per-user, so they work in every context — incl.
+                a managing super admin's global syllabus-request alerts. */}
+            <NotificationsBell />
             <ThemeSwitcher />
             <div className="user-chip">
               <div className="user-chip__avatar">

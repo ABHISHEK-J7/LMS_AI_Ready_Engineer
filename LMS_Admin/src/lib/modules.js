@@ -100,6 +100,15 @@ export function useDecideSyllabusRequest() {
   });
 }
 
+/** Super admin: approve EVERY pending request for one organization at once. */
+export function useApproveAllSyllabusRequests() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (organization) => unwrap(api.post('/modules/master-syllabus-requests/approve-all', { organization })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['syllabus-requests'] }),
+  });
+}
+
 export function useUpdateModule() {
   const invalidate = useModuleInvalidation();
   return useMutation({

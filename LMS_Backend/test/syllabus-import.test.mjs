@@ -171,3 +171,37 @@ test('super admin sees + approves requests even with a drill-in X-Org-Id header'
   assert.ok(note, 'requester got a notification');
   assert.equal(String(note.organization), String(orgId), 'notification stamped into the requesting org');
 });
+
+test('super admin approves ALL of an org\'s pending requests at once', async () => {
+  const { req, models } = ctx;
+  const A = await ctx.login('admin@acme.local');
+
+  // Give the org a second requestable module so there are multiple pending requests.
+  await models.Module.create({
+    organization: templateId, name: 'Second Mod', code: 'ST2', order: 2, level: 'beginner',
+    description: 'Second master', topics: [{ title: 'Alpha', order: 0, subtopics: [{ title: 'a1' }] }],
+  });
+  const org2 = await ctx.req('POST', '/organizations', SA, { name: 'Beta', code: 'BETA', adminName: 'Beta Admin', adminEmail: 'admin@beta.local', adminPassword: 'Passw0rd!' });
+  const B = await ctx.login('admin@beta.local');
+  const mods = await models.Module.find({ organization: org2.data.id, code: { $in: ['ST', 'ST2'] } });
+  assert.equal(mods.length, 2, 'Beta cloned both requestable modules');
+  // Drift both so we can prove approval applies the master.
+  await models.Module.updateMany({ _id: { $in: mods.map((m) => m._id) } }, { $set: { topics: [], description: '' } });
+
+  // File a pending request for each module.
+  for (const m of mods) {
+    assert.equal((await req('POST', `/modules/${m._id}/master-syllabus-request`, B, {})).status, 201);
+  }
+
+  // Approve them all in one call (with the template drill-in header, to be realistic).
+  const header = { 'X-Org-Id': String(templateId) };
+  const res = await req('POST', '/modules/master-syllabus-requests/approve-all', SA, { organization: org2.data.id }, header);
+  assert.equal(res.status, 200);
+  assert.equal(res.data.approved, 2, 'both requests approved');
+
+  // Both modules now carry the master syllabus, and no request is left pending.
+  const after = await models.Module.find({ organization: org2.data.id, code: { $in: ['ST', 'ST2'] } });
+  for (const m of after) assert.ok(m.description, 'master description applied');
+  const stillPending = await models.SyllabusImportRequest.countDocuments({ organization: org2.data.id, status: 'pending' });
+  assert.equal(stillPending, 0, 'no pending requests remain for the org');
+});

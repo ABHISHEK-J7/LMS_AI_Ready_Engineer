@@ -217,6 +217,10 @@ export const decideRequestSchema = z.object({
   decision: z.enum(['approve', 'reject']),
   note: z.string().max(500).optional(),
 });
+export const approveAllSchema = z.object({
+  organization: objectId,
+  note: z.string().max(500).optional(),
+});
 
 /** The template module matching a given org-module code (lean), or null. */
 async function templateModuleForCode(code) {
@@ -244,6 +248,37 @@ async function notifySuperAdminsOfRequest(request) {
       link: '/app/syllabus-requests',
     });
   });
+}
+
+/**
+ * Apply the master syllabus onto a request's target module and mark it APPROVED.
+ * Throws ApiError if the module or its master template no longer exists. Assumes it
+ * runs inside a runUnscoped() block (the module lives in the requesting org).
+ */
+async function applyMasterSyllabusToRequest(request, userId, note = '') {
+  const target = await Module.findById(request.module);
+  const src = await templateModuleForCode(request.moduleCode);
+  if (!target) throw ApiError.badRequest('The requested module no longer exists.');
+  if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
+  copyMasterSyllabus(target, src);
+  await target.save();
+  request.status = RequestStatus.APPROVED;
+  request.decidedBy = userId;
+  request.decidedAt = new Date();
+  request.decisionNote = note;
+  await request.save();
+}
+
+/** Notify a request's requester of the outcome — stamped into THEIR org's inbox. */
+async function notifyRequesterOfDecision(request) {
+  await runAsOrg(request.organization, () => notify(request.requestedBy, {
+    type: 'syllabus',
+    title: `Master syllabus request ${request.status}: ${request.moduleName || request.moduleCode}`,
+    body: request.status === RequestStatus.APPROVED
+      ? 'The super admin approved your request — the master syllabus has been imported.'
+      : `The super admin declined your request.${request.decisionNote ? ` "${request.decisionNote}"` : ''}`,
+    link: '/app/modules',
+  }));
 }
 
 /**
@@ -309,33 +344,49 @@ export async function decideSyllabusRequest(req, res) {
     if (request.status !== RequestStatus.PENDING) throw ApiError.badRequest('This request has already been decided.');
 
     if (req.body.decision === 'approve') {
-      const target = await Module.findById(request.module);
-      const src = await templateModuleForCode(request.moduleCode);
-      if (!target) throw ApiError.badRequest('The requested module no longer exists.');
-      if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
-      copyMasterSyllabus(target, src);
-      await target.save();
-      request.status = RequestStatus.APPROVED;
+      await applyMasterSyllabusToRequest(request, req.auth.userId, req.body.note ?? '');
     } else {
       request.status = RequestStatus.REJECTED;
+      request.decidedBy = req.auth.userId;
+      request.decidedAt = new Date();
+      request.decisionNote = req.body.note ?? '';
+      await request.save();
     }
-    request.decidedBy = req.auth.userId;
-    request.decidedAt = new Date();
-    request.decisionNote = req.body.note ?? '';
-    await request.save();
     return request;
   });
 
-  // Tell the requester the outcome — stamped into THEIR org so it lands in their inbox.
-  await runAsOrg(request.organization, () => notify(request.requestedBy, {
-    type: 'syllabus',
-    title: `Master syllabus request ${request.status}: ${request.moduleName || request.moduleCode}`,
-    body: request.status === RequestStatus.APPROVED
-      ? 'The super admin approved your request — the master syllabus has been imported.'
-      : `The super admin declined your request.${request.decisionNote ? ` "${request.decisionNote}"` : ''}`,
-    link: '/app/modules',
-  }));
+  await notifyRequesterOfDecision(request);
   ok(res, request.toJSON());
+}
+
+/**
+ * SUPER ADMIN: approve EVERY pending request for one organization in a single action.
+ * Requests whose module/master no longer exists are skipped (not failed), so one bad
+ * request can't block the rest. Returns how many were approved vs skipped.
+ */
+export async function approveAllSyllabusRequests(req, res) {
+  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Super admin only.');
+  const orgId = req.body.organization;
+
+  const { approved, skipped } = await runUnscoped(async () => {
+    const pending = await SyllabusImportRequest.find({ organization: orgId, status: RequestStatus.PENDING })
+      .sort({ createdAt: 1 }); // FIFO
+    const approved = [];
+    let skipped = 0;
+    for (const request of pending) {
+      try {
+        await applyMasterSyllabusToRequest(request, req.auth.userId, req.body.note ?? '');
+        approved.push(request);
+      } catch {
+        skipped += 1; // module no longer part of the master curriculum, etc.
+      }
+    }
+    return { approved, skipped };
+  });
+
+  // Notify each requester of their approval.
+  await Promise.all(approved.map((request) => notifyRequesterOfDecision(request)));
+  ok(res, { approved: approved.length, skipped });
 }
 
 // ── Admin CRUD ───────────────────────────────────────────────────────────────

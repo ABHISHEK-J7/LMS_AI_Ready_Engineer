@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Building2, CheckCircle2, ChevronRight, Inbox, XCircle } from 'lucide-react';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, SkeletonCards, useToast } from '@/components/ui';
+import { ArrowLeft, BookOpen, Building2, CheckCircle2, CheckCheck, ChevronRight, Inbox, XCircle } from 'lucide-react';
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, SkeletonCards, useConfirm, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/PageHeader';
 import { apiErrorMessage } from '@/lib/api';
-import { useDecideSyllabusRequest, useSyllabusRequests } from '@/lib/modules';
+import { useApproveAllSyllabusRequests, useDecideSyllabusRequest, useSyllabusRequests } from '@/lib/modules';
 import { formatDate } from '@/lib/format';
 import '../modules/modules.css';
 
@@ -94,7 +94,9 @@ export function SyllabusRequestsOrgPage() {
   const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch } = useSyllabusRequests();
   const decide = useDecideSyllabusRequest();
+  const approveAll = useApproveAllSyllabusRequests();
   const toast = useToast();
+  const confirm = useConfirm();
   const [busyId, setBusyId] = useState(null);
 
   const requests = useMemo(
@@ -119,6 +121,24 @@ export function SyllabusRequestsOrgPage() {
     }
   }
 
+  async function handleApproveAll() {
+    const ok = await confirm({
+      title: `Approve all ${pending} request${pending === 1 ? '' : 's'}?`,
+      message: `The master syllabus will be imported into ${org?.name ?? 'this organization'} for every pending request.`,
+      confirmLabel: 'Approve all',
+    });
+    if (!ok) return;
+    try {
+      const res = await approveAll.mutateAsync(String(orgId));
+      toast.success(
+        `Approved ${res.approved} request${res.approved === 1 ? '' : 's'}.` +
+        (res.skipped ? ` ${res.skipped} skipped (no longer in the master curriculum).` : ''),
+      );
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
   return (
     <>
       <button type="button" className="back-link" onClick={() => navigate('/app/syllabus-requests')}>
@@ -135,6 +155,11 @@ export function SyllabusRequestsOrgPage() {
         subtitle={pending > 0
           ? `${pending} request${pending === 1 ? '' : 's'} awaiting your approval.`
           : 'No requests awaiting approval.'}
+        actions={pending > 0 ? (
+          <Button onClick={handleApproveAll} loading={approveAll.isPending} disabled={approveAll.isPending}>
+            <CheckCheck size={15} style={{ marginRight: 6 }} /> Approve all ({pending})
+          </Button>
+        ) : null}
       />
 
       {isError ? (

@@ -231,6 +231,18 @@
 .page-header {
   margin-bottom: var(--space-6);
 }
+.page-header--with-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.page-header__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex: none;
+}
 .page-header__sub {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);

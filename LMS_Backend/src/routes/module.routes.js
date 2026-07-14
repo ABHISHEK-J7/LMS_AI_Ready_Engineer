@@ -26,6 +26,7 @@ router.post(
 // Super admin (handler-enforced): review + decide org admins' master-syllabus
 // requests. Declared before "/:id" so the literal path wins.
 router.get('/master-syllabus-requests', adminOnly, asyncHandler(modules.listSyllabusRequests));
+router.post('/master-syllabus-requests/approve-all', adminOnly, validate({ body: modules.approveAllSchema }), asyncHandler(modules.approveAllSyllabusRequests));
 router.patch('/master-syllabus-requests/:reqId', adminOnly, validate({ params: modules.requestIdParam, body: modules.decideRequestSchema }), asyncHandler(modules.decideSyllabusRequest));
 
 router.get('/:id', validate({ params: modules.moduleIdParam }), asyncHandler(modules.getModule));

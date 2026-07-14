@@ -57,6 +57,15 @@ export function useCreateModule() {
   });
 }
 
+/** Super admin (drilled into an org): copy the master syllabus onto this org's module. */
+export function useImportSyllabusFromMaster() {
+  const invalidate = useModuleInvalidation();
+  return useMutation({
+    mutationFn: (id) => unwrap(api.post(`/modules/${id}/import-syllabus`)),
+    onSuccess: invalidate,
+  });
+}
+
 export function useUpdateModule() {
   const invalidate = useModuleInvalidation();
   return useMutation({

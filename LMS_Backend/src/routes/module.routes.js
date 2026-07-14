@@ -24,6 +24,9 @@ router.post(
 );
 
 router.get('/:id', validate({ params: modules.moduleIdParam }), asyncHandler(modules.getModule));
+// Super admin only (enforced in the handler): copy the master syllabus onto this
+// org's module. adminOnly lets a drilled-in super admin (effective role ADMIN) through.
+router.post('/:id/import-syllabus', adminOnly, validate({ params: modules.moduleIdParam }), asyncHandler(modules.importSyllabusFromTemplate));
 
 // ── Admin CRUD ────────────────────────────────────────────────────────────────
 router.post('/', adminOnly, validate({ body: modules.createModuleSchema }), asyncHandler(modules.createModule));

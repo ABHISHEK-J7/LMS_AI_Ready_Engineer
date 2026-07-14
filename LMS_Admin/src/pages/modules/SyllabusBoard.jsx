@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { BookOpen, FileSpreadsheet, Layers, ListChecks, Pencil, Trash2 } from 'lucide-react';
-import { Button, Card, CardHeader, Input, Modal, Textarea, useConfirm } from '@/components/ui';
+import { BookOpen, FileSpreadsheet, Layers, Library, ListChecks, Pencil, Trash2 } from 'lucide-react';
+import { Button, Card, CardHeader, Input, Modal, Textarea, useConfirm, useToast } from '@/components/ui';
+import { apiErrorMessage } from '@/lib/api';
 import {
   useAddTopic,
   useDeleteTopic,
+  useImportSyllabusFromMaster,
   useUpdateTopic,
 } from '@/lib/modules';
 import { useResources } from '@/lib/resources';
@@ -16,7 +18,7 @@ import { AddSyllabusModal } from './AddSyllabusModal';
  * (subtopics + descriptions) and learning resources in a modal. Staff can bulk
  * import the whole syllabus from an Excel sheet ("Add syllabus").
  */
-export function SyllabusBoard({ module, canEdit }) {
+export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) {
   const [newTitle, setNewTitle] = useState('');
   const [editing, setEditing] = useState(null); // { topicId, title, description }
   const [openTopicId, setOpenTopicId] = useState(null);
@@ -24,8 +26,26 @@ export function SyllabusBoard({ module, canEdit }) {
   const addTopic = useAddTopic();
   const updateTopic = useUpdateTopic();
   const deleteTopic = useDeleteTopic();
+  const importSyllabus = useImportSyllabusFromMaster();
   const confirm = useConfirm();
+  const toast = useToast();
   const { data: resources } = useResources(module.id);
+
+  async function onImportFromMaster() {
+    const okToGo = await confirm({
+      title: 'Import syllabus from the master?',
+      message: 'This replaces this module’s topics, subtopics and descriptions with the master curriculum’s. This can’t be undone.',
+      confirmLabel: 'Import & replace',
+      tone: 'danger',
+    });
+    if (!okToGo) return;
+    try {
+      await importSyllabus.mutateAsync(module.id);
+      toast.success('Master syllabus imported.');
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
 
   async function onDeleteTopic(topicId) {
     if (await confirm({ title: 'Delete this topic?', message: 'Its concepts and resource links will be removed.', confirmLabel: 'Delete', tone: 'danger' })) {
@@ -65,11 +85,18 @@ export function SyllabusBoard({ module, canEdit }) {
           title="Syllabus"
           subtitle="Click a topic to add its concepts, videos, documents, presentations & links"
         />
-        {canEdit && (
-          <Button onClick={() => setAddSyllabusOpen(true)} style={{ marginLeft: 'auto' }}>
-            <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Add syllabus
-          </Button>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)' }}>
+          {canImportFromMaster && (
+            <Button variant="outline" onClick={onImportFromMaster} loading={importSyllabus.isPending}>
+              <Library size={15} style={{ marginRight: 6 }} /> Import from Master
+            </Button>
+          )}
+          {canEdit && (
+            <Button onClick={() => setAddSyllabusOpen(true)}>
+              <FileSpreadsheet size={15} style={{ marginRight: 6 }} /> Add syllabus
+            </Button>
+          )}
+        </div>
       </div>
 
       {canEdit && (

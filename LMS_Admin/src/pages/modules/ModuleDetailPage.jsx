@@ -40,6 +40,8 @@ export function ModuleDetailPage() {
   // …but a super admin editing the TEMPLATE (not drilled into an org) never assigns
   // trainers — trainers are per-org and assigned by that org's admin. Hide the panel.
   const editingTemplate = user?.role === UserRole.SUPER_ADMIN && !orgView;
+  // A super admin drilled INTO an org can pull the master syllabus onto its module.
+  const canImportSyllabus = user?.role === UserRole.SUPER_ADMIN && Boolean(orgView);
 
   const { data: module, isLoading, isError, error, refetch } = useModule(id);
 
@@ -111,7 +113,7 @@ export function ModuleDetailPage() {
 
       <div className={`detail-grid${editingTemplate ? ' detail-grid--full' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-          <SyllabusBoard module={module} canEdit={canEdit} />
+          <SyllabusBoard module={module} canEdit={canEdit} canImportFromMaster={canImportSyllabus} />
           <ObjectivesEditor module={module} canEdit={canEdit} />
         </div>
         {!editingTemplate && <TrainersPanel module={module} isAdmin={isAdmin} />}

@@ -9,6 +9,7 @@ import {
   QuestionBankItem,
   User,
 } from '../models/index.js';
+import { getTemplateOrg } from '../services/orgSeed.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -128,6 +129,46 @@ export async function getModule(req, res) {
   );
   if (!module) throw ApiError.notFound('Module not found');
   ok(res, module.toJSON());
+}
+
+/**
+ * SUPER ADMIN ONLY (while drilled into an org): copy the MASTER template's syllabus
+ * for this module — its description, learning objectives, topics, subtopics (with
+ * their descriptions and date windows) — onto this org's module, replacing its
+ * current syllabus. Modules are matched to the template by code.
+ */
+export async function importSyllabusFromTemplate(req, res) {
+  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Only the super admin can import the master syllabus.');
+  const targetOrg = req.auth.organization;
+  if (!targetOrg) throw ApiError.badRequest('Enter an organization first, then import.');
+
+  const template = await getTemplateOrg();
+  if (!template) throw ApiError.badRequest('The master template is not set up.');
+  if (String(template._id) === String(targetOrg)) throw ApiError.badRequest('You are already editing the master syllabus.');
+
+  const target = await Module.findById(req.params.id);
+  if (!target) throw ApiError.notFound('Module not found');
+  // Reading the template bypasses tenant scoping via an explicit `organization`.
+  const src = await Module.findOne({ organization: template._id, code: target.code }).lean();
+  if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
+
+  // Deep-copy the master syllabus onto the org module (fresh, so completed flags reset).
+  target.description = src.description ?? '';
+  target.learningObjectives = src.learningObjectives ?? [];
+  target.topics = (src.topics ?? []).map((t, i) => ({
+    title: t.title,
+    description: t.description ?? '',
+    order: t.order ?? i,
+    completed: false,
+    subtopics: (t.subtopics ?? []).map((s) => ({
+      title: s.title ?? '',
+      description: s.description ?? '',
+      fromDate: s.fromDate ?? null,
+      toDate: s.toDate ?? null,
+    })),
+  }));
+  await target.save();
+  ok(res, target.toJSON());
 }
 
 // ── Admin CRUD ───────────────────────────────────────────────────────────────

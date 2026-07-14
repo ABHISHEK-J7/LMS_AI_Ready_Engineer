@@ -132,25 +132,56 @@ export async function getModule(req, res) {
 }
 
 /**
+ * Resolve the master-template module that matches this org module (by code), for
+ * the syllabus preview/import. Super-admin-only, while drilled into an org.
+ * Returns { target: <org module doc>, src: <template module, lean> }.
+ */
+async function resolveMasterModule(req) {
+  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Only the super admin can use the master syllabus.');
+  const targetOrg = req.auth.organization;
+  if (!targetOrg) throw ApiError.badRequest('Enter an organization first.');
+  const template = await getTemplateOrg();
+  if (!template) throw ApiError.badRequest('The master template is not set up.');
+  if (String(template._id) === String(targetOrg)) throw ApiError.badRequest('You are already editing the master syllabus.');
+  const target = await Module.findById(req.params.id);
+  if (!target) throw ApiError.notFound('Module not found');
+  // Reading the template bypasses tenant scoping via an explicit `organization`.
+  const src = await Module.findOne({ organization: template._id, code: target.code }).lean();
+  if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
+  return { target, src };
+}
+
+/**
+ * SUPER ADMIN ONLY: a read-only PREVIEW of the master syllabus that would be
+ * imported onto this org module — its description, objectives, topic titles +
+ * descriptions, subtopic titles + descriptions, and counts. Applies nothing.
+ */
+export async function getMasterSyllabusPreview(req, res) {
+  const { src } = await resolveMasterModule(req);
+  const topics = (src.topics ?? []).map((t) => ({
+    title: t.title,
+    description: t.description ?? '',
+    subtopics: (t.subtopics ?? []).map((s) => ({ title: s.title ?? '', description: s.description ?? '' })),
+  }));
+  ok(res, {
+    code: src.code,
+    name: src.name,
+    description: src.description ?? '',
+    learningObjectives: src.learningObjectives ?? [],
+    topics,
+    topicCount: topics.length,
+    subtopicCount: topics.reduce((n, t) => n + t.subtopics.length, 0),
+  });
+}
+
+/**
  * SUPER ADMIN ONLY (while drilled into an org): copy the MASTER template's syllabus
  * for this module — its description, learning objectives, topics, subtopics (with
  * their descriptions and date windows) — onto this org's module, replacing its
  * current syllabus. Modules are matched to the template by code.
  */
 export async function importSyllabusFromTemplate(req, res) {
-  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Only the super admin can import the master syllabus.');
-  const targetOrg = req.auth.organization;
-  if (!targetOrg) throw ApiError.badRequest('Enter an organization first, then import.');
-
-  const template = await getTemplateOrg();
-  if (!template) throw ApiError.badRequest('The master template is not set up.');
-  if (String(template._id) === String(targetOrg)) throw ApiError.badRequest('You are already editing the master syllabus.');
-
-  const target = await Module.findById(req.params.id);
-  if (!target) throw ApiError.notFound('Module not found');
-  // Reading the template bypasses tenant scoping via an explicit `organization`.
-  const src = await Module.findOne({ organization: template._id, code: target.code }).lean();
-  if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
+  const { target, src } = await resolveMasterModule(req);
 
   // Deep-copy the master syllabus onto the org module (fresh, so completed flags reset).
   target.description = src.description ?? '';

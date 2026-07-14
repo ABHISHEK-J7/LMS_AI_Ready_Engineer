@@ -568,3 +568,10 @@
 .ord-btn:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
 .ord-btn:active:not(:disabled) { transform: scale(0.9); }
 .ord-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Master syllabus preview (before import). */
+.syllabus-preview { display: flex; flex-direction: column; gap: var(--space-3); max-height: 55vh; overflow-y: auto; padding-right: 4px; }
+.syllabus-preview__topic { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-3); }
+.syllabus-preview__topic-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.syllabus-preview__subs { list-style: none; margin: var(--space-2) 0 0 22px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.syllabus-preview__subs li { display: flex; align-items: flex-start; gap: 6px; font-size: var(--font-size-sm); }

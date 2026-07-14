@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { BookOpen, FileSpreadsheet, Layers, Library, ListChecks, Pencil, Trash2 } from 'lucide-react';
-import { Button, Card, CardHeader, Input, Modal, Textarea, useConfirm, useToast } from '@/components/ui';
+import { BookOpen, Check, ChevronRight, FileSpreadsheet, Layers, Library, ListChecks, Pencil, Trash2 } from 'lucide-react';
+import { Button, Card, CardHeader, ErrorState, Input, Modal, SkeletonText, Textarea, useConfirm, useToast } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import {
   useAddTopic,
   useDeleteTopic,
   useImportSyllabusFromMaster,
+  useMasterSyllabusPreview,
   useUpdateTopic,
 } from '@/lib/modules';
 import { useResources } from '@/lib/resources';
@@ -23,29 +24,12 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
   const [editing, setEditing] = useState(null); // { topicId, title, description }
   const [openTopicId, setOpenTopicId] = useState(null);
   const [addSyllabusOpen, setAddSyllabusOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const addTopic = useAddTopic();
   const updateTopic = useUpdateTopic();
   const deleteTopic = useDeleteTopic();
-  const importSyllabus = useImportSyllabusFromMaster();
   const confirm = useConfirm();
-  const toast = useToast();
   const { data: resources } = useResources(module.id);
-
-  async function onImportFromMaster() {
-    const okToGo = await confirm({
-      title: 'Import syllabus from the master?',
-      message: 'This replaces this module’s topics, subtopics and descriptions with the master curriculum’s. This can’t be undone.',
-      confirmLabel: 'Import & replace',
-      tone: 'danger',
-    });
-    if (!okToGo) return;
-    try {
-      await importSyllabus.mutateAsync(module.id);
-      toast.success('Master syllabus imported.');
-    } catch (e) {
-      toast.error(apiErrorMessage(e));
-    }
-  }
 
   async function onDeleteTopic(topicId) {
     if (await confirm({ title: 'Delete this topic?', message: 'Its concepts and resource links will be removed.', confirmLabel: 'Delete', tone: 'danger' })) {
@@ -87,7 +71,7 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
         />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)' }}>
           {canImportFromMaster && (
-            <Button variant="outline" onClick={onImportFromMaster} loading={importSyllabus.isPending}>
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
               <Library size={15} style={{ marginRight: 6 }} /> Import from Master
             </Button>
           )}
@@ -195,6 +179,11 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
         <AddSyllabusModal module={module} onClose={() => setAddSyllabusOpen(false)} />
       </Modal>
 
+      {/* Preview the master syllabus, then import on confirm. */}
+      {previewOpen && (
+        <MasterSyllabusPreviewModal moduleId={module.id} onClose={() => setPreviewOpen(false)} />
+      )}
+
       {/* Edit topic */}
       <Modal
         open={Boolean(editing)}
@@ -215,5 +204,104 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
         )}
       </Modal>
     </Card>
+  );
+}
+
+// ── Master syllabus: preview, then import ────────────────────────────────────────
+
+/**
+ * Shows exactly what the master syllabus contains for this module — topic titles +
+ * descriptions, subtopic titles + descriptions, and counts — before the super admin
+ * confirms the import (which REPLACES the module's current syllabus).
+ */
+function MasterSyllabusPreviewModal({ moduleId, onClose }) {
+  const { data, isLoading, isError, error, refetch } = useMasterSyllabusPreview(moduleId, true);
+  const importSyllabus = useImportSyllabusFromMaster();
+  const toast = useToast();
+
+  async function apply() {
+    try {
+      await importSyllabus.mutateAsync(moduleId);
+      toast.success('Master syllabus imported.');
+      onClose();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      open
+      title="Import syllabus from Master"
+      size="lg"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="danger" disabled={isLoading || isError || !data} loading={importSyllabus.isPending} onClick={apply}>
+            <Check size={15} style={{ marginRight: 6 }} /> Import &amp; replace
+          </Button>
+        </>
+      }
+    >
+      {isLoading ? (
+        <SkeletonText lines={6} />
+      ) : isError ? (
+        <ErrorState message={apiErrorMessage(error)} onRetry={refetch} />
+      ) : data ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <p className="lms-secondary-text" style={{ margin: 0 }}>
+            The master has <strong>{data.topicCount}</strong> topic{data.topicCount === 1 ? '' : 's'} and{' '}
+            <strong>{data.subtopicCount}</strong> subtopic{data.subtopicCount === 1 ? '' : 's'}. Importing{' '}
+            <strong>replaces this module’s current syllabus</strong> with the one below.
+          </p>
+
+          {data.description && (
+            <div>
+              <div className="field__label">Module description</div>
+              <p className="lms-secondary-text" style={{ margin: 0 }}>{data.description}</p>
+            </div>
+          )}
+          {data.learningObjectives?.length > 0 && (
+            <div>
+              <div className="field__label">Learning objectives ({data.learningObjectives.length})</div>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                {data.learningObjectives.map((o, i) => <li key={i} className="lms-secondary-text">{o}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {data.topics.length === 0 ? (
+            <p className="lms-muted">The master syllabus for this module is empty.</p>
+          ) : (
+            <div className="syllabus-preview">
+              {data.topics.map((t, i) => (
+                <div key={i} className="syllabus-preview__topic">
+                  <div className="syllabus-preview__topic-title">
+                    <BookOpen size={15} /> <strong>{i + 1}. {t.title}</strong>
+                    {t.subtopics.length > 0 && (
+                      <span className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
+                        · {t.subtopics.length} subtopic{t.subtopics.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </div>
+                  {t.description && <div className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: '2px 0 0 22px' }}>{t.description}</div>}
+                  {t.subtopics.length > 0 && (
+                    <ul className="syllabus-preview__subs">
+                      {t.subtopics.map((s, j) => (
+                        <li key={j}>
+                          <ChevronRight size={13} style={{ color: 'var(--color-primary)', flex: 'none' }} />
+                          <span>{s.title}{s.description ? <span className="lms-muted"> — {s.description}</span> : null}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </Modal>
   );
 }

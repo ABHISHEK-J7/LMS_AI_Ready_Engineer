@@ -57,6 +57,15 @@ export function useCreateModule() {
   });
 }
 
+/** Super admin: read-only preview of the master syllabus for a module (topics/subtopics). */
+export function useMasterSyllabusPreview(id, enabled) {
+  return useQuery({
+    queryKey: ['module', id, 'master-syllabus-preview'],
+    queryFn: () => unwrap(api.get(`/modules/${id}/master-syllabus-preview`)),
+    enabled: Boolean(id && enabled),
+  });
+}
+
 /** Super admin (drilled into an org): copy the master syllabus onto this org's module. */
 export function useImportSyllabusFromMaster() {
   const invalidate = useModuleInvalidation();

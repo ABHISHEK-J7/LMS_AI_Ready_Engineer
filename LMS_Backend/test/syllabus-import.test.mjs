@@ -28,6 +28,25 @@ after(async () => { await ctx.stop(); });
 
 const asOrg = () => ({ 'X-Org-Id': orgId });
 
+test('master syllabus preview shows titles + counts and applies nothing', async () => {
+  const { req, models } = ctx;
+  const mod = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  await models.Module.updateOne({ _id: mod._id }, { $set: { topics: [{ title: 'Untouched', order: 0, subtopics: [] }] } });
+
+  const res = await req('GET', `/modules/${mod._id}/master-syllabus-preview`, SA, null, asOrg());
+  assert.equal(res.status, 200);
+  assert.equal(res.data.topicCount, 2);
+  assert.equal(res.data.subtopicCount, 1);
+  assert.equal(res.data.description, 'Master description');
+  assert.deepEqual(res.data.topics.map((t) => t.title), ['Topic One', 'Topic Two']);
+  assert.equal(res.data.topics[0].subtopics[0].title, 'Sub 1');
+
+  // The preview is read-only — the org module is unchanged.
+  const after = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  assert.equal(after.topics.length, 1);
+  assert.equal(after.topics[0].title, 'Untouched');
+});
+
 test('super admin (drilled in) imports the master syllabus onto an org module', async () => {
   const { req, models } = ctx;
   const mod = await models.Module.findOne({ organization: orgId, code: 'ST' });

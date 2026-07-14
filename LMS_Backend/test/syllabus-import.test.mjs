@@ -129,3 +129,39 @@ test('org admin requests the master syllabus → super admin approves → it app
   // Deciding again is refused.
   assert.equal((await req('PATCH', `/modules/master-syllabus-requests/${request.data.id}`, SA, { decision: 'reject' })).status, 400);
 });
+
+// Regression: the admin UI attaches an X-Org-Id header on the super admin's GLOBAL
+// calls (defaulting to the master-template org when not drilled into the requester).
+// That must NOT scope the approvals inbox — the request lives in the requester's org.
+test('super admin sees + approves requests even with a drill-in X-Org-Id header', async () => {
+  const { req, models } = ctx;
+  const A = await ctx.login('admin@acme.local');
+  const mod = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  await models.Module.updateOne({ _id: mod._id }, { $set: { topics: [], description: '' } });
+
+  // Org admin files a fresh request (the earlier one was already approved).
+  const request = await req('POST', `/modules/${mod._id}/master-syllabus-request`, A, { note: 'again please' });
+  assert.equal(request.status, 201);
+
+  // Super admin's client sends X-Org-Id = the TEMPLATE org (its default when not
+  // drilled into the requester) — the request is raised by ACME, a different org.
+  const header = { 'X-Org-Id': String(templateId) };
+
+  const listSA = await req('GET', '/modules/master-syllabus-requests', SA, null, header);
+  assert.equal(listSA.status, 200);
+  const mine = listSA.data.find((r) => r.id === request.data.id);
+  assert.ok(mine, 'request from ACME is visible despite the template X-Org-Id header');
+  assert.equal(mine.organization.code, 'ACME');
+
+  // And it can be approved through the header without a cross-org 404.
+  const decided = await req('PATCH', `/modules/master-syllabus-requests/${request.data.id}`, SA, { decision: 'approve' }, header);
+  assert.equal(decided.status, 200);
+  assert.equal(decided.data.status, 'approved');
+  const after = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  assert.equal(after.description, 'Master description', 'master syllabus applied to ACME on approval');
+
+  // The requester's outcome notification lands in THEIR org (not the header org).
+  const note = await models.Notification.findOne({ user: mine.requestedBy._id ?? mine.requestedBy, type: 'syllabus' }).sort({ createdAt: -1 });
+  assert.ok(note, 'requester got a notification');
+  assert.equal(String(note.organization), String(orgId), 'notification stamped into the requesting org');
+});

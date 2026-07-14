@@ -13,6 +13,7 @@ import {
 import { RequestStatus } from '../models/SyllabusImportRequest.js';
 import { getTemplateOrg } from '../services/orgSeed.js';
 import { notify } from '../services/notify.js';
+import { runUnscoped, runAsOrg } from '../services/tenantContext.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -252,54 +253,65 @@ export async function requestMasterSyllabus(req, res) {
  */
 export async function listSyllabusRequests(req, res) {
   if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Super admin only.');
-  const reqs = await SyllabusImportRequest.find({})
-    .sort({ status: 1, createdAt: -1 })
-    .populate('organization', 'name code')
-    .populate('requestedBy', 'name email')
-    .lean();
-  // Rank pending first, then newest.
-  const rank = { pending: 0, approved: 1, rejected: 2 };
-  reqs.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
+  // Run unscoped: this is a GLOBAL super-admin inbox spanning every org. Without this,
+  // a drilled-in X-Org-Id header would scope the query to a single org and hide the
+  // requests raised by other organizations.
+  const items = await runUnscoped(async () => {
+    const reqs = await SyllabusImportRequest.find({})
+      .sort({ status: 1, createdAt: -1 })
+      .populate('organization', 'name code')
+      .populate('requestedBy', 'name email')
+      .lean();
+    // Rank pending first, then newest.
+    const rank = { pending: 0, approved: 1, rejected: 2 };
+    reqs.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
 
-  const items = await Promise.all(reqs.map(async (r) => {
-    const src = await templateModuleForCode(r.moduleCode);
-    return { ...r, id: String(r._id), master: src ? syllabusPreview(src) : null };
-  }));
+    return Promise.all(reqs.map(async (r) => {
+      const src = await templateModuleForCode(r.moduleCode);
+      return { ...r, id: String(r._id), master: src ? syllabusPreview(src) : null };
+    }));
+  });
   ok(res, items);
 }
 
 /** SUPER ADMIN: approve (apply the master syllabus) or reject a request. */
 export async function decideSyllabusRequest(req, res) {
   if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Super admin only.');
-  const request = await SyllabusImportRequest.findById(req.params.reqId);
-  if (!request) throw ApiError.notFound('Request not found');
-  if (request.status !== RequestStatus.PENDING) throw ApiError.badRequest('This request has already been decided.');
+  // Run unscoped: the request and its target module belong to the REQUESTING org, not
+  // the org in any drill-in X-Org-Id header — so scoping here would 404 the request
+  // and fail approvals across orgs.
+  const request = await runUnscoped(async () => {
+    const request = await SyllabusImportRequest.findById(req.params.reqId);
+    if (!request) throw ApiError.notFound('Request not found');
+    if (request.status !== RequestStatus.PENDING) throw ApiError.badRequest('This request has already been decided.');
 
-  if (req.body.decision === 'approve') {
-    const target = await Module.findById(request.module);
-    const src = await templateModuleForCode(request.moduleCode);
-    if (!target) throw ApiError.badRequest('The requested module no longer exists.');
-    if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
-    copyMasterSyllabus(target, src);
-    await target.save();
-    request.status = RequestStatus.APPROVED;
-  } else {
-    request.status = RequestStatus.REJECTED;
-  }
-  request.decidedBy = req.auth.userId;
-  request.decidedAt = new Date();
-  request.decisionNote = req.body.note ?? '';
-  await request.save();
+    if (req.body.decision === 'approve') {
+      const target = await Module.findById(request.module);
+      const src = await templateModuleForCode(request.moduleCode);
+      if (!target) throw ApiError.badRequest('The requested module no longer exists.');
+      if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
+      copyMasterSyllabus(target, src);
+      await target.save();
+      request.status = RequestStatus.APPROVED;
+    } else {
+      request.status = RequestStatus.REJECTED;
+    }
+    request.decidedBy = req.auth.userId;
+    request.decidedAt = new Date();
+    request.decisionNote = req.body.note ?? '';
+    await request.save();
+    return request;
+  });
 
-  // Tell the requester the outcome.
-  notify(request.requestedBy, {
+  // Tell the requester the outcome — stamped into THEIR org so it lands in their inbox.
+  await runAsOrg(request.organization, () => notify(request.requestedBy, {
     type: 'syllabus',
     title: `Master syllabus request ${request.status}: ${request.moduleName || request.moduleCode}`,
     body: request.status === RequestStatus.APPROVED
       ? 'The super admin approved your request — the master syllabus has been imported.'
       : `The super admin declined your request.${request.decisionNote ? ` "${request.decisionNote}"` : ''}`,
     link: '/app/modules',
-  });
+  }));
   ok(res, request.toJSON());
 }
 

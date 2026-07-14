@@ -100,7 +100,7 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
                 <BookOpen size={15} style={{ marginRight: 6 }} /> View syllabus
               </Button>
               <Button variant="outline" onClick={() => setRequestOpen(true)}>
-                <Library size={15} style={{ marginRight: 6 }} /> Request syllabus
+                <Library size={15} style={{ marginRight: 6 }} /> Request from Master
               </Button>
             </>
           )}

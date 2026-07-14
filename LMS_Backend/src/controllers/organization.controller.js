@@ -10,7 +10,7 @@ import { seedCurriculumForOrg } from '../services/orgSeed.js';
 
 // Every tenant collection that must be purged when an organization is deleted.
 const TENANT_MODELS = [
-  'User', 'Module', 'Batch', 'Assessment', 'QuestionBankItem', 'Resource', 'Submission',
+  'User', 'Module', 'Batch', 'Assessment', 'QuestionBankItem', 'SyllabusImportRequest', 'Resource', 'Submission',
   'Attendance', 'Announcement', 'Doubt', 'Certificate', 'ExternalCertificate',
   'ClassSchedule', 'ClassJoin', 'ClassRating', 'ModuleProgress', 'Project',
   'Notification', 'AuditLog', 'Settings',

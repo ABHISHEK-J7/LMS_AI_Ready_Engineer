@@ -16,7 +16,7 @@ import { getSettings, Module, Organization, User } from '../models/index.js';
 
 // Every tenant-scoped collection that must carry `organization`.
 const TENANT_MODELS = [
-  'Module', 'Batch', 'Assessment', 'QuestionBankItem', 'Resource', 'Submission',
+  'Module', 'Batch', 'Assessment', 'QuestionBankItem', 'SyllabusImportRequest', 'Resource', 'Submission',
   'Attendance', 'Announcement', 'Doubt', 'Certificate', 'ExternalCertificate',
   'ClassSchedule', 'ClassJoin', 'ClassRating', 'ModuleProgress', 'Project',
   'Notification', 'AuditLog', 'Settings',

@@ -23,11 +23,18 @@ router.post(
   asyncHandler(modules.reorderModules),
 );
 
+// Super admin (handler-enforced): review + decide org admins' master-syllabus
+// requests. Declared before "/:id" so the literal path wins.
+router.get('/master-syllabus-requests', adminOnly, asyncHandler(modules.listSyllabusRequests));
+router.patch('/master-syllabus-requests/:reqId', adminOnly, validate({ params: modules.requestIdParam, body: modules.decideRequestSchema }), asyncHandler(modules.decideSyllabusRequest));
+
 router.get('/:id', validate({ params: modules.moduleIdParam }), asyncHandler(modules.getModule));
 // Super admin only (enforced in the handler): preview, then copy, the master
 // syllabus onto this org's module. adminOnly lets a drilled-in super admin through.
 router.get('/:id/master-syllabus-preview', adminOnly, validate({ params: modules.moduleIdParam }), asyncHandler(modules.getMasterSyllabusPreview));
 router.post('/:id/import-syllabus', adminOnly, validate({ params: modules.moduleIdParam }), asyncHandler(modules.importSyllabusFromTemplate));
+// Org admin: request the master syllabus for this module (super admin approves it).
+router.post('/:id/master-syllabus-request', adminOnly, validate({ params: modules.moduleIdParam, body: modules.syllabusRequestSchema }), asyncHandler(modules.requestMasterSyllabus));
 
 // ── Admin CRUD ────────────────────────────────────────────────────────────────
 router.post('/', adminOnly, validate({ body: modules.createModuleSchema }), asyncHandler(modules.createModule));

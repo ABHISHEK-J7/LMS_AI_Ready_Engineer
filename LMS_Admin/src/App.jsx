@@ -8,6 +8,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { OrganizationsPage } from '@/pages/organizations/OrganizationsPage';
 import { OrganizationDetailPage } from '@/pages/organizations/OrganizationDetailPage';
 import { SuperAdminDashboard } from '@/pages/organizations/SuperAdminDashboard';
+import { SyllabusRequestsPage } from '@/pages/organizations/SyllabusRequestsPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
 import { UsersPage } from '@/pages/users/UsersPage';
 import { StudentDetailPage } from '@/pages/students/StudentDetailPage';
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="modules" element={<ModulesPage />} />
           <Route path="modules/:id" element={<ModuleDetailPage />} />
           <Route path="question-bank" element={<Suspense fallback={<FullPageSpinner />}><QuestionBankPage /></Suspense>} />
+          <Route path="syllabus-requests" element={<SyllabusRequestsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Route>

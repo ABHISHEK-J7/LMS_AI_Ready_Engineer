@@ -7,9 +7,12 @@ import {
   Module,
   ModuleProgress,
   QuestionBankItem,
+  SyllabusImportRequest,
   User,
 } from '../models/index.js';
+import { RequestStatus } from '../models/SyllabusImportRequest.js';
 import { getTemplateOrg } from '../services/orgSeed.js';
+import { notify } from '../services/notify.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ok } from '../utils/http.js';
 
@@ -151,19 +154,14 @@ async function resolveMasterModule(req) {
   return { target, src };
 }
 
-/**
- * SUPER ADMIN ONLY: a read-only PREVIEW of the master syllabus that would be
- * imported onto this org module — its description, objectives, topic titles +
- * descriptions, subtopic titles + descriptions, and counts. Applies nothing.
- */
-export async function getMasterSyllabusPreview(req, res) {
-  const { src } = await resolveMasterModule(req);
+/** Build the read-only syllabus preview (titles + descriptions + counts) from a module. */
+function syllabusPreview(src) {
   const topics = (src.topics ?? []).map((t) => ({
     title: t.title,
     description: t.description ?? '',
     subtopics: (t.subtopics ?? []).map((s) => ({ title: s.title ?? '', description: s.description ?? '' })),
   }));
-  ok(res, {
+  return {
     code: src.code,
     name: src.name,
     description: src.description ?? '',
@@ -171,19 +169,11 @@ export async function getMasterSyllabusPreview(req, res) {
     topics,
     topicCount: topics.length,
     subtopicCount: topics.reduce((n, t) => n + t.subtopics.length, 0),
-  });
+  };
 }
 
-/**
- * SUPER ADMIN ONLY (while drilled into an org): copy the MASTER template's syllabus
- * for this module — its description, learning objectives, topics, subtopics (with
- * their descriptions and date windows) — onto this org's module, replacing its
- * current syllabus. Modules are matched to the template by code.
- */
-export async function importSyllabusFromTemplate(req, res) {
-  const { target, src } = await resolveMasterModule(req);
-
-  // Deep-copy the master syllabus onto the org module (fresh, so completed flags reset).
+/** Copy the master module's syllabus onto a target module doc (does not save). */
+function copyMasterSyllabus(target, src) {
   target.description = src.description ?? '';
   target.learningObjectives = src.learningObjectives ?? [];
   target.topics = (src.topics ?? []).map((t, i) => ({
@@ -198,8 +188,122 @@ export async function importSyllabusFromTemplate(req, res) {
       toDate: s.toDate ?? null,
     })),
   }));
+}
+
+/**
+ * SUPER ADMIN ONLY: a read-only PREVIEW of the master syllabus that would be
+ * imported onto this org module. Applies nothing.
+ */
+export async function getMasterSyllabusPreview(req, res) {
+  const { src } = await resolveMasterModule(req);
+  ok(res, syllabusPreview(src));
+}
+
+/**
+ * SUPER ADMIN ONLY (while drilled into an org): copy the MASTER template's syllabus
+ * for this module onto the org's module, replacing its current syllabus.
+ */
+export async function importSyllabusFromTemplate(req, res) {
+  const { target, src } = await resolveMasterModule(req);
+  copyMasterSyllabus(target, src);
   await target.save();
   ok(res, target.toJSON());
+}
+
+// ── Org-admin requests → super-admin approvals ────────────────────────────────
+
+export const syllabusRequestSchema = z.object({ note: z.string().max(500).optional() });
+export const requestIdParam = z.object({ reqId: objectId });
+export const decideRequestSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  note: z.string().max(500).optional(),
+});
+
+/** The template module matching a given org-module code (lean), or null. */
+async function templateModuleForCode(code) {
+  const template = await getTemplateOrg();
+  if (!template) return null;
+  return Module.findOne({ organization: template._id, code }).lean();
+}
+
+/**
+ * ORG ADMIN: request that the master syllabus for this module be imported. The super
+ * admin approves it in their Approvals area. Only ONE pending request per module.
+ */
+export async function requestMasterSyllabus(req, res) {
+  const mod = await Module.findById(req.params.id).select('code name');
+  if (!mod) throw ApiError.notFound('Module not found');
+  if (!(await templateModuleForCode(mod.code))) {
+    throw ApiError.badRequest('This module is not part of the master curriculum.');
+  }
+  const existing = await SyllabusImportRequest.findOne({ module: mod._id, status: RequestStatus.PENDING });
+  if (existing) throw ApiError.conflict('A request for this module is already awaiting approval.');
+
+  const request = await SyllabusImportRequest.create({
+    module: mod._id,
+    moduleCode: mod.code,
+    moduleName: mod.name,
+    requestedBy: req.auth.userId,
+    note: req.body.note ?? '',
+  });
+  ok(res, request.toJSON(), 201);
+}
+
+/**
+ * SUPER ADMIN: all syllabus-import requests (pending first), each with the master
+ * syllabus preview it's asking for + the requesting org and admin.
+ */
+export async function listSyllabusRequests(req, res) {
+  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Super admin only.');
+  const reqs = await SyllabusImportRequest.find({})
+    .sort({ status: 1, createdAt: -1 })
+    .populate('organization', 'name code')
+    .populate('requestedBy', 'name email')
+    .lean();
+  // Rank pending first, then newest.
+  const rank = { pending: 0, approved: 1, rejected: 2 };
+  reqs.sort((a, b) => (rank[a.status] - rank[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
+
+  const items = await Promise.all(reqs.map(async (r) => {
+    const src = await templateModuleForCode(r.moduleCode);
+    return { ...r, id: String(r._id), master: src ? syllabusPreview(src) : null };
+  }));
+  ok(res, items);
+}
+
+/** SUPER ADMIN: approve (apply the master syllabus) or reject a request. */
+export async function decideSyllabusRequest(req, res) {
+  if (!req.auth.isSuperAdmin) throw ApiError.forbidden('Super admin only.');
+  const request = await SyllabusImportRequest.findById(req.params.reqId);
+  if (!request) throw ApiError.notFound('Request not found');
+  if (request.status !== RequestStatus.PENDING) throw ApiError.badRequest('This request has already been decided.');
+
+  if (req.body.decision === 'approve') {
+    const target = await Module.findById(request.module);
+    const src = await templateModuleForCode(request.moduleCode);
+    if (!target) throw ApiError.badRequest('The requested module no longer exists.');
+    if (!src) throw ApiError.badRequest('This module is not part of the master curriculum.');
+    copyMasterSyllabus(target, src);
+    await target.save();
+    request.status = RequestStatus.APPROVED;
+  } else {
+    request.status = RequestStatus.REJECTED;
+  }
+  request.decidedBy = req.auth.userId;
+  request.decidedAt = new Date();
+  request.decisionNote = req.body.note ?? '';
+  await request.save();
+
+  // Tell the requester the outcome.
+  notify(request.requestedBy, {
+    type: 'syllabus',
+    title: `Master syllabus request ${request.status}: ${request.moduleName || request.moduleCode}`,
+    body: request.status === RequestStatus.APPROVED
+      ? 'The super admin approved your request — the master syllabus has been imported.'
+      : `The super admin declined your request.${request.decisionNote ? ` "${request.decisionNote}"` : ''}`,
+    link: '/app/modules',
+  });
+  ok(res, request.toJSON());
 }
 
 // ── Admin CRUD ───────────────────────────────────────────────────────────────

@@ -75,6 +75,30 @@ export function useImportSyllabusFromMaster() {
   });
 }
 
+/** Org admin: request the master syllabus for a module (the super admin approves it). */
+export function useRequestMasterSyllabus() {
+  return useMutation({
+    mutationFn: ({ id, note }) => unwrap(api.post(`/modules/${id}/master-syllabus-request`, note ? { note } : {})),
+  });
+}
+
+/** Super admin: pending + decided master-syllabus import requests (with previews). */
+export function useSyllabusRequests() {
+  return useQuery({
+    queryKey: ['syllabus-requests'],
+    queryFn: () => unwrap(api.get('/modules/master-syllabus-requests')),
+  });
+}
+
+/** Super admin: approve (apply) or reject a request. */
+export function useDecideSyllabusRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, decision, note }) => unwrap(api.patch(`/modules/master-syllabus-requests/${id}`, { decision, ...(note ? { note } : {}) })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['syllabus-requests'] }),
+  });
+}
+
 export function useUpdateModule() {
   const invalidate = useModuleInvalidation();
   return useMutation({

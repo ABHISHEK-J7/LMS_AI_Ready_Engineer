@@ -81,3 +81,41 @@ test('a plain org admin cannot import the master syllabus (super-admin only)', a
   const res = await req('POST', `/modules/${mod._id}/import-syllabus`, A, {});
   assert.equal(res.status, 403);
 });
+
+test('org admin requests the master syllabus → super admin approves → it applies', async () => {
+  const { req, models } = ctx;
+  const A = await ctx.login('admin@acme.local');
+  const mod = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  // Drift the org module so we can prove the approval applies the master.
+  await models.Module.updateOne({ _id: mod._id }, { $set: { topics: [], description: '' } });
+
+  // Org admin files a request.
+  const request = await req('POST', `/modules/${mod._id}/master-syllabus-request`, A, { note: 'please share' });
+  assert.equal(request.status, 201);
+  // A second pending request for the same module is refused.
+  assert.equal((await req('POST', `/modules/${mod._id}/master-syllabus-request`, A, {})).status, 409);
+
+  // Super admin sees it (with the master preview), pending first.
+  const listSA = await req('GET', '/modules/master-syllabus-requests', SA);
+  assert.equal(listSA.status, 200);
+  const mine = listSA.data.find((r) => r.id === request.data.id);
+  assert.ok(mine, 'request visible to super admin');
+  assert.equal(mine.status, 'pending');
+  assert.ok(mine.master.topicCount >= 2, 'preview shows the master syllabus');
+  assert.equal(mine.organization.code, 'ACME');
+
+  // A plain org admin cannot list/decide requests.
+  assert.equal((await req('GET', '/modules/master-syllabus-requests', A)).status, 403);
+  assert.equal((await req('PATCH', `/modules/master-syllabus-requests/${request.data.id}`, A, { decision: 'approve' })).status, 403);
+
+  // Super admin approves → the org module gets the master syllabus.
+  const decided = await req('PATCH', `/modules/master-syllabus-requests/${request.data.id}`, SA, { decision: 'approve' });
+  assert.equal(decided.status, 200);
+  assert.equal(decided.data.status, 'approved');
+  const after = await models.Module.findOne({ organization: orgId, code: 'ST' });
+  assert.equal(after.topics.length, mine.master.topicCount, 'master topics applied on approval');
+  assert.equal(after.description, 'Master description');
+
+  // Deciding again is refused.
+  assert.equal((await req('PATCH', `/modules/master-syllabus-requests/${request.data.id}`, SA, { decision: 'reject' })).status, 400);
+});

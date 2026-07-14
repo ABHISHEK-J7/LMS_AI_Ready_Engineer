@@ -9,6 +9,7 @@ export { ClassRating } from './ClassRating.js';
 export { Attendance } from './Attendance.js';
 export { Assessment } from './Assessment.js';
 export { QuestionBankItem } from './QuestionBank.js';
+export { SyllabusImportRequest } from './SyllabusImportRequest.js';
 export { Submission } from './Submission.js';
 export { Resource } from './Resource.js';
 export { Certificate } from './Certificate.js';

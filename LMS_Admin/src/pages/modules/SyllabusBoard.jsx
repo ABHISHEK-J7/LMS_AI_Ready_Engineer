@@ -7,6 +7,7 @@ import {
   useDeleteTopic,
   useImportSyllabusFromMaster,
   useMasterSyllabusPreview,
+  useRequestMasterSyllabus,
   useUpdateTopic,
 } from '@/lib/modules';
 import { useResources } from '@/lib/resources';
@@ -19,12 +20,13 @@ import { AddSyllabusModal } from './AddSyllabusModal';
  * (subtopics + descriptions) and learning resources in a modal. Staff can bulk
  * import the whole syllabus from an Excel sheet ("Add syllabus").
  */
-export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) {
+export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, canRequestFromMaster = false }) {
   const [newTitle, setNewTitle] = useState('');
   const [editing, setEditing] = useState(null); // { topicId, title, description }
   const [openTopicId, setOpenTopicId] = useState(null);
   const [addSyllabusOpen, setAddSyllabusOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
   const addTopic = useAddTopic();
   const updateTopic = useUpdateTopic();
   const deleteTopic = useDeleteTopic();
@@ -73,6 +75,11 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
           {canImportFromMaster && (
             <Button variant="outline" onClick={() => setPreviewOpen(true)}>
               <Library size={15} style={{ marginRight: 6 }} /> Import from Master
+            </Button>
+          )}
+          {canRequestFromMaster && (
+            <Button variant="outline" onClick={() => setRequestOpen(true)}>
+              <Library size={15} style={{ marginRight: 6 }} /> Request from Master
             </Button>
           )}
           {canEdit && (
@@ -184,6 +191,11 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
         <MasterSyllabusPreviewModal moduleId={module.id} onClose={() => setPreviewOpen(false)} />
       )}
 
+      {/* Org admin: request the master syllabus (super admin approves it). */}
+      {requestOpen && (
+        <RequestMasterSyllabusModal moduleId={module.id} moduleName={module.name} onClose={() => setRequestOpen(false)} />
+      )}
+
       {/* Edit topic */}
       <Modal
         open={Boolean(editing)}
@@ -204,6 +216,51 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false }) 
         )}
       </Modal>
     </Card>
+  );
+}
+
+// ── Org admin: request the master syllabus ───────────────────────────────────────
+
+function RequestMasterSyllabusModal({ moduleId, moduleName, onClose }) {
+  const request = useRequestMasterSyllabus();
+  const toast = useToast();
+  const [note, setNote] = useState('');
+
+  async function send() {
+    try {
+      await request.mutateAsync({ id: moduleId, note: note.trim() || undefined });
+      toast.success('Request sent to the super admin for approval.');
+      onClose();
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      open
+      title="Request syllabus from Master"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button loading={request.isPending} onClick={send}>Send request</Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <p className="lms-secondary-text" style={{ margin: 0 }}>
+          Ask the super admin to import the master syllabus for <strong>{moduleName}</strong> onto this module.
+          They'll review and approve it — on approval, its topics, subtopics and descriptions land here.
+        </p>
+        <Textarea
+          label="Note to the super admin (optional)"
+          placeholder="e.g. We'd like the latest topics for this module."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
+    </Modal>
   );
 }
 

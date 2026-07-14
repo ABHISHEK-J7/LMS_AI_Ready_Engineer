@@ -80,7 +80,7 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
         )}
       </div>
 
-      {/* One tidy toolbar row: add a topic on the left, master actions on the right. */}
+      {/* One tidy row: New topic, Add topic, View syllabus, Request syllabus. */}
       {(canEdit || canImportFromMaster || canRequestFromMaster) && (
         <div className="syllabus-toolbar">
           {canEdit && (
@@ -89,24 +89,20 @@ export function SyllabusBoard({ module, canEdit, canImportFromMaster = false, ca
               <Button type="submit" variant="outline" loading={addTopic.isPending}>Add topic</Button>
             </form>
           )}
-          {(canImportFromMaster || canRequestFromMaster) && (
-            <div className="syllabus-toolbar__master">
-              {canImportFromMaster && (
-                <Button variant="outline" onClick={() => setPreviewOpen(true)}>
-                  <Library size={15} style={{ marginRight: 6 }} /> Import from Master
-                </Button>
-              )}
-              {canRequestFromMaster && (
-                <>
-                  <Button variant="outline" onClick={() => setViewOpen(true)}>
-                    <BookOpen size={15} style={{ marginRight: 6 }} /> View from Master
-                  </Button>
-                  <Button variant="outline" onClick={() => setRequestOpen(true)}>
-                    <Library size={15} style={{ marginRight: 6 }} /> Request from Master
-                  </Button>
-                </>
-              )}
-            </div>
+          {canImportFromMaster && (
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+              <Library size={15} style={{ marginRight: 6 }} /> Import from Master
+            </Button>
+          )}
+          {canRequestFromMaster && (
+            <>
+              <Button variant="outline" onClick={() => setViewOpen(true)}>
+                <BookOpen size={15} style={{ marginRight: 6 }} /> View syllabus
+              </Button>
+              <Button variant="outline" onClick={() => setRequestOpen(true)}>
+                <Library size={15} style={{ marginRight: 6 }} /> Request syllabus
+              </Button>
+            </>
           )}
         </div>
       )}

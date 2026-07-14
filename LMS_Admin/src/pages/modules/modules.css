@@ -417,29 +417,23 @@
 .add-inline .field { flex: 0 1 260px; min-width: 0; margin: 0; }
 .add-inline .select { width: 100%; }
 
-/* Syllabus toolbar: "New topic" + Add topic on the left, master actions on the
-   right, all on one row (wraps gracefully on narrow screens). */
+/* Syllabus toolbar: New topic, Add topic, View syllabus, Request syllabus — all in
+   one aligned row (wraps gracefully on narrow screens). */
 .syllabus-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin: var(--space-2) 0 var(--space-5);
-}
-.syllabus-toolbar .add-inline {
-  flex: 1 1 20rem;
-  min-width: 14rem;
-  justify-content: flex-start;
-  margin: 0;
-}
-.syllabus-toolbar .add-inline .field { flex: 1 1 auto; } /* the New-topic input grows */
-.syllabus-toolbar__master {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
-  margin-left: auto; /* push the master buttons to the right edge */
+  margin: var(--space-2) 0 var(--space-5);
 }
+.syllabus-toolbar .add-inline {
+  flex: 0 1 auto;      /* sit at natural width beside the other buttons */
+  justify-content: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+}
+.syllabus-toolbar .add-inline .field { flex: 0 1 240px; } /* the New-topic input */
+.syllabus-toolbar > .btn { flex: none; }  /* keep buttons compact + aligned */
 
 /* Side-by-side, wrapping list of people chips (students/trainers). */
 .chip-list {

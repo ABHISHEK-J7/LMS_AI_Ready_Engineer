@@ -152,6 +152,19 @@ export function TrainerDashboard() {
         )}
       </Card>
 
+      {/* Student leaderboard */}
+      {(data?.leaderboard ?? []).length > 0 && (
+        <Card>
+          <CardHeader title="Top Students" subtitle="Highest average score across your assessments" />
+          <BarChart
+            data={data.leaderboard.map((s) => ({ label: s.student, value: s.avgScore }))}
+            suffix="%"
+            max={100}
+            emptyText="No graded submissions yet."
+          />
+        </Card>
+      )}
+
       {/* Low-attendance nudge */}
       {avgAttendance > 0 && avgAttendance < 75 && (
         <Card style={{ borderColor: 'var(--color-warning)' }}>

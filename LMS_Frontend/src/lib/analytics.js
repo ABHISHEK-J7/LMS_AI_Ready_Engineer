@@ -4,7 +4,16 @@ import { api, unwrap } from './api';
 export const analyticsKeys = {
   admin: ['analytics', 'admin'],
   trainer: ['analytics', 'trainer'],
+  student: ['analytics', 'student'],
 };
+
+export function useStudentAnalytics({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: analyticsKeys.student,
+    queryFn: () => unwrap(api.get('/analytics/student')),
+    enabled,
+  });
+}
 
 export function useAdminAnalytics({ enabled = true } = {}) {
   return useQuery({

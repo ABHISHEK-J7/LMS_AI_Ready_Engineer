@@ -4,6 +4,7 @@ import { BarChart3, BookOpen, Building2, ClipboardList, FileText, GraduationCap,
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, SkeletonCards } from '@/components/ui';
 import { PageHeader, Stat } from '@/components/PageHeader';
 import { BarChart } from '@/components/charts/BarChart';
+import { DonutChart } from '@/components/charts/DonutChart';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useOrganizations, useOverview } from '@/lib/organizations';
@@ -33,6 +34,7 @@ export function SuperAdminDashboard() {
 
   const sorted = [...(orgs ?? [])].sort((a, b) => (b.counts?.students ?? 0) - (a.counts?.students ?? 0));
   const chart = sorted.slice(0, 8).map((x) => ({ label: x.code, value: x.counts?.students ?? 0 }));
+  const growth = (o?.growth ?? []).map((g) => ({ label: g.label, value: g.students }));
 
   return (
     <>
@@ -53,19 +55,34 @@ export function SuperAdminDashboard() {
             <Stat label="Submissions" value={o.submissions} icon={<ClipboardList size={18} />} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
+          <div className="dash-grid-3" style={{ marginTop: 'var(--space-6)' }}>
             <Card>
-              <CardHeader
-                title="Students per organization"
-                subtitle={`${o.activeOrgs} active · ${o.suspendedOrgs} suspended`}
+              <CardHeader title="Organization Status" subtitle={`${o.activeOrgs} active · ${o.suspendedOrgs} suspended`} />
+              <DonutChart
+                data={[
+                  { label: 'Active', value: o.activeOrgs, color: 'var(--color-success)' },
+                  { label: 'Suspended', value: o.suspendedOrgs, color: 'var(--color-warning)' },
+                ]}
+                centerValue={o.organizations}
+                centerLabel="Organizations"
+                emptyText="No organizations yet."
               />
+            </Card>
+            <Card>
+              <CardHeader title="Students per Organization" subtitle="Top organizations by size" />
               {chart.length === 0 ? (
                 <EmptyState icon={<BarChart3 size={26} />} title="No organizations yet" description="Create your first organization to see analytics." />
               ) : (
                 <BarChart data={chart} multicolor emptyText="No students yet." />
               )}
             </Card>
+            <Card>
+              <CardHeader title="New Students / Month" subtitle="Platform growth, last 6 months" />
+              <BarChart data={growth} emptyText="No growth data yet." />
+            </Card>
+          </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
             <Card>
               <div className="panel-head">
                 <CardHeader title="Organizations" subtitle="Enter one to manage it, or open the full list." />

@@ -9,5 +9,6 @@ router.use(authenticate);
 
 router.get('/admin', requireRole(UserRole.ADMIN), asyncHandler(analytics.getAdminAnalytics));
 router.get('/trainer', requireRole(UserRole.TRAINER, UserRole.ADMIN), asyncHandler(analytics.getTrainerAnalytics));
+router.get('/student', requireRole(UserRole.STUDENT), asyncHandler(analytics.getStudentAnalytics));
 
 export default router;

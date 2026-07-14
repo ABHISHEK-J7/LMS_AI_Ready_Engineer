@@ -181,6 +181,26 @@ export async function getOverview(_req, res) {
     Assessment.countDocuments(),
     Submission.countDocuments(),
   ]);
+
+  // Growth: new organizations + new students per month over the last 6 months.
+  const since = new Date();
+  since.setMonth(since.getMonth() - 5, 1);
+  since.setHours(0, 0, 0, 0);
+  const months = [];
+  for (let i = 0; i < 6; i += 1) {
+    const d = new Date(since);
+    d.setMonth(since.getMonth() + i);
+    months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'short' }), orgs: 0, students: 0 });
+  }
+  const byKey = new Map(months.map((m) => [m.key, m]));
+  const monthKey = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+  const [newOrgs, newStudents] = await Promise.all([
+    Organization.find({ isTemplate: { $ne: true }, createdAt: { $gte: since } }).select('createdAt').lean(),
+    User.find({ role: UserRole.STUDENT, createdAt: { $gte: since } }).select('createdAt').lean(),
+  ]);
+  for (const o of newOrgs) { const m = byKey.get(monthKey(new Date(o.createdAt))); if (m) m.orgs += 1; }
+  for (const s of newStudents) { const m = byKey.get(monthKey(new Date(s.createdAt))); if (m) m.students += 1; }
+
   ok(res, {
     organizations,
     activeOrgs,
@@ -192,5 +212,6 @@ export async function getOverview(_req, res) {
     modules,
     assessments,
     submissions,
+    growth: months.map(({ key, ...m }) => m),
   });
 }

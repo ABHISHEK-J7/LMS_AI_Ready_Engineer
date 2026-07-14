@@ -2,9 +2,11 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-export default defineConfig({
-  // The admin app is hosted under /admin, so assets + router are prefixed there.
-  base: '/admin/',
+export default defineConfig(({ command }) => ({
+  // In production the admin app is hosted under /admin, so assets + router are
+  // prefixed there. In dev, serve at the root so localhost:5174/login just works
+  // (the router basename follows import.meta.env.BASE_URL automatically).
+  base: command === 'build' ? '/admin/' : '/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -32,4 +34,4 @@ export default defineConfig({
       '/api': { target: 'http://localhost:5050', changeOrigin: true },
     },
   },
-});
+}));

@@ -364,6 +364,8 @@
 }
 .map-row__add .field { flex: 1 1 auto; min-width: 0; margin: 0; }
 .map-row__add .select { width: 100%; }
+/* Trainer search-and-add: let the search box fill the row. */
+.map-row__add .user-search { flex: 1 1 auto; min-width: 0; }
 .map-row__chips {
   display: flex;
   flex-wrap: wrap;

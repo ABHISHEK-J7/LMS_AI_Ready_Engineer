@@ -44,23 +44,34 @@ const batchSchema = new Schema(
 // Batch code is unique WITHIN an organization.
 batchSchema.index({ organization: 1, code: 1 }, { unique: true });
 
-// Serialize like every model (id, no __v/passwordHash) but ALSO drop any member
-// ref that populate couldn't resolve (e.g. an anonymized/removed account). Left in,
-// a null trainer both breaks the UI and gets re-submitted, which the API rejects
-// (trainerIds.0: Expected string, received null).
+// Serialize members (trainers/students) straight from the source document so every
+// one always carries an `id`. Mongoose reuses a single populated instance across
+// paths (e.g. a trainer who delivers several modules is the SAME object in
+// batch.trainers AND each module's trainers), and its default JSON transform can
+// drop the id on the repeated references — which then reaches the client as
+// undefined and, once re-submitted, as null (trainerIds.0: Expected string,
+// received null). Unresolvable refs (an anonymized/removed account) are dropped.
+const memberJSON = (u) => {
+  if (!u) return null;
+  if (u._id) return { id: String(u._id), name: u.name, email: u.email, status: u.status };
+  const id = String(u); // an unpopulated ObjectId ref — keep the id so it's usable
+  return /^[0-9a-fA-F]{24}$/.test(id) ? { id } : null;
+};
+
 batchSchema.set('toJSON', {
   virtuals: true,
   versionKey: false,
-  transform(_doc, ret) {
+  transform(doc, ret) {
     ret.id = ret._id;
     delete ret._id;
     delete ret.passwordHash;
-    if (Array.isArray(ret.trainers)) ret.trainers = ret.trainers.filter(Boolean);
-    if (Array.isArray(ret.students)) ret.students = ret.students.filter(Boolean);
-    if (Array.isArray(ret.moduleTrainers)) {
-      for (const mt of ret.moduleTrainers) {
-        if (mt && Array.isArray(mt.trainers)) mt.trainers = mt.trainers.filter(Boolean);
-      }
+    if (Array.isArray(doc.trainers)) ret.trainers = doc.trainers.map(memberJSON).filter(Boolean);
+    if (Array.isArray(doc.students)) ret.students = doc.students.map(memberJSON).filter(Boolean);
+    if (Array.isArray(doc.moduleTrainers)) {
+      ret.moduleTrainers = doc.moduleTrainers.map((mt, i) => ({
+        ...ret.moduleTrainers[i],
+        trainers: Array.isArray(mt.trainers) ? mt.trainers.map(memberJSON).filter(Boolean) : [],
+      }));
     }
     return ret;
   },

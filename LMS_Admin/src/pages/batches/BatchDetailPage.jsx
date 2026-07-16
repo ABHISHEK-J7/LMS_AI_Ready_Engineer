@@ -32,7 +32,6 @@ import {
   useUpdateBatch,
 } from '@/lib/batches';
 import { formatDateRange, toDateInput } from '@/lib/format';
-import { useTrainers } from '@/lib/users';
 import { useModules } from '@/lib/modules';
 import '../modules/modules.css';
 
@@ -190,7 +189,6 @@ function trainersForModule(batch, moduleId) {
 
 function ModuleTrainersPanel({ batch, isAdmin }) {
   const { data: allModules, isLoading: modLoading } = useModules();
-  const { data: allTrainers, isLoading: trLoading } = useTrainers();
   const assignModule = useAssignModules();
   const [pickModule, setPickModule] = useState('');
 
@@ -244,8 +242,6 @@ function ModuleTrainersPanel({ batch, isAdmin }) {
               batch={batch}
               module={m}
               assignedTrainers={trainersForModule(batch, m.id)}
-              allTrainers={allTrainers ?? []}
-              trLoading={trLoading}
               isAdmin={isAdmin}
             />
           ))}
@@ -255,8 +251,7 @@ function ModuleTrainersPanel({ batch, isAdmin }) {
   );
 }
 
-function ModuleRow({ batch, module, assignedTrainers, allTrainers, trLoading, isAdmin }) {
-  const [pick, setPick] = useState('');
+function ModuleRow({ batch, module, assignedTrainers, isAdmin }) {
   const setTrainers = useSetModuleTrainers();
   const removeModule = useRemoveModule();
 
@@ -269,22 +264,15 @@ function ModuleRow({ batch, module, assignedTrainers, allTrainers, trLoading, is
     .map((t) => (typeof t === 'string' ? { id: t, name: 'Trainer' } : t))
     .filter((t) => typeof t.id === 'string' && t.id.length > 0);
   const currentIds = assigned.map((t) => t.id);
-  const assignedSet = new Set(currentIds);
-  const available = allTrainers.filter((t) => t?.id && !assignedSet.has(t.id));
 
-  const addTrainer = async (tid) => {
-    if (!tid) return;
-    await setTrainers.mutateAsync({ id: batch.id, moduleId: module.id, trainerIds: [...currentIds, tid] });
-    setPick('');
+  // Add any number of trainers to this module: pick from a search over ALL org
+  // trainers (already-assigned ones are excluded), appending each to the set.
+  const addTrainer = (tid) => {
+    if (!tid || currentIds.includes(tid)) return;
+    return setTrainers.mutateAsync({ id: batch.id, moduleId: module.id, trainerIds: [...currentIds, tid] });
   };
   const removeTrainer = (tid) =>
     setTrainers.mutateAsync({ id: batch.id, moduleId: module.id, trainerIds: currentIds.filter((x) => x !== tid) });
-
-  const trainerNoneText = trLoading
-    ? 'Loading…'
-    : (allTrainers.length ?? 0) === 0
-      ? 'No trainers yet — add them in Users'
-      : 'All trainers assigned';
 
   return (
     <div className="map-row">
@@ -309,17 +297,13 @@ function ModuleRow({ batch, module, assignedTrainers, allTrainers, trLoading, is
 
       {isAdmin && (
         <div className="map-row__add">
-          <Select
-            value={pick}
-            onChange={(e) => setPick(e.target.value)}
-            options={[
-              { value: '', label: available.length ? 'Add a trainer…' : trainerNoneText },
-              ...available.map((t) => ({ value: t.id, label: t.name })),
-            ]}
+          <UserSearchSelect
+            role="trainer"
+            excludeIds={currentIds}
+            placeholder="Search trainers by name or email…"
+            disabled={setTrainers.isPending}
+            onPick={(u) => addTrainer(u.id)}
           />
-          <Button size="sm" disabled={!pick} loading={setTrainers.isPending} onClick={() => addTrainer(pick)}>
-            Add
-          </Button>
         </div>
       )}
 

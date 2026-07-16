@@ -260,11 +260,20 @@ function ModuleRow({ batch, module, assignedTrainers, allTrainers, trLoading, is
   const setTrainers = useSetModuleTrainers();
   const removeModule = useRemoveModule();
 
-  const currentIds = assignedTrainers.map((t) => t.id);
+  // Assigned trainers can arrive as populated objects or bare ids, and an
+  // anonymized/removed account can surface without a usable id. Normalize to real
+  // trainers with a string id so we never send null/undefined — JSON turns an
+  // undefined array element into null, which the API rejects (trainerIds.0).
+  const assigned = (assignedTrainers ?? [])
+    .filter(Boolean)
+    .map((t) => (typeof t === 'string' ? { id: t, name: 'Trainer' } : t))
+    .filter((t) => typeof t.id === 'string' && t.id.length > 0);
+  const currentIds = assigned.map((t) => t.id);
   const assignedSet = new Set(currentIds);
-  const available = allTrainers.filter((t) => !assignedSet.has(t.id));
+  const available = allTrainers.filter((t) => t?.id && !assignedSet.has(t.id));
 
   const addTrainer = async (tid) => {
+    if (!tid) return;
     await setTrainers.mutateAsync({ id: batch.id, moduleId: module.id, trainerIds: [...currentIds, tid] });
     setPick('');
   };
@@ -315,10 +324,10 @@ function ModuleRow({ batch, module, assignedTrainers, allTrainers, trLoading, is
       )}
 
       <div className="map-row__chips">
-        {assignedTrainers.length === 0 && (
+        {assigned.length === 0 && (
           <span className="lms-muted" style={{ fontSize: 'var(--font-size-sm)' }}>No trainers assigned yet.</span>
         )}
-        {assignedTrainers.map((t) => (
+        {assigned.map((t) => (
           <span className="chip" key={t.id}>
             {t.name}
             {isAdmin && (

@@ -665,6 +665,22 @@
   place-items: center;
 }
 
+/* Two-column form grid for the "New ready-made test" modal — everything fits in a
+   wide modal without scrolling. Full-width rows span both columns. */
+.tmpl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4) var(--space-5);
+  align-items: start;
+}
+.tmpl-grid > .field,
+.tmpl-grid > * { margin: 0; }
+.tmpl-grid__full { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .tmpl-grid { grid-template-columns: 1fr; }
+  .tmpl-grid__full { grid-column: 1; }
+}
+
 /* "Who can take this" — student allow-list chips. */
 .allow-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .allow-chip {

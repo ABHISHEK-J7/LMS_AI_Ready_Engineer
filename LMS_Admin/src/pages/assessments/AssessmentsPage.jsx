@@ -255,12 +255,13 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
         </div>
       )}
 
-      <Modal open={creating} title="New ready-made test" onClose={() => setCreating(false)}
+      <Modal open={creating} title="New ready-made test" size="lg" onClose={() => setCreating(false)}
         footer={<><Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button><Button form="tmpl-form" type="submit" loading={create.isPending}>Create</Button></>}>
-        <form id="tmpl-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <form id="tmpl-form" onSubmit={submitCreate} className="tmpl-grid">
+          {/* Row 1: name + topics side by side */}
           <Input label="Test name" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Prompt Patterns — Practice Test" required />
           <div className="field">
-            <label className="field__label">Topics covered <span className="lms-muted">— pick the module topics this test assesses</span></label>
+            <label className="field__label">Topics covered <span className="lms-muted">— pick from this module</span></label>
             {topics.length === 0 ? (
               <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>This module has no topics yet — add them in Modules.</p>
             ) : (
@@ -282,35 +283,41 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
                     ))}
                   </div>
                 )}
-                <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 6 }}>
-                  {topicIds.length === 0 ? 'Optional — leave empty to cover the whole module.' : `${topicIds.length} topic${topicIds.length === 1 ? '' : 's'} selected — click one to remove it.`}
-                </p>
               </>
             )}
           </div>
-          <div className="field">
+
+          {/* Row 2: description full width */}
+          <div className="field tmpl-grid__full">
             <label className="field__label">Description <span className="lms-muted">— extra notes (optional)</span></label>
             <textarea
               className="input"
-              style={{ minHeight: '5rem', resize: 'vertical' }}
+              style={{ minHeight: '4rem', resize: 'vertical' }}
               placeholder="e.g. Covers Prompt Patterns, Chain of Thought, and Structured Outputs."
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
+
+          {/* Row 3: type + proctoring side by side */}
           <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={TYPE_OPTIONS} />
           <Select label="Proctoring / format" value={form.proctoring} onChange={(e) => setForm({ ...form, proctoring: e.target.value })} options={PROCTORING_OPTIONS} />
+
+          {/* Row 4 (proctored only): duration + auto-submit side by side */}
           {timed && (
             <Input label="Duration (minutes per student)" type="number" min="1" max="600" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })} placeholder="e.g. 30" />
           )}
           {timed && (
             <Select label="Auto-submit after violations" value={form.violationLimit} onChange={(e) => setForm({ ...form, violationLimit: e.target.value })} options={VIOLATION_OPTIONS} />
           )}
-          <Input label="Passing score % (optional)" type="number" min="0" max="100" value={form.passingScore} onChange={(e) => setForm({ ...form, passingScore: e.target.value })} placeholder="Defaults to platform setting (70)" />
-          <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>
+
+          {/* Row 5: passing score */}
+          <Input label="Passing score % (optional)" type="number" min="0" max="100" value={form.passingScore} onChange={(e) => setForm({ ...form, passingScore: e.target.value })} placeholder="Defaults to 70" />
+
+          <p className="lms-muted tmpl-grid__full" style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>
             After creating, add the questions from this module's question bank{form.type === AssessmentType.PRACTICE ? ' (exactly 10 for a practice test)' : ''}. Trainers assign this test — they can't change the questions or duration.
           </p>
-          {err && <span className="field__error">{err}</span>}
+          {err && <span className="field__error tmpl-grid__full">{err}</span>}
         </form>
       </Modal>
     </>

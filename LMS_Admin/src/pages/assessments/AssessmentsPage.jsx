@@ -162,8 +162,10 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   const confirm = useConfirm();
   const timed = form.proctoring !== ProctoringMode.NONE;
   const topics = moduleObj?.topics ?? [];
-  const toggleTopic = (id) =>
-    setTopicIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const addTopic = (id) => setTopicIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  const removeTopic = (id) => setTopicIds((prev) => prev.filter((x) => x !== id));
+  const availableTopics = topics.filter((t) => !topicIds.includes(t.id)); // not yet picked
+  const selectedTopics = topics.filter((t) => topicIds.includes(t.id)); // in module order
 
   function openCreate() {
     setForm(BLANK_TEMPLATE);
@@ -258,23 +260,30 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
         <form id="tmpl-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <Input label="Test name" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Prompt Patterns — Practice Test" required />
           <div className="field">
-            <label className="field__label">Topics covered <span className="lms-muted">— select the module topics this test assesses</span></label>
+            <label className="field__label">Topics covered <span className="lms-muted">— pick the module topics this test assesses</span></label>
             {topics.length === 0 ? (
               <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>This module has no topics yet — add them in Modules.</p>
             ) : (
               <>
-                <div className="allow-chips">
-                  {topics.map((t) => {
-                    const on = topicIds.includes(t.id);
-                    return (
-                      <button type="button" key={t.id} className={`allow-chip${on ? ' allow-chip--on' : ''}`} onClick={() => toggleTopic(t.id)}>
-                        <span className="allow-chip__dot" /> {t.title}
+                <Select
+                  value=""
+                  onChange={(e) => { if (e.target.value) addTopic(e.target.value); }}
+                  options={[
+                    { value: '', label: availableTopics.length ? 'Add a topic…' : 'All topics added' },
+                    ...availableTopics.map((t) => ({ value: t.id, label: t.title })),
+                  ]}
+                />
+                {selectedTopics.length > 0 && (
+                  <div className="allow-chips" style={{ marginTop: 'var(--space-2)' }}>
+                    {selectedTopics.map((t) => (
+                      <button type="button" key={t.id} className="allow-chip allow-chip--on" onClick={() => removeTopic(t.id)} title="Remove">
+                        <span className="allow-chip__dot" /> {t.title} ×
                       </button>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
                 <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 6 }}>
-                  {topicIds.length === 0 ? 'Optional — leave empty to cover the whole module.' : `${topicIds.length} topic${topicIds.length === 1 ? '' : 's'} selected.`}
+                  {topicIds.length === 0 ? 'Optional — leave empty to cover the whole module.' : `${topicIds.length} topic${topicIds.length === 1 ? '' : 's'} selected — click one to remove it.`}
                 </p>
               </>
             )}

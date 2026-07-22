@@ -78,6 +78,7 @@ export function AssessmentEditor() {
 
       <div className="module-card__meta" style={{ marginBottom: 'var(--space-6)' }}>
         <Badge tone="neutral">{a.module?.name}</Badge>
+        {(a.topics ?? []).map((t) => <Badge key={t.id ?? t.topic ?? t.title} tone="primary">{t.title}</Badge>)}
         {isTemplate && <Badge tone="primary">Ready-made test</Badge>}
         {a.batch && <Badge tone="primary">Batch: {a.batch.name}</Badge>}
         <Badge tone={ASSESSMENT_TYPE_TONE[a.type]}>{ASSESSMENT_TYPE_LABEL[a.type]}</Badge>

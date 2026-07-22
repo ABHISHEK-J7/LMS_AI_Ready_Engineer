@@ -56,6 +56,11 @@ function StudentAssessments() {
                 {a.description && (
                   <div className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)' }}>{a.description}</div>
                 )}
+                {(a.topics ?? []).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {a.topics.map((t) => <Badge key={t.id ?? t.topic ?? t.title} tone="neutral">{t.title}</Badge>)}
+                  </div>
+                )}
                 <div className="module-card__meta">
                   <Badge tone="neutral">{a.questionCount} questions</Badge>
                   <Badge tone="neutral">Pass ≥ {a.passingScore}%</Badge>
@@ -150,11 +155,22 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   const { data: templates, isLoading, isError, error, refetch } = useAssessments({ template: 'true', module: moduleId });
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(BLANK_TEMPLATE);
+  const [topicIds, setTopicIds] = useState([]);
   const [err, setErr] = useState('');
   const create = useCreateAssessment();
   const del = useDeleteAssessment();
   const confirm = useConfirm();
   const timed = form.proctoring !== ProctoringMode.NONE;
+  const topics = moduleObj?.topics ?? [];
+  const toggleTopic = (id) =>
+    setTopicIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  function openCreate() {
+    setForm(BLANK_TEMPLATE);
+    setTopicIds([]);
+    setErr('');
+    setCreating(true);
+  }
 
   async function submitCreate(e) {
     e.preventDefault();
@@ -168,12 +184,14 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
         ...(form.description.trim() ? { description: form.description.trim() } : {}),
         module: moduleId,
         type: form.type,
+        ...(topicIds.length ? { topics: topicIds } : {}),
         proctoring: form.proctoring,
         ...(timed && form.durationMinutes ? { durationMinutes: Number(form.durationMinutes) } : {}),
         ...(form.passingScore ? { passingScore: Number(form.passingScore) } : {}),
       });
       setCreating(false);
       setForm(BLANK_TEMPLATE);
+      setTopicIds([]);
       navigate(`/app/assessments/${created.id}`);
     } catch (e2) {
       setErr(apiErrorMessage(e2));
@@ -189,7 +207,7 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   return (
     <>
       <ModuleBar moduleObj={moduleObj} onBack={onBack}>
-        <Button onClick={() => setCreating(true)}><Plus size={15} style={{ marginRight: 6 }} /> New ready-made test</Button>
+        <Button onClick={openCreate}><Plus size={15} style={{ marginRight: 6 }} /> New ready-made test</Button>
       </ModuleBar>
 
       {isError ? (
@@ -197,7 +215,7 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
       ) : isLoading && !templates ? (
         <Card><SkeletonTable rows={4} cols={4} /></Card>
       ) : templates && templates.length === 0 ? (
-        <EmptyState icon={<ClipboardList size={26} />} title="No ready-made tests yet" description="Create a practice or final test for this module." action={<Button onClick={() => setCreating(true)}><Plus size={15} style={{ marginRight: 6 }} /> New ready-made test</Button>} />
+        <EmptyState icon={<ClipboardList size={26} />} title="No ready-made tests yet" description="Create a practice or final test for this module." action={<Button onClick={openCreate}><Plus size={15} style={{ marginRight: 6 }} /> New ready-made test</Button>} />
       ) : (
         <div className="table-wrap">
           <table className="table">
@@ -207,6 +225,11 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
                 <tr key={a.id}>
                   <td>
                     {a.title}
+                    {(a.topics ?? []).length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '4px 0' }}>
+                        {a.topics.map((t) => <Badge key={t.id ?? t.topic ?? t.title} tone="neutral">{t.title}</Badge>)}
+                      </div>
+                    )}
                     {a.description && <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', maxWidth: '26rem' }}>{a.description}</div>}
                     <div className="lms-muted" style={{ fontSize: 'var(--font-size-xs)' }}>{PROCTORING_LABEL[a.proctoring] ?? 'No proctoring'}</div>
                   </td>
@@ -234,7 +257,29 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
         <form id="tmpl-form" onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <Input label="Test name" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Prompt Patterns — Practice Test" required />
           <div className="field">
-            <label className="field__label">Description <span className="lms-muted">— topics this test covers</span></label>
+            <label className="field__label">Topics covered <span className="lms-muted">— select the module topics this test assesses</span></label>
+            {topics.length === 0 ? (
+              <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: 0 }}>This module has no topics yet — add them in Modules.</p>
+            ) : (
+              <>
+                <div className="allow-chips">
+                  {topics.map((t) => {
+                    const on = topicIds.includes(t.id);
+                    return (
+                      <button type="button" key={t.id} className={`allow-chip${on ? ' allow-chip--on' : ''}`} onClick={() => toggleTopic(t.id)}>
+                        <span className="allow-chip__dot" /> {t.title}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="lms-muted" style={{ fontSize: 'var(--font-size-xs)', marginTop: 6 }}>
+                  {topicIds.length === 0 ? 'Optional — leave empty to cover the whole module.' : `${topicIds.length} topic${topicIds.length === 1 ? '' : 's'} selected.`}
+                </p>
+              </>
+            )}
+          </div>
+          <div className="field">
+            <label className="field__label">Description <span className="lms-muted">— extra notes (optional)</span></label>
             <textarea
               className="input"
               style={{ minHeight: '5rem', resize: 'vertical' }}
@@ -387,6 +432,11 @@ function AssignModal({ template, moduleId, onClose }) {
       <form id="assign-form" onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {template.description && (
           <div className="lms-secondary-text" style={{ fontSize: 'var(--font-size-sm)' }}>{template.description}</div>
+        )}
+        {(template.topics ?? []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {template.topics.map((t) => <Badge key={t.id ?? t.topic ?? t.title} tone="neutral">{t.title}</Badge>)}
+          </div>
         )}
         <div className="module-card__meta">
           <Badge tone={ASSESSMENT_TYPE_TONE[template.type]}>{ASSESSMENT_TYPE_LABEL[template.type]}</Badge>

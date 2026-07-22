@@ -37,6 +37,8 @@ export const createAssessmentSchema = z.object({
   module: objectId,
   type: z.enum(READY_MADE_TYPES),
   topic: objectId.optional().nullable(),
+  // Module topics this test covers (admin selects any number).
+  topics: z.array(objectId).optional(),
   passingScore: z.number().int().min(0).max(100).optional(),
   durationMinutes: z.number().int().min(1).max(600).optional(),
   proctoring: z.nativeEnum(ProctoringMode).optional(),
@@ -355,6 +357,17 @@ export async function createAssessment(req, res) {
     topicTitle = t.title;
   }
 
+  // Resolve the selected topics (any number) to {topic, title}, preserving the
+  // module's topic order and rejecting any id that isn't in this module.
+  let topics = [];
+  if (data.topics?.length) {
+    const wanted = new Set(data.topics.map(String));
+    topics = module.topics
+      .filter((t) => wanted.has(String(t._id)))
+      .map((t) => ({ topic: t._id, title: t.title }));
+    if (topics.length !== wanted.size) throw ApiError.badRequest('One or more topics are not in this module');
+  }
+
   const questions = await snapshotsFromBank(data.questionIds, data.module);
   if (data.type === AssessmentType.PRACTICE && questions.length > PRACTICE_QUESTION_COUNT) {
     throw ApiError.badRequest(`A practice test can have at most ${PRACTICE_QUESTION_COUNT} questions.`);
@@ -376,6 +389,7 @@ export async function createAssessment(req, res) {
     type: data.type,
     topic: data.topic ?? null,
     topicTitle,
+    topics,
     passingScore: data.passingScore ?? settings.passingScore,
     proctoring,
     proctored,
@@ -437,6 +451,7 @@ export async function assignTemplate(req, res) {
     type: template.type,
     topic: template.topic ?? null,
     topicTitle: template.topicTitle ?? '',
+    topics: (template.topics ?? []).map((t) => ({ topic: t.topic, title: t.title })),
     passingScore: template.passingScore,
     availableFrom: availableFrom ?? undefined,
     deadline: deadline ?? undefined,

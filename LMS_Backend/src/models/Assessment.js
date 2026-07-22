@@ -49,6 +49,12 @@ const assessmentSchema = new Schema(
     // preparation/final cover the whole module so topic stays null.
     topic: { type: Schema.Types.ObjectId, default: null },
     topicTitle: { type: String, trim: true, default: '' },
+    // The module topics this test covers (admin-selected, multiple). Titles are
+    // denormalized for display. Copied onto assigned tests.
+    topics: {
+      type: [{ topic: { type: Schema.Types.ObjectId }, title: { type: String, trim: true, default: '' } }],
+      default: [],
+    },
     availability: {
       type: String,
       enum: Object.values(AssessmentAvailability),

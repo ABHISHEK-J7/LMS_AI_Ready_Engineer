@@ -681,6 +681,35 @@
   .tmpl-grid__full { grid-column: 1; }
 }
 
+/* ── Question-bank picker (add questions to a test) ──────────────────────────── */
+.q-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.q-item {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  transition: border-color 160ms ease-out;
+}
+.q-item:hover { border-color: var(--color-primary); }
+.q-item > input { margin-top: 3px; flex: none; }
+.q-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.q-item__prompt { font-size: var(--font-size-sm); }
+.q-item__meta { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+/* Auto-pick control */
+.bank-random {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+}
+.bank-random .field { margin: 0; }
+/* Per-topic groups */
+.bank-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.bank-group + .bank-group { margin-top: var(--space-4); }
+.bank-group__head {
+  font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm);
+  position: sticky; top: 0; z-index: 1; padding: var(--space-1) 0;
+  background: var(--color-surface);
+}
+
 /* "Who can take this" — student allow-list chips. */
 .allow-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .allow-chip {

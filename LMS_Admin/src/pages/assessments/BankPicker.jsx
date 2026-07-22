@@ -1,34 +1,61 @@
 import { useState } from 'react';
-import { Database } from 'lucide-react';
-import { QuestionType } from '@/shared';
-import { Badge, Button, EmptyState, SkeletonText } from '@/components/ui';
+import { Database, Shuffle } from 'lucide-react';
+import { AssessmentType, QuestionType } from '@/shared';
+import { Badge, Button, EmptyState, Input, SkeletonText } from '@/components/ui';
 import { apiErrorMessage } from '@/lib/api';
 import { useQuestionBank } from '@/lib/questionBank';
 import { useAddQuestionsFromBank } from '@/lib/assessments';
 import { QUESTION_TYPE_LABEL } from './assessmentsUi';
+import { pickEvenlyByTopic, shuffle } from './bankRandom';
+
+const PRACTICE_CAP = 10;
 
 /**
- * Hand-pick questions from the module's bank to add to a test. Topic-scoped
- * practice tests only show that topic's questions; otherwise the whole bank.
- * Questions already in the test (by source id) are filtered out.
+ * Pick questions from the module's bank to add to a test. Questions are scoped to
+ * the topics the admin chose for the test (grouped by topic), and "Select randomly"
+ * shares a target count evenly across those topics. Questions already in the test
+ * (by source id) are filtered out.
  */
 export function BankPicker({ assessment, onClose }) {
   const moduleId = assessment.module?.id ?? assessment.module;
-  const { data: items, isLoading } = useQuestionBank({ module: moduleId, topic: assessment.topic || undefined });
+  // Fetch the whole module bank; we scope to the test's topics client-side so we can
+  // also group + split the random pick per topic.
+  const { data: items, isLoading } = useQuestionBank({ module: moduleId });
   const addFromBank = useAddQuestionsFromBank();
   const [selected, setSelected] = useState(() => new Set());
   const [err, setErr] = useState('');
 
+  // The topics this test covers (multi-select; fall back to the legacy single topic).
+  const testTopics = assessment.topics?.length
+    ? assessment.topics
+    : (assessment.topic ? [{ topic: assessment.topic, title: assessment.topicTitle }] : []);
+  const topicSet = new Set(testTopics.map((t) => String(t.topic)));
+
   const alreadyAdded = new Set((assessment.questions ?? []).map((q) => q.sourceId).filter(Boolean));
-  const available = (items ?? []).filter((q) => !alreadyAdded.has(q.id));
+  const scoped = topicSet.size > 0 ? (items ?? []).filter((q) => topicSet.has(String(q.topic))) : (items ?? []);
+  const available = scoped.filter((q) => !alreadyAdded.has(q.id));
+
+  // Practice tests cap at 10 total; cap the random target to the remaining room.
+  const isPractice = assessment.type === AssessmentType.PRACTICE;
+  const maxTarget = isPractice ? Math.max(0, PRACTICE_CAP - alreadyAdded.size) : available.length;
+  const [target, setTarget] = useState(() => String(Math.min(PRACTICE_CAP, maxTarget || PRACTICE_CAP)));
 
   function toggle(id) {
     setSelected((s) => {
       const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      if (n.has(id)) n.delete(id); else n.add(id);
       return n;
     });
+  }
+
+  function selectRandomly() {
+    setErr('');
+    const n = Math.min(Number(target) || 0, available.length, maxTarget || available.length);
+    if (n <= 0) return;
+    const picks = topicSet.size > 1
+      ? pickEvenlyByTopic(available, testTopics, n)
+      : shuffle(available).slice(0, n).map((q) => q.id);
+    setSelected(new Set(picks));
   }
 
   async function add() {
@@ -41,38 +68,80 @@ export function BankPicker({ assessment, onClose }) {
     }
   }
 
+  const QItem = (q) => (
+    <label key={q.id} className="q-item" style={{ cursor: 'pointer' }}>
+      <input type="checkbox" checked={selected.has(q.id)} onChange={() => toggle(q.id)} />
+      <div className="q-item__body">
+        <div className="q-item__prompt">{q.prompt}</div>
+        <div className="q-item__meta">
+          <Badge tone="neutral">{QUESTION_TYPE_LABEL[q.type]}</Badge>
+          {q.topicTitle && <Badge tone="primary">{q.topicTitle}</Badge>}
+          <span className="lms-muted">{q.points} pt{q.points > 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </label>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       <p className="lms-muted" style={{ margin: 0 }}>
-        {assessment.topic
-          ? <>Bank questions for <strong>{assessment.topicTitle}</strong>.</>
+        {testTopics.length > 0
+          ? <>Bank questions for <strong>{testTopics.map((t) => t.title).join(', ')}</strong>.</>
           : 'All bank questions for this module.'}
       </p>
+
       {isLoading && !items ? (
         <SkeletonText lines={4} />
       ) : available.length === 0 ? (
         <EmptyState
           icon={<Database size={26} />}
-          title={`No more bank questions available${assessment.topic ? ' for this topic' : ''}`}
+          title={`No more bank questions available${testTopics.length ? ' for these topics' : ''}`}
           description="Add questions in the Question Bank first."
         />
       ) : (
-        <div className="q-list" style={{ maxHeight: '26rem', overflowY: 'auto' }}>
-          {available.map((q) => (
-            <label key={q.id} className="q-item" style={{ cursor: 'pointer' }}>
-              <input type="checkbox" checked={selected.has(q.id)} onChange={() => toggle(q.id)} />
-              <div className="q-item__body">
-                <div className="q-item__prompt">{q.prompt}</div>
-                <div className="q-item__meta">
-                  <Badge tone="neutral">{QUESTION_TYPE_LABEL[q.type]}</Badge>
-                  {q.topicTitle && <Badge tone="primary">{q.topicTitle}</Badge>}
-                  <span className="lms-muted">{q.points} pt{q.points > 1 ? 's' : ''}</span>
-                </div>
-              </div>
-            </label>
-          ))}
-        </div>
+        <>
+          {/* Random picker: share N evenly across the selected topics. */}
+          <div className="bank-random">
+            <span className="lms-muted">Auto-pick</span>
+            <Input
+              type="number"
+              min={1}
+              max={maxTarget || undefined}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              style={{ width: '4.5rem' }}
+            />
+            <span className="lms-muted">
+              at random{topicSet.size > 1 ? ` · split evenly across ${topicSet.size} topics` : ''}
+            </span>
+            <Button type="button" variant="outline" size="sm" onClick={selectRandomly}>
+              <Shuffle size={14} style={{ marginRight: 6 }} /> Select randomly
+            </Button>
+            {selected.size > 0 && <span className="lms-muted" style={{ marginLeft: 'auto' }}>{selected.size} selected</span>}
+          </div>
+
+          <div className="q-list" style={{ maxHeight: '24rem', overflowY: 'auto' }}>
+            {testTopics.length > 0 ? (
+              testTopics.map((t) => {
+                const group = available.filter((q) => String(q.topic) === String(t.topic));
+                return (
+                  <div key={t.topic} className="bank-group">
+                    <div className="bank-group__head">
+                      {t.title} <span className="lms-muted">· {group.length} question{group.length === 1 ? '' : 's'}</span>
+                    </div>
+                    {group.length === 0
+                      ? <p className="lms-muted" style={{ fontSize: 'var(--font-size-sm)', margin: '0 0 var(--space-2)' }}>No questions tagged with this topic yet.</p>
+                      : group.map(QItem)}
+                  </div>
+                );
+              })
+            ) : (
+              available.map(QItem)
+            )}
+          </div>
+        </>
       )}
+
       {err && <span className="field__error">{err}</span>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
         <Button variant="outline" onClick={onClose}>Cancel</Button>

@@ -277,7 +277,6 @@ function ImportFromMasterModal({ modules, defaultModuleId, onClose }) {
             onChange={(e) => setTopic(e.target.value)}
             options={[
               { value: 'all', label: 'All topics' },
-              { value: 'general', label: 'General (whole module)' },
               ...topics.map((t) => ({ value: t.id, label: t.title })),
             ]}
           />

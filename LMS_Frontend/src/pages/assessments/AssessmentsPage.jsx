@@ -149,6 +149,7 @@ function ModuleBar({ moduleObj, onBack, children }) {
 // ── Admin: author ready-made test templates ─────────────────────────────────────
 
 const BLANK_TEMPLATE = { title: '', description: '', type: AssessmentType.PRACTICE, proctoring: ProctoringMode.NONE, durationMinutes: '', passingScore: '' };
+const WHOLE_MODULE = '__whole__'; // dropdown sentinel: the test covers every topic
 
 function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   const navigate = useNavigate();
@@ -156,20 +157,23 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(BLANK_TEMPLATE);
   const [topicIds, setTopicIds] = useState([]);
+  const [wholeModule, setWholeModule] = useState(false); // "cover all topics" — sends no topics
   const [err, setErr] = useState('');
   const create = useCreateAssessment();
   const del = useDeleteAssessment();
   const confirm = useConfirm();
   const timed = form.proctoring !== ProctoringMode.NONE;
   const topics = moduleObj?.topics ?? [];
-  const addTopic = (id) => setTopicIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  const addTopic = (id) => { setWholeModule(false); setTopicIds((prev) => (prev.includes(id) ? prev : [...prev, id])); };
   const removeTopic = (id) => setTopicIds((prev) => prev.filter((x) => x !== id));
+  const pickWholeModule = () => { setWholeModule(true); setTopicIds([]); }; // whole module is exclusive
   const availableTopics = topics.filter((t) => !topicIds.includes(t.id)); // not yet picked
   const selectedTopics = topics.filter((t) => topicIds.includes(t.id)); // in module order
 
   function openCreate() {
     setForm(BLANK_TEMPLATE);
     setTopicIds([]);
+    setWholeModule(false);
     setErr('');
     setCreating(true);
   }
@@ -194,6 +198,7 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
       setCreating(false);
       setForm(BLANK_TEMPLATE);
       setTopicIds([]);
+      setWholeModule(false);
       navigate(`/app/assessments/${created.id}`);
     } catch (e2) {
       setErr(apiErrorMessage(e2));
@@ -267,13 +272,25 @@ function AdminModuleTemplates({ moduleId, moduleObj, onBack }) {
               <>
                 <Select
                   value=""
-                  onChange={(e) => { if (e.target.value) addTopic(e.target.value); }}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    if (v === WHOLE_MODULE) pickWholeModule();
+                    else addTopic(v);
+                  }}
                   options={[
-                    { value: '', label: availableTopics.length ? 'Add a topic…' : 'All topics added' },
+                    { value: '', label: 'Add a topic…' },
+                    { value: WHOLE_MODULE, label: 'Whole module — all topics' },
                     ...availableTopics.map((t) => ({ value: t.id, label: t.title })),
                   ]}
                 />
-                {selectedTopics.length > 0 && (
+                {wholeModule ? (
+                  <div className="allow-chips" style={{ marginTop: 'var(--space-2)' }}>
+                    <button type="button" className="allow-chip allow-chip--on" onClick={() => setWholeModule(false)} title="Remove">
+                      <span className="allow-chip__dot" /> Whole module (all topics) ×
+                    </button>
+                  </div>
+                ) : selectedTopics.length > 0 && (
                   <div className="allow-chips" style={{ marginTop: 'var(--space-2)' }}>
                     {selectedTopics.map((t) => (
                       <button type="button" key={t.id} className="allow-chip allow-chip--on" onClick={() => removeTopic(t.id)} title="Remove">

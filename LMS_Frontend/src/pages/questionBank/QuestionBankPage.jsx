@@ -17,7 +17,6 @@ import {
 import { QUESTION_TYPE_LABEL, QUESTION_TYPE_OPTIONS } from '../assessments/assessmentsUi';
 import '../modules/modules.css';
 
-const GENERAL = '__general__'; // sentinel for "no specific topic"
 
 const COMPLEXITY_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 const COMPLEXITY_TONE = { easy: 'success', medium: 'warning', hard: 'danger' };
@@ -28,7 +27,7 @@ export function QuestionBankPage() {
   const confirm = useConfirm();
   const { data: modules } = useModules();
   const [moduleId, setModuleId] = useState('');
-  const [topicFilter, setTopicFilter] = useState(''); // '' = all, GENERAL, or topicId
+  const [topicFilter, setTopicFilter] = useState(''); // '' = all topics, or a topicId
   const [complexityFilter, setComplexityFilter] = useState(''); // '' = all
   const { data: items, isLoading, isError, error, refetch } = useQuestionBank({ module: moduleId, complexity: complexityFilter });
 
@@ -50,8 +49,7 @@ export function QuestionBankPage() {
   }
 
   const filtered = (items ?? []).filter((q) => {
-    if (!topicFilter) return true;
-    if (topicFilter === GENERAL) return !q.topic;
+    if (!topicFilter) return true; // "All topics" — every question in the module
     return q.topic === topicFilter;
   });
 
@@ -80,7 +78,6 @@ export function QuestionBankPage() {
               onChange={(e) => setTopicFilter(e.target.value)}
               options={[
                 { value: '', label: 'All topics' },
-                { value: GENERAL, label: 'General (whole module)' },
                 ...topics.map((t) => ({ value: t.id, label: t.title })),
               ]}
             />
@@ -228,12 +225,13 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
   async function save(e) {
     e.preventDefault();
     setErr('');
+    if (!form.topic) { setErr('Choose a topic for this question.'); return; }
     const payload = {
       type: form.type,
       complexity: form.complexity,
       prompt: form.prompt,
       points: Number(form.points) || 1,
-      topic: form.topic || null,
+      topic: form.topic,
       ...(isMcq
         ? { options: form.options.map((o) => o.trim()).filter(Boolean), correctOption: form.correctOption, referenceAnswer: '' }
         : { options: [], referenceAnswer: form.referenceAnswer?.trim() || '' }),
@@ -269,10 +267,10 @@ function BankQuestionModal({ moduleId, topics, question, onClose }) {
           </div>
         </div>
         <Select
-          label="Topic (optional)"
+          label="Topic"
           value={form.topic}
           onChange={(e) => setForm({ ...form, topic: e.target.value })}
-          options={[{ value: '', label: 'General (whole module)' }, ...topics.map((t) => ({ value: t.id, label: t.title }))]}
+          options={[{ value: '', label: topics.length ? 'Select a topic…' : 'Add topics to this module first' }, ...topics.map((t) => ({ value: t.id, label: t.title }))]}
         />
         <Input label="Question prompt" value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} required />
         {isMcq && (
@@ -417,8 +415,9 @@ function BankExcelImport({ moduleId, topics, onClose }) {
 
   async function submit() {
     setError('');
+    if (!topic) { setError('Choose a topic for these questions.'); return; }
     try {
-      const res = await bulk.mutateAsync({ module: moduleId, topic: topic || null, items: questions });
+      const res = await bulk.mutateAsync({ module: moduleId, topic, items: questions });
       setResult({ added: res?.added ?? questions.length });
     } catch (e2) {
       setError(apiErrorMessage(e2));
@@ -449,7 +448,7 @@ function BankExcelImport({ moduleId, topics, onClose }) {
             label="Topic for these questions"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            options={[{ value: '', label: 'General (whole module)' }, ...topics.map((t) => ({ value: t.id, label: t.title }))]}
+            options={[{ value: '', label: topics.length ? 'Select a topic…' : 'Add topics to this module first' }, ...topics.map((t) => ({ value: t.id, label: t.title }))]}
           />
         </div>
       </div>
